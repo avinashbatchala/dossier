@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { daysBetween, formatCalendarDate, formatDate, formatDateTime, formatShortCalendarDate, formatShortDate, formatTime } from "./dates";
+import { daysBetween, formatCalendarDate, formatDate, formatDateTime, formatShortCalendarDate, formatShortDate, formatTime, isoInZone } from "./dates";
 
 describe("dates", () => {
   it("shows a calendar date as stored, whatever the time zone", () => {
@@ -39,5 +39,14 @@ describe("dates", () => {
     expect(daysBetween(now, later, "Europe/Amsterdam")).toBe(1);
     expect(daysBetween(now, later, "America/New_York")).toBe(0);
     expect(daysBetween(now, new Date("2026-09-28T12:00:00Z"), "UTC")).toBe(-1);
+  });
+});
+
+describe("isoInZone", () => {
+  it("writes a moment as the zone's wall clock with its offset, DST included", () => {
+    expect(isoInZone(new Date("2026-10-18T11:00:00Z"), "Europe/Berlin")).toBe("2026-10-18T13:00:00+02:00");
+    expect(isoInZone(new Date("2026-11-02T11:00:00Z"), "Europe/Berlin")).toBe("2026-11-02T12:00:00+01:00");
+    expect(isoInZone(new Date("2026-10-18T11:00:00Z"), "America/New_York")).toBe("2026-10-18T07:00:00-04:00");
+    expect(isoInZone(new Date("2026-10-18T11:00:00Z"), "UTC")).toBe("2026-10-18T11:00:00+00:00");
   });
 });

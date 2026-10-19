@@ -319,12 +319,22 @@ model Application {
   /// means a single column (APP-4, decided in E5-1 #42).
   followThemeLayout Boolean           @default(false)
   archivedAt        DateTime?
+  /// The Gmail thread the application was sent in, when it went out through Gmail (E15-2).
+  emailThreadId     String?
+  /// The Google Calendar event of the next interview, and the calendar it's
+  /// in, when Dossier added it: kept in step with nextInterviewAt both ways.
+  interviewEventId    String?
+  interviewCalendarId String?
   /// The Find jobs posting it was started from, if any (E14-8).
   posting           Posting?
+  /// Mail sent and received about it through Gmail (E15-3).
+  emails            EmailMessage[]
   events            StatusEvent[]
   documents         Document[]
   messages          ChatMessage[]
   notes             Note[]
+  /// Its background jobs, deleted with it (their inputs and results hold the posting and the documents).
+  jobs              Job[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -356,21 +366,21 @@ enum DocumentKind {
 
 /// A tailored resume, cover letter or application email, split into editable units (unitsSchema).
 model Document {
-  id            String       @id @default(cuid())
+  id            String            @id @default(cuid())
   applicationId String
-  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   kind          DocumentKind
   units         Json
   /// The theme it was created with; null falls back to the base theme.
   themeId       String?
-  theme         Theme?       @relation(fields: [themeId], references: [id], onDelete: SetNull)
+  theme         Theme?            @relation(fields: [themeId], references: [id], onDelete: SetNull)
   /// The prompt version that last wrote its units, e.g. "tailor-resume@1" (E6-5).
   writtenWith   String?
   /// Parts left out to fit one page, which can be put back (trimmedSchema, E10-10).
   trimmed       Json?
   /// Earlier states, after each AI change and before each restore (E8-10).
   versions      DocumentVersion[]
-  updatedAt     DateTime     @updatedAt
+  updatedAt     DateTime          @updatedAt
 
   @@unique([applicationId, kind])
 }
@@ -511,6 +521,92 @@ model PostingSearch {
   @@index([createdAt])
 }
 
+// ─── Google: Gmail and Calendar (E15) ────────────────────────────────────────
+
+/// The connected Google account; at most one row, with id "google". It
+/// belongs to this install, not its data: exports leave it out.
+model GoogleAccount {
+  id              String    @id @default("google")
+  /// The Gmail address it's connected as.
+  email           String
+  /// The OAuth refresh token, encrypted like the API keys (GOOGLE_TOKEN).
+  refreshTokenEnc String
+  /// The scopes Google granted, space-separated.
+  scopes          String    @default("")
+  /// Where the inbox check carries on from (Gmail's history id).
+  historyId       String?
+  lastSyncAt      DateTime?
+  /// Why the last check failed; null once one works again.
+  syncProblem     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+enum EmailDirection {
+  /// Sent from Dossier, or from Gmail in a thread Dossier knows.
+  OUTGOING
+  INCOMING
+}
+
+/// What a reply from an employer is, as the AI read it (E15-4).
+enum ReplyKind {
+  REJECTION
+  INTERVIEW
+  QUESTION
+  OFFER
+  /// An automatic "we got your application".
+  ACKNOWLEDGEMENT
+  OTHER
+}
+
+/// A mail in Gmail about an application, or one that may be (E15-3). Only
+/// the text is kept, not attachments.
+model EmailMessage {
+  id              String             @id @default(cuid())
+  gmailId         String             @unique
+  threadId        String
+  /// Null while it isn't linked to an application ("Needs a look").
+  /// Deleting the application deletes its mail, as it does its documents.
+  applicationId   String?
+  application     Application?       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  direction       EmailDirection
+  fromName        String             @default("")
+  fromAddress     String             @default("")
+  toAddress       String             @default("")
+  subject         String             @default("")
+  /// The RFC 5322 Message-ID, for replying in the thread.
+  messageId       String             @default("")
+  /// The text, without quoted earlier mail, cut to a sensible length.
+  body            String             @default("")
+  sentAt          DateTime
+  kind            ReplyKind?
+  /// One line on what it says.
+  summary         String             @default("")
+  /// The questions it asks (stringList), for the reply to answer.
+  questions       Json?
+  /// The status it suggests moving to; null once handled or when there's none.
+  suggestedStatus ApplicationStatus?
+  /// The interview time it confirms, if any, for the calendar.
+  confirmedAt     DateTime?
+  /// The prompt version that read it.
+  classifiedWith  String?
+  /// The drafted answer, while there is one.
+  replyDraft      String             @default("")
+  /// What the draft couldn't answer from the profile (stringList).
+  replyGaps       Json?
+  draftedWith     String?
+  /// Answered from Dossier, or marked as needing no answer.
+  handledAt       DateTime?
+  /// "Not job-related": only the ids and date are kept, so the inbox check
+  /// doesn't fetch it again.
+  dismissedAt     DateTime?
+  createdAt       DateTime           @default(now())
+
+  @@index([threadId])
+  @@index([applicationId, sentAt])
+  @@index([sentAt])
+}
+
 // ─── Sign-in (E3-4) ──────────────────────────────────────────────────────────
 
 /// Failed sign-in attempts, for rate limiting (AUTH-5): one row per client IP,
@@ -541,23 +637,27 @@ enum JobStatus {
 /// A long AI task run in the background, e.g. reading a posting or writing the
 /// documents. Each job type validates its own input and result (src/lib/jobs).
 model Job {
-  id         String    @id @default(cuid())
+  id            String       @id @default(cuid())
   /// Which handler runs it, e.g. "extract-posting".
-  type       String
+  type          String
   /// Finds the job again for something on screen, e.g. "application:<id>".
-  key        String?
-  status     JobStatus @default(QUEUED)
+  key           String?
+  /// The application it works on, if any: deleting the application deletes the job.
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  status        JobStatus    @default(QUEUED)
   /// The named step in progress, e.g. "Reading the posting".
-  step       String?
-  input      Json
-  result     Json?
+  step          String?
+  input         Json
+  result        Json?
   /// Why it failed, written for the user.
-  error      String?
-  createdAt  DateTime  @default(now())
-  startedAt  DateTime?
-  finishedAt DateTime?
-  updatedAt  DateTime  @updatedAt
+  error         String?
+  createdAt     DateTime     @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  updatedAt     DateTime     @updatedAt
 
   @@index([key, createdAt])
   @@index([status])
+  @@index([applicationId])
 }

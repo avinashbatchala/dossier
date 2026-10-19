@@ -32,7 +32,7 @@ export function ConfirmDialog({
   return (
     <AlertDialog.Root open={open} onOpenChange={onOpenChange}>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-[rgb(29_28_26/0.32)]" />
+        <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/40" />
         <AlertDialog.Content
           onCloseAutoFocus={(event) => {
             if (!returnFocusTo?.current?.isConnected) return;

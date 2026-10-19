@@ -44,7 +44,7 @@ export function LoginForm({ next }: { next?: string }) {
     <form
       onSubmit={submit}
       noValidate
-      className="flex flex-col gap-5 rounded-dialog border border-line-card bg-card p-8 shadow-dialog"
+      className="flex flex-col gap-5"
     >
       <div className="flex flex-col gap-1.5">
         <h1 className="font-serif text-[28px] leading-[1.15] tracking-[-0.01em]">Welcome back</h1>
@@ -78,7 +78,7 @@ export function LoginForm({ next }: { next?: string }) {
           }}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "password-error" : undefined}
-          className={cn(controlClassName, "px-3 py-[11px]")}
+          className={cn(controlClassName, "h-10 px-3")}
         />
         {error && (
           <p id="password-error" role="alert" className="text-meta text-error">

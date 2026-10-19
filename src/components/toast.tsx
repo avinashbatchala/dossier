@@ -86,7 +86,7 @@ export function Toaster() {
           onMouseLeave={() => setPausedId(null)}
           onFocus={() => setPausedId(shown.id)}
           onBlur={() => setPausedId(null)}
-          className="pointer-events-auto flex max-w-[520px] items-baseline gap-4 rounded-toast bg-primary px-[18px] py-3 text-sm text-on-primary shadow-toast motion-safe:animate-toast-in"
+          className="pointer-events-auto flex max-w-[520px] items-baseline gap-4 rounded-toast bg-inverse px-[18px] py-3 text-sm text-on-inverse shadow-toast motion-safe:animate-toast-in"
         >
           <span>{shown.message}</span>
           {shown.action && (
@@ -96,7 +96,7 @@ export function Toaster() {
                 dismiss(shown.id);
                 shown.action?.onClick();
               }}
-              className="shrink-0 font-medium underline underline-offset-3 focus-visible:outline-on-primary"
+              className="shrink-0 font-medium underline underline-offset-3 focus-visible:outline-on-inverse"
             >
               {shown.action.label}
             </button>

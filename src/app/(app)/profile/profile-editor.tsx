@@ -73,7 +73,7 @@ export function ProfileEditor({ initial, section, order }: { initial: ProfileDat
         }
       />
 
-      <div className="flex flex-wrap items-start gap-x-12 gap-y-10 px-14 pt-2 pb-20">
+      <div className="flex flex-wrap items-start gap-x-12 gap-y-10 px-10 pt-2 pb-20">
         <div className="flex max-w-[220px] min-w-[200px] flex-[1_1_200px] flex-col gap-6">
           <StrengthMeter profile={profile} />
           <nav aria-label="Profile sections" className="flex flex-col gap-0.5">

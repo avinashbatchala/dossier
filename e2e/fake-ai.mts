@@ -153,6 +153,28 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     references: [],
   }),
 
+  // Gmail (E15): an employer's reply is an invitation that asks two things,
+  // and the answer offers the times it's given and leaves the notice period open.
+  classified_reply: () => ({
+    kind: "INTERVIEW",
+    summary: "Invites you to a 45-minute call next week and asks about your notice period.",
+    questions: ["Which times would work for you?", "What is your notice period?"],
+    confirmedTime: null,
+  }),
+
+  reply_draft: (messages) => {
+    const times = (messages.at(-1)?.content ?? "").split("\n").filter((line) => line.startsWith("• "));
+    return {
+      greeting: "Hi John,",
+      paragraphs: [
+        times.length > 0 ? `Thank you, I'd be glad to talk. Any of these times works for me:\n${times.join("\n")}` : "Thank you, I'd be glad to talk.",
+        "My notice period is […].",
+      ],
+      signOff: "Best regards,",
+      gaps: ["What is your notice period?"],
+    };
+  },
+
   new_text: (messages) => {
     const current = messages[1].content.split("Its current text:\n").at(-1) ?? "";
     const lines = current.split("\n").filter(Boolean);

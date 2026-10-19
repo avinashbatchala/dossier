@@ -50,7 +50,7 @@ export function FieldShell({
   return (
     <div className={cn("flex flex-col gap-[7px]", className)}>
       {label && (
-        <label htmlFor={controlId} className="text-label text-muted">
+        <label htmlFor={controlId} className="text-label font-medium text-ink">
           {label}
         </label>
       )}
@@ -72,7 +72,7 @@ export function FieldShell({
 
 /** The look of text inputs, textareas and selects, without a width. */
 export const controlBaseClassName =
-  "rounded-control border border-line-input bg-input text-field text-ink focus:border-ink aria-invalid:border-error disabled:cursor-not-allowed disabled:bg-paper disabled:text-muted";
+  "rounded-control border border-line-input bg-input text-field text-ink shadow-control focus:border-primary aria-invalid:border-error disabled:cursor-not-allowed disabled:bg-paper disabled:text-muted";
 
 /** Shared look of text inputs, textareas and selects, filling their container. */
 export const controlClassName = `w-full ${controlBaseClassName}`;

@@ -45,7 +45,8 @@ describe("AiProviderSection", () => {
     render(<AiProviderSection initial={local} />);
     await userEvent.click(screen.getByRole("radio", { name: "Anthropic" }));
     expect(screen.getByLabelText("Server address")).toHaveValue("https://api.anthropic.com");
-    expect(screen.getByRole("note")).toHaveTextContent(/sent to Anthropic/);
+    expect(screen.getByRole("note")).toHaveTextContent(/^Anthropic receives what each task needs: your profile without contact details, .* the drafts and your chat messages\. Importing a resume sends its whole text/);
+    expect(screen.getByRole("note")).toHaveTextContent(/depend on your account with Anthropic\.$/);
     expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "Stored encrypted on your server");
     await waitFor(() =>
       expect(saveAiProvider).toHaveBeenCalledWith({ provider: "ANTHROPIC", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5" }),

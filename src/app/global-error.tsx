@@ -12,7 +12,7 @@ export default function GlobalError(props: ErrorPageProps) {
       <body className="min-h-full">
         <title>Dossier didn&apos;t load</title>
         <main className="flex min-h-screen justify-center">
-          <ScreenError {...props} title="Dossier didn't load" />
+          <ScreenError {...props} standalone title="Dossier didn't load" />
         </main>
       </body>
     </html>

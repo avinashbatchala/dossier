@@ -51,6 +51,11 @@ services:
       DOSSIER_JSEARCH_HOST: ${DOSSIER_JSEARCH_HOST:-}
       DOSSIER_ADZUNA_APP_ID: ${DOSSIER_ADZUNA_APP_ID:-}
       DOSSIER_ADZUNA_KEY: ${DOSSIER_ADZUNA_KEY:-}
+      # Gmail and Calendar: a Google OAuth client (or enter it in Settings → Google).
+      DOSSIER_GOOGLE_CLIENT_ID: ${DOSSIER_GOOGLE_CLIENT_ID:-}
+      DOSSIER_GOOGLE_CLIENT_SECRET: ${DOSSIER_GOOGLE_CLIENT_SECRET:-}
+      # The address Dossier is reached at, for Google's redirect.
+      DOSSIER_PUBLIC_URL: ${DOSSIER_PUBLIC_URL:-}
     # Only on the server itself: put a reverse proxy with HTTPS in front.
     ports:
       - "127.0.0.1:${DOSSIER_PORT:-3000}:3000"

@@ -78,7 +78,7 @@ export function Board({
     >
       {/* Relative, so screen-reader-only text inside is clipped with the rest
           instead of widening the page. */}
-      <div className="relative min-h-0 flex-1 scrollbar-subtle overflow-x-auto overflow-y-hidden px-14 pt-1.5 pb-5">
+      <div className="relative min-h-0 flex-1 scrollbar-subtle overflow-x-auto overflow-y-hidden px-10 pt-1.5 pb-5">
         <div className="flex h-full w-max items-stretch gap-3.5">
           {statuses.map((status) => {
             const cards = byNewest.filter((row) => row.status === status);
@@ -112,7 +112,7 @@ function Column({ status, count, children }: { status: ApplicationStatus; count:
       aria-labelledby={headingId}
       className={cn(
         "flex min-h-0 w-[252px] flex-none flex-col gap-2.5 rounded-panel p-3 outline-[1.5px] -outline-offset-2 motion-safe:transition-colors",
-        isOver ? "bg-[rgb(29_28_26/0.08)] outline-dashed outline-[rgb(29_28_26/0.35)]" : "bg-[rgb(29_28_26/0.035)] outline-transparent",
+        isOver ? "bg-selected outline-dashed outline-line-strong" : "bg-track outline-transparent",
       )}
     >
       <h2 id={headingId} className="flex items-center gap-2 px-1 pt-1 pb-0.5">
@@ -162,7 +162,7 @@ function CardFace({ row, lifted = false, onOpen }: { row: ApplicationRow; lifted
   return (
     <div
       className={cn(
-        "group flex cursor-grab flex-col gap-1.5 rounded-[10px] border border-line-card bg-card p-3.5 pr-9 shadow-[0_1px_2px_rgb(40_35_25/0.04)] hover:border-[rgb(29_28_26/0.3)]",
+        "group flex cursor-grab flex-col gap-1.5 rounded-[10px] border border-line-card bg-card p-3.5 pr-9 shadow-control hover:border-line-strong",
         lifted && "cursor-grabbing shadow-menu",
       )}
     >
@@ -175,7 +175,7 @@ function CardFace({ row, lifted = false, onOpen }: { row: ApplicationRow; lifted
         href={`/applications/${row.id}`}
         onClick={onOpen}
         draggable={false}
-        className="text-field leading-[1.35] font-medium text-pretty text-ink after:absolute after:inset-0 after:rounded-[10px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ink"
+        className="text-field leading-[1.35] font-medium text-pretty text-ink after:absolute after:inset-0 after:rounded-[10px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-primary"
       >
         {row.role}
       </Link>

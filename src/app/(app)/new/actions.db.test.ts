@@ -135,7 +135,7 @@ describe("createApplication", () => {
     expect(application.messages).toHaveLength(1);
     expect(application.messages[0]).toMatchObject({ role: "AI", text: expect.stringMatching(/^Here's what I tailored for Ledgerly B\.V\.:\n\n- /) });
     expect(application.messages[0].text).toMatch(/Nothing invented: every line comes from your profile\.$/);
-    expect(await prisma().job.count({ where: { key: `application:${id}` } })).toBe(2);
+    expect(await prisma().job.count({ where: { key: `application:${id}`, applicationId: id } })).toBe(2);
   });
 
   it("links the Find jobs posting it was started from (E14-8)", async () => {

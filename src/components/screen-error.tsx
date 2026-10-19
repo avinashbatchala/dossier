@@ -23,7 +23,10 @@ export function ScreenError({
   title,
   children,
   elsewhere = { href: "/", label: "Go to the dashboard" },
+  standalone,
 }: ErrorPageProps & {
+  /** Outside the app's shell: see ScreenMessage. */
+  standalone?: boolean;
   title: string;
   /** Extra reassurance for this screen, e.g. that a draft is kept. */
   children?: ReactNode;
@@ -32,6 +35,7 @@ export function ScreenError({
   return (
     <ScreenMessage
       title={title}
+      standalone={standalone}
       actions={
         <>
           <Button onClick={() => retry()}>Try again</Button>

@@ -8,6 +8,7 @@ export default function NotFound() {
   return (
     <main className="flex min-h-screen justify-center">
       <ScreenMessage
+        standalone
         title="There's no page here"
         actions={
           <Link href="/" className={buttonClassName("primary", "md", "hover:text-on-primary")}>

@@ -32,7 +32,7 @@ export type UnitFrameProps = {
 };
 
 const toolButton =
-  "rounded-[6px] px-[9px] py-[5px] text-on-primary hover:bg-white/14 focus-visible:outline-on-primary focus-visible:-outline-offset-2";
+  "rounded-[6px] px-[9px] py-[5px] text-on-inverse hover:bg-white/14 focus-visible:outline-on-inverse focus-visible:-outline-offset-2";
 
 /**
  * One unit of a tailored document in the preview (APP-5, APP-6). Hovering it
@@ -93,7 +93,7 @@ export function UnitFrame({
           <div
             className={cn(
               styles.toolbar,
-              "gap-0.5 rounded-control bg-primary p-[3px] font-sans text-xs leading-[1.2] font-medium whitespace-nowrap shadow-toolbar",
+              "gap-0.5 rounded-control bg-inverse p-[3px] font-sans text-xs leading-[1.2] font-medium whitespace-nowrap shadow-toolbar",
             )}
           >
             <button type="button" className={toolButton} onClick={onEdit}>
@@ -151,7 +151,7 @@ function UnitEditor({
             onSave(value);
           }
         }}
-        className="max-h-[60vh] w-full resize-y rounded-control border border-ink bg-input px-3 py-2.5 text-[13.5px] leading-[1.55] text-ink [field-sizing:content] focus-visible:outline-offset-0 disabled:opacity-60"
+        className="max-h-[60vh] w-full resize-y rounded-control border border-primary bg-input px-3 py-2.5 text-[13.5px] leading-[1.55] text-ink [field-sizing:content] focus-visible:outline-offset-0 disabled:opacity-60"
       />
       <div className="flex items-center justify-end gap-1.5">
         {isRoleUnit(unit.id) && (
@@ -180,7 +180,7 @@ function CheckThis({ facts }: { facts: string[] }) {
         title="Check this"
         className={cn(
           styles.check,
-          "grid size-4 place-items-center rounded-full border border-[oklch(0.85_0.06_85)] bg-warning-surface font-sans text-[11px] leading-none font-bold text-warning",
+          "grid size-4 place-items-center rounded-full border border-warning-line bg-warning-surface font-sans text-[11px] leading-none font-bold text-warning",
         )}
       >
         !

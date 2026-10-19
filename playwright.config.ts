@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-import { APP_PORT, appEnv, FAKE_AI_PORT, FAKE_JOBS_PORT, STORAGE_STATE } from "./e2e/support";
+import { APP_PORT, appEnv, FAKE_AI_PORT, FAKE_GOOGLE_PORT, FAKE_JOBS_PORT, STORAGE_STATE } from "./e2e/support";
 
 // End-to-end tests (E11-2): a production build (`yarn build` first) with its
 // own database, a fake AI server and fake job sources, in headless Chromium.
@@ -39,6 +39,12 @@ export default defineConfig({
       command: "node e2e/fake-jobs.mts",
       url: `http://localhost:${FAKE_JOBS_PORT}/health`,
       env: { FAKE_JOBS_PORT: String(FAKE_JOBS_PORT) },
+      reuseExistingServer: false,
+    },
+    {
+      command: "node e2e/fake-google.mts",
+      url: `http://localhost:${FAKE_GOOGLE_PORT}/health`,
+      env: { FAKE_GOOGLE_PORT: String(FAKE_GOOGLE_PORT) },
       reuseExistingServer: false,
     },
     {

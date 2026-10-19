@@ -93,7 +93,7 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
   const board = !empty && rows.length > 0 && params.view === "board";
 
   return (
-    <div className={cn("flex flex-col", board ? "h-screen min-h-[520px]" : "flex-1")}>
+    <div className={cn("flex flex-col", board ? "h-panel min-h-[520px]" : "flex-1")}>
       <PageHeader
         title="Applications"
         description={summary}
@@ -120,7 +120,7 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
         <FirstApplication />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-3 px-14 pb-[18px]">
+          <div className="flex flex-wrap items-center gap-3 px-10 pb-[18px]">
             <input
               type="search"
               aria-label="Search applications"
@@ -128,7 +128,7 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
               value={query}
               onChange={(event) => search(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && go({ q: query.trim() }, { replace: true })}
-              className="min-w-[180px] flex-[0_1_300px] rounded-control border border-line-input bg-input px-3 py-2.5 text-sm placeholder:text-muted focus-visible:border-ink focus-visible:outline-offset-0"
+              className="min-w-[180px] flex-[0_1_300px] rounded-control border border-line-input bg-input px-3 py-2.5 text-sm placeholder:text-muted focus-visible:border-primary focus-visible:outline-offset-0"
             />
             <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
               {FILTERS.map(({ value, label }) => (
@@ -139,7 +139,7 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
                   onClick={() => go({ filter: value })}
                   className={cn(
                     "flex items-baseline gap-1.5 rounded-control border px-3 py-2 text-control",
-                    params.filter === value ? "border-primary bg-primary text-on-primary" : "border-line-field bg-card hover:border-ink",
+                    params.filter === value ? "border-primary bg-selected font-medium text-primary-text" : "border-line-field bg-card hover:border-line-strong hover:bg-hover",
                   )}
                 >
                   {label}{" "}
@@ -179,14 +179,14 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
 /** When the search or filter leaves nothing to show. */
 function Nothing({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-14 mb-16 rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">{children}</div>
+    <div className="mx-10 mb-16 rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">{children}</div>
   );
 }
 
 /** Before the first application: where to start. */
 function FirstApplication() {
   return (
-    <div className="mx-14 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
+    <div className="mx-10 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
       <h2 className="font-serif text-section">Your first application</h2>
       <p className="text-sm text-muted">
         Paste a job posting and I&apos;ll read it, check it against your profile and draft a tailored resume and cover letter. Your

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { AiError } from "@/lib/ai/errors";
 import { createTestClient, resetDatabase } from "@/test/db";
 
-import { cancelJob, defineJob, getJob, recoverInterruptedJobs, retryJob, startJob, subscribeJob } from "./runner";
+import { cancelApplicationJobs, cancelJob, defineJob, getJob, recoverInterruptedJobs, retryJob, startJob, subscribeJob } from "./runner";
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
@@ -127,6 +127,33 @@ describe("the job runner", () => {
     await release("A");
     await release("B");
     await eventually(async () => (await status(b)).toBe("DONE"));
+  });
+
+  it("cancels an application's unfinished jobs, and only those", async () => {
+    await prisma().application.createMany({ data: [{ id: "app-1" }, { id: "app-2" }] });
+    const running = await startJob(gated, { name: "Mine", fail: "no" }, { applicationId: "app-1" });
+    const queued = await startJob(gated, { name: "Mine too", fail: "no" }, { applicationId: "app-1" });
+    const other = await startJob(gated, { name: "Theirs", fail: "no" }, { applicationId: "app-2" });
+    await eventually(async () => (await status(running)).toBe("RUNNING"));
+    await cancelApplicationJobs("app-1");
+    await eventually(async () => {
+      expect(await getJob(running)).toMatchObject({ status: "FAILED", error: "Cancelled." });
+      expect(await getJob(queued)).toMatchObject({ status: "FAILED", error: "Cancelled." });
+    });
+    expect(await prisma().job.findUniqueOrThrow({ where: { id: other } })).toMatchObject({ applicationId: "app-2" });
+    await eventually(async () => (await status(other)).toBe("RUNNING"));
+    await release("Theirs");
+    await eventually(async () => (await status(other)).toBe("DONE"));
+  });
+
+  it("ends a job deleted while it runs without an error", async () => {
+    const id = await startJob(gated, { name: "Deleted", fail: "no" });
+    await eventually(async () => (await status(id)).toBe("RUNNING"));
+    vi.mocked(console.error).mockClear();
+    await prisma().job.delete({ where: { id } });
+    await release("Deleted");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it("cancels a running or a queued job", async () => {

@@ -19,24 +19,22 @@ beforeEach(() => {
 });
 
 describe("the application header (E8-1)", () => {
-  it("has the breadcrumb, the title and the meta line", () => {
+  it("has the breadcrumb back to Applications, the title and the meta line", () => {
     render(
       <ApplicationHeader
         title="Senior Product Designer · Ledgerly"
-        company="Ledgerly"
         meta={["Amsterdam", "Hybrid", "Apply by 15 Oct 2026", "Created 27 Sep 2026"]}
         actions={null}
       />,
     );
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Applications" })).toHaveAttribute("href", "/applications");
-    expect(within(breadcrumb).getByText("Ledgerly")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("heading", { level: 1, name: "Senior Product Designer · Ledgerly" })).toBeInTheDocument();
     expect(screen.getByText("Apply by 15 Oct 2026")).toBeInTheDocument();
   });
 
   it("names an application without a title", () => {
-    render(<ApplicationHeader title=" " company="" meta={[]} actions={null} />);
+    render(<ApplicationHeader title=" " meta={[]} actions={null} />);
     expect(screen.getByRole("heading", { level: 1, name: "Untitled application" })).toBeInTheDocument();
   });
 });

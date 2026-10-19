@@ -18,7 +18,7 @@ import { BASICS_FIELDS, formatDateRange, languageLevelLabel, type BasicsField } 
 import { IMPORT_PROFILE_STEPS, importCounts, type ImportedProfile, type ImportMode } from "@/lib/profile-import";
 
 import { JobProgress, jobStep } from "../../new/job-progress";
-import { applyProfileImport } from "../actions";
+import { applyProfileImport, discardProfileImport } from "../actions";
 
 const BASICS_LABELS: Record<BasicsField, string> = {
   name: "Full name",
@@ -37,9 +37,21 @@ const BASICS_LABELS: Record<BasicsField, string> = {
 /**
  * Import a profile from a resume file (E4-10): choose a PDF, Word or Markdown file, wait
  * while the AI sorts its text, then look at everything it found and merge it
- * into the profile or replace the profile with it. Nothing is saved before.
+ * into the profile or replace the profile with it. Nothing goes into the
+ * profile before; the reading is deleted once it's used or set aside.
  */
-export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: boolean; provider: AiProvider; initialJobId: string | null }) {
+export function ProfileImport({
+  aiReady,
+  provider,
+  initialJobId,
+  keptFor,
+}: {
+  aiReady: boolean;
+  provider: AiProvider;
+  initialJobId: string | null;
+  /** How long an unused reading is kept (Settings → Your data), e.g. "24 hours". */
+  keptFor: string;
+}) {
   const router = useRouter();
   const [jobId, setJobId] = useState(initialJobId);
   const [revision, setRevision] = useState(0);
@@ -64,6 +76,12 @@ export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: bo
   const follow = (id: string | null) => {
     setJobId(id);
     router.replace(id ? `/profile/import?job=${id}` : "/profile/import");
+  };
+
+  // "Choose another file": the reading goes, with the resume's text.
+  const startOver = () => {
+    if (jobId) void discardProfileImport({ jobId });
+    follow(null);
   };
 
   async function read() {
@@ -97,14 +115,14 @@ export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: bo
     <>
       <PageHeader
         title="Import from a resume"
-        description="Start your profile from a resume you already have. You'll see everything that was found before anything is saved."
+        description={`Start your profile from a resume you already have. Nothing goes into your profile until you've seen what was found. The file's text is deleted once you've chosen, or after ${keptFor} if you don't.`}
         actions={
           <Link href="/profile" className={buttonClassName("secondary")}>
             Back to your profile
           </Link>
         }
       />
-      <div ref={area} className="flex max-w-[816px] flex-col gap-6 px-14 pb-20">
+      <div ref={area} className="flex max-w-[816px] flex-col gap-6 px-10 pb-20">
         {phase === "choose" && (
           <Card className="flex flex-col items-start gap-5">
             {!aiReady && (
@@ -130,7 +148,7 @@ export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: bo
                 type="file"
                 accept=".pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain"
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                className="text-sm file:mr-3 file:rounded-control file:border file:border-line-control file:bg-input file:px-3 file:py-2 file:text-sm file:text-ink hover:file:border-ink"
+                className="text-sm file:mr-3 file:rounded-control file:border file:border-line-control file:bg-input file:px-3 file:py-2 file:text-sm file:text-ink hover:file:border-line-strong"
               />
             </div>
             <Button aria-disabled={!aiReady || !file || uploading || undefined} onClick={() => void (aiReady && !uploading ? read() : undefined)}>
@@ -146,7 +164,7 @@ export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: bo
             current={jobStep(IMPORT_PROFILE_STEPS, job)}
             error={job?.status === "FAILED" ? job.error : null}
             onRetry={() => void retry({ id: jobId! }).then((result) => toastResult(result).ok && setRevision((count) => count + 1))}
-            onBack={() => follow(null)}
+            onBack={startOver}
             backLabel="← Choose another file"
           />
         )}
@@ -167,7 +185,7 @@ export function ProfileImport({ aiReady, provider, initialJobId }: { aiReady: bo
                 <Button variant="secondary" aria-disabled={applying || undefined} onClick={() => setConfirmReplace(true)}>
                   Replace my profile…
                 </Button>
-                <Button variant="text" onClick={() => follow(null)}>
+                <Button variant="text" onClick={startOver}>
                   Choose another file
                 </Button>
               </div>

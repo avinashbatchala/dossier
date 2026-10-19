@@ -8,7 +8,7 @@ import { rememberQuietDays } from "./actions";
 import { Dashboard } from "./dashboard";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 vi.mock("./actions", () => ({ rememberDashboardPeriod: vi.fn(), rememberQuietDays: vi.fn(async () => ({ ok: true, data: null })) }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 

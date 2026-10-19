@@ -31,6 +31,10 @@ const toModelList = (result: Awaited<ReturnType<typeof listAiModels>>): ModelLis
 const OTHER_MODEL = "__other";
 const looksLikeUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
 
+/** What a hosted model is sent (profileForPrompt and the tasks in src/lib/ai/tasks; PRIVACY.md). */
+const SENT_TO_HOSTED =
+  "your profile without contact details, the postings you add and what you tell it about each one, and, when you refine, the drafts and your chat messages. Importing a resume sends its whole text, contact details included. With Gmail connected, it also gets each reply it reads or answers, with earlier mail in the thread. The notes you keep on an application are never sent.";
+
 /**
  * Settings → AI provider (E6-3, SET-1, SET-2). Each field saves on its own:
  * picking a card or a model right away, typing once you pause. The key is
@@ -143,15 +147,15 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
             value={entry.value}
             aria-label={entry.name}
             aria-describedby={`provider-${entry.value}`}
-            className="group flex flex-col gap-1.5 rounded-card border border-line-card bg-card p-[18px] text-left hover:border-line-strong data-[state=checked]:border-ink data-[state=checked]:shadow-[0_0_0_1px_var(--color-ink)]"
+            className="group flex flex-col gap-1.5 rounded-card border border-line-card bg-card p-[18px] text-left hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:shadow-[0_0_0_1px_var(--color-primary)]"
           >
             <span className="flex items-center justify-between gap-2">
               <span className="text-[15px] font-medium">{entry.name}</span>
               <span
                 aria-hidden
-                className="grid size-4 place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-ink"
+                className="grid size-4 place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-primary"
               >
-                <RadioGroup.Indicator className="size-2 rounded-full bg-ink" />
+                <RadioGroup.Indicator className="size-2 rounded-full bg-primary" />
               </span>
             </span>
             <span id={`provider-${entry.value}`} className="flex flex-col gap-1.5">
@@ -165,8 +169,8 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
       {provider !== "LOCAL" && (
         <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
           {provider === "ANTHROPIC"
-            ? "Your profile and the job postings you add are sent to Anthropic to read postings and write your drafts. Nothing else leaves your server."
-            : "Your profile and the job postings you add are sent to this server to read postings and write your drafts. If it isn't on your own network, they leave your server."}
+            ? `Anthropic receives what each task needs: ${SENT_TO_HOSTED} How long it's kept and where it's processed depend on your account with Anthropic.`
+            : `This server receives what each task needs: ${SENT_TO_HOSTED} If it isn't on your own network, all this leaves your server, and how long it's kept is up to whoever runs it.`}
         </p>
       )}
 

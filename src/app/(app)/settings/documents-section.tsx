@@ -182,7 +182,7 @@ export function DocumentsSection({
                 type="button"
                 title={description}
                 onClick={() => insertToken(token)}
-                className="flex items-baseline gap-2 rounded-control border border-line-field bg-input px-2.5 py-1.5 hover:border-ink"
+                className="flex items-baseline gap-2 rounded-control border border-line-field bg-input px-2.5 py-1.5 hover:border-line-strong"
               >
                 <span className="font-mono text-label text-ink">{token}</span>{" "}
                 <span className="text-xs text-muted">{description}</span>

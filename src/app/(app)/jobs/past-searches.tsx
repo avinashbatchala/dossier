@@ -39,14 +39,14 @@ export function PastSearches({ days, countries }: { days: PastSearchDay[]; count
 
   if (shown.length === 0) {
     return (
-      <div className="mx-14 mb-16 max-w-[860px] rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">
+      <div className="mx-10 mb-16 max-w-[860px] rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">
         No searches yet. Each search you run is kept here with what it found, so you can open it again without spending another search.
       </div>
     );
   }
 
   return (
-    <div className="flex max-w-[860px] flex-col gap-6 px-14 pb-16">
+    <div className="flex max-w-[860px] flex-col gap-6 px-10 pb-16">
       {shown.map((day) => (
         <section key={day.day} aria-label={day.day} className="flex flex-col gap-2">
           <h2 className="text-label font-medium text-muted">{day.day}</h2>

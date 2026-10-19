@@ -9,7 +9,7 @@ import { DEFAULT_SORT } from "@/lib/applications-list";
 import { ApplicationsScreen } from "./applications-screen";
 
 vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => null }));
 vi.mock("@/components/change-status", () => ({ changeStatus: vi.fn(async () => true) }));
 
 const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => ({

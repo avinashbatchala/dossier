@@ -47,7 +47,7 @@ export function Table({
   const router = useRouter();
   return (
     // Relative, so screen-reader-only text is clipped with the table.
-    <div className="relative mx-14 mb-16 overflow-x-auto rounded-panel border border-line-card bg-card">
+    <div className="relative mx-10 mb-16 overflow-x-auto rounded-panel border border-line-card bg-card">
       <table className="w-full min-w-[820px] table-fixed border-collapse text-left">
         <thead>
           <tr className="border-b border-line">
@@ -85,7 +85,7 @@ export function Table({
                 if (!(event.target instanceof Element) || event.target.closest("a, button, select, [role=menu]")) return;
                 router.push(`/applications/${row.id}`);
               }}
-              className="cursor-pointer border-b border-line last:border-b-0 hover:bg-[rgb(29_28_26/0.03)]"
+              className="cursor-pointer border-b border-line last:border-b-0 hover:bg-hover"
             >
               <td className="py-3.5 pr-4 pl-5">
                 <Link href={`/applications/${row.id}`} className="block truncate text-field font-medium text-ink">
@@ -103,7 +103,7 @@ export function Table({
                     aria-label={`Status of ${[row.role, row.company].filter(Boolean).join(", ")}`}
                     value={row.status}
                     onChange={(event) => onMove(row, event.target.value as ApplicationStatus)}
-                    className="-ml-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-[6px] border border-transparent bg-transparent py-1 pr-2 pl-1.5 text-sm text-ink hover:border-line-field focus-visible:border-ink"
+                    className="-ml-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-[6px] border border-transparent bg-transparent py-1 pr-2 pl-1.5 text-sm text-ink hover:border-line-field focus-visible:border-primary"
                   >
                     {STATUSES.map((status) => (
                       <option key={status.value} value={status.value}>

@@ -21,9 +21,9 @@ export function Greeting({ name, serverPeriod }: { name: string; serverPeriod: D
   }, []);
 
   return (
-    <h1 className="font-serif text-title text-pretty">
+    <>
       Good {period}
       {name && `, ${name}`}
-    </h1>
+    </>
   );
 }

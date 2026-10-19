@@ -27,7 +27,7 @@
 .frame:focus-visible::before,
 .frame:has(:focus-visible)::before,
 .editing::before {
-  background: rgb(29 28 26 / 0.045);
+  background: var(--color-hover);
 }
 
 .frame:focus-visible::before {

@@ -6,7 +6,7 @@ import { ScreenError, type ErrorPageProps } from "@/components/screen-error";
 export default function RootError(props: ErrorPageProps) {
   return (
     <main className="flex min-h-screen justify-center">
-      <ScreenError {...props} title="Dossier didn't load" />
+      <ScreenError {...props} standalone title="Dossier didn't load" />
     </main>
   );
 }

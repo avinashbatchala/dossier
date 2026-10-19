@@ -42,7 +42,7 @@ export function StatusChangeDemo({ application }: { application: DemoApplication
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={pending}
-          className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-ink"
+          className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-line-strong"
         >
           <StatusDot status={application.status} />
           {statusInfo(application.status).label}

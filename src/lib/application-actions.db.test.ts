@@ -33,9 +33,10 @@ beforeEach(async () => {
   });
   await prisma().job.createMany({
     data: [
-      { id: "claimed", type: "write-documents", key: "application:app-1", status: "DONE", input: { posting: "…" } },
-      { id: "refine", type: "refine", key: "refine:app-1", status: "DONE", input: {} },
-      { id: "other", type: "refine", key: "refine:app-2", status: "DONE", input: {} },
+      { id: "claimed", type: "write-documents", key: "application:app-1", applicationId: "app-1", status: "DONE", input: { posting: "…" } },
+      { id: "refine", type: "refine", key: "refine:app-1", applicationId: "app-1", status: "DONE", input: {} },
+      { id: "email", type: "write-email", key: "email:app-1", applicationId: "app-1", status: "DONE", input: {}, result: { units: [], previous: [] } },
+      { id: "other", type: "import-profile", key: "profile-import", status: "DONE", input: { resume: "…" } },
     ],
   });
 });
@@ -58,18 +59,22 @@ describe("setArchived (E9-5)", () => {
 });
 
 describe("deleteApplication (E9-5)", () => {
-  it("deletes it with its documents, chat, notes, history and jobs", async () => {
+  it("deletes it with its documents and their versions, chat, notes, history and jobs, its emails' included", async () => {
+    const resume = await prisma().document.findFirstOrThrow({ where: { applicationId: "app-1" } });
+    await prisma().documentVersion.create({ data: { documentId: resume.id, units: [], cause: "WRITTEN" } });
     expect(await deleteApplication({ id: "app-1" })).toEqual({ ok: true, data: null });
     const counts = await Promise.all([
       prisma().application.count(),
       prisma().document.count(),
+      prisma().documentVersion.count(),
       prisma().chatMessage.count(),
       prisma().note.count(),
       prisma().statusEvent.count(),
     ]);
-    expect(counts).toEqual([0, 0, 0, 0, 0]);
+    expect(counts).toEqual([0, 0, 0, 0, 0, 0]);
     expect(await prisma().job.findMany({ select: { id: true } })).toEqual([{ id: "other" }]);
   });
+
 
   it("says so when it's already gone", async () => {
     await deleteApplication({ id: "app-1" });

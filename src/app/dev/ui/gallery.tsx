@@ -96,7 +96,7 @@ export function Gallery({ application }: { application: DemoApplication | null }
     });
 
   return (
-    <main className="mx-auto flex max-w-[960px] flex-col gap-10 px-14 py-12">
+    <main className="mx-auto flex max-w-[960px] flex-col gap-10 px-10 py-12">
       <header className="flex flex-col gap-2">
         <h1 className="font-serif text-title">UI primitives</h1>
         <p className="text-lead text-muted">
@@ -296,7 +296,7 @@ export function Gallery({ application }: { application: DemoApplication | null }
       <Section title="Dropdown menu and status dots">
         <Row label="Status menu">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-ink">
+            <DropdownMenuTrigger className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-line-strong">
               <StatusDot status={status} />
               {statusInfo(status).label}
               <span aria-hidden="true" className="text-[10px] text-muted">

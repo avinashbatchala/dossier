@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 
 const MARKS: Record<MatchResult, { mark: string; label: string; className: string }> = {
   covered: { mark: "✓", label: "Covered", className: "border-primary bg-primary text-on-primary" },
-  partial: { mark: "~", label: "Partly covered", className: "border-[oklch(0.85_0.06_85)] bg-warning-surface text-warning" },
+  partial: { mark: "~", label: "Partly covered", className: "border-warning-line bg-warning-surface text-warning" },
   gap: { mark: "–", label: "Not covered", className: "border-line-strong text-muted" },
 };
 

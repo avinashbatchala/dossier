@@ -209,7 +209,7 @@ export const createApplication = action(
         select: { id: true },
       });
       const key = `${CLAIMED}${application.id}`;
-      await tx.job.updateMany({ where: { id: { in: [writeJobId, input.readJobId] } }, data: { key } });
+      await tx.job.updateMany({ where: { id: { in: [writeJobId, input.readJobId] } }, data: { key, applicationId: application.id } });
       // The posting it came from shows it as applied for (E14-8); one already linked keeps its application.
       if (postingId) await tx.posting.updateMany({ where: { id: postingId, applicationId: null }, data: { applicationId: application.id } });
       return { id: application.id, isNew: true };

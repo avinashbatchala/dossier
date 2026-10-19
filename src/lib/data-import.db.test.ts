@@ -71,6 +71,19 @@ describe("importExport (E10-6)", () => {
     expect(await prisma().application.findFirstOrThrow({ where: { company: "Northstar Health" } })).toMatchObject({ nextInterviewAt: null });
   });
 
+  it("deletes every background job, since their inputs and results hold the data it replaces", async () => {
+    const ledgerly = await prisma().application.findFirstOrThrow({ where: { documents: { some: {} } } });
+    await prisma().job.createMany({
+      data: [
+        { type: "write-email", key: `email:${ledgerly.id}`, applicationId: ledgerly.id, status: "DONE", input: {} },
+        { type: "import-profile", key: "profile-import", status: "DONE", input: { resume: "Jane Doe, jane@example.com" } },
+        { type: "read-posting", status: "DONE", input: { posting: "A posting never applied to" } },
+      ],
+    });
+    await importExport(prisma(), await asFile());
+    expect(await prisma().job.count()).toBe(0);
+  });
+
   it("keeps the current API key when the file has none", async () => {
     await importExport(prisma(), await asFile());
     const saved = await prisma().setting.findUniqueOrThrow({ where: { key: "apiKeyEnc" } });

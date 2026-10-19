@@ -38,9 +38,13 @@ const SCREENS = [
   "/jobs?view=history",
   "/jobs?view=saved",
   "/jobs?view=dismissed",
+  "/inbox",
+  "/calendar",
+  "/calendar?view=month",
   "/settings?section=ai",
   "/settings?section=jobs",
   "/settings?section=documents",
+  "/settings?section=google",
   "/settings?section=data",
   "/settings?section=about",
   "/applications/nope",
@@ -54,6 +58,45 @@ for (const path of SCREENS) {
     await expectAccessible(page);
   });
 }
+
+// The dark scheme and the collapsed sidebar (chosen in the sidebar, kept in
+// cookies) on every main screen too.
+test.describe("dark, with the sidebar collapsed", () => {
+  test.beforeEach(async ({ context, baseURL }) => {
+    await context.addCookies([
+      { name: "dossier_theme", value: "dark", url: baseURL! },
+      { name: "dossier_sidebar", value: "collapsed", url: baseURL! },
+    ]);
+  });
+
+  for (const path of SCREENS) {
+    test(`axe: ${path}`, async ({ page }) => {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      await expectAccessible(page);
+    });
+  }
+
+  test("axe: an application, on every tab", async ({ page }) => {
+    await page.goto(application);
+    await expectAccessible(page);
+    for (const tab of ["Cover letter", "Email", /^Job posting/, /^Notes/]) {
+      await page.getByRole("tab", { name: tab }).click();
+      await expectAccessible(page);
+    }
+  });
+
+  test("axe: open menus and the sign-in page", async ({ page, context, baseURL }) => {
+    await page.goto(application);
+    await page.getByRole("button", { name: "More actions" }).click();
+    await expectAccessible(page);
+    await context.clearCookies({ name: "dossier_session" });
+    await context.addCookies([{ name: "dossier_theme", value: "dark", url: baseURL! }]);
+    await page.goto("/login");
+    await expectAccessible(page);
+  });
+});
 
 test.describe("signed out", () => {
   test.use({ storageState: { cookies: [], origins: [] } });

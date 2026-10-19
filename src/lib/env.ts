@@ -121,10 +121,31 @@ const schema = z.object({
   ),
   DOSSIER_ADZUNA_APP_ID: optional(z.string()),
   DOSSIER_ADZUNA_KEY: optional(z.string()),
+  // Google sign-in for Gmail and Calendar (E15-1): an OAuth client of type
+  // "Web application". Settings → Google can save one instead, which wins.
+  // Never echo the secret.
+  DOSSIER_GOOGLE_CLIENT_ID: optional(z.string().trim()),
+  DOSSIER_GOOGLE_CLIENT_SECRET: optional(z.string().trim()),
+  // The address Dossier is reached at, e.g. https://dossier.example.com, for
+  // Google's redirect. Defaults to the address of the request that connects.
+  DOSSIER_PUBLIC_URL: optional(
+    z.url({ protocol: /^https?$/, error: "DOSSIER_PUBLIC_URL must be an http:// or https:// URL." }).transform((url) => url.replace(/\/+$/, "")),
+  ),
   // For the end-to-end tests only: sends every job source's requests to
   // <url>/<source> instead, where a fake source answers (e2e/fake-jobs.mts).
   DOSSIER_JOBS_TEST_BASE_URL: optional(
     z.url({ protocol: /^https?$/, error: "DOSSIER_JOBS_TEST_BASE_URL must be an http:// or https:// URL." }),
+  ),
+  // For the end-to-end tests only: sends Google's sign-in, Gmail and Calendar
+  // requests to <url>/<host> instead, where a fake Google answers
+  // (e2e/fake-google.mts).
+  DOSSIER_GOOGLE_TEST_BASE_URL: optional(
+    z.url({ protocol: /^https?$/, error: "DOSSIER_GOOGLE_TEST_BASE_URL must be an http:// or https:// URL." }),
+  ),
+  // For the end-to-end tests only: asks <url> for the latest release instead
+  // of GitHub's API (e2e/fake-jobs.mts answers).
+  DOSSIER_UPDATES_TEST_BASE_URL: optional(
+    z.url({ protocol: /^https?$/, error: "DOSSIER_UPDATES_TEST_BASE_URL must be an http:// or https:// URL." }),
   ),
 });
 

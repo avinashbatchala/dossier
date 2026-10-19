@@ -61,7 +61,7 @@ export function ThemePicker({ themes, activeId, userName, onSelect, onCustomize,
                 onClick={() => onSelect(theme.id)}
                 className={cn(
                   "flex items-center gap-3 rounded-[10px] border bg-card px-3.5 py-3 text-left",
-                  active ? "border-ink" : "border-line-card hover:border-line-strong",
+                  active ? "border-primary" : "border-line-card hover:border-line-strong",
                 )}
               >
                 <span aria-hidden className="size-3.5 flex-none rounded-full" style={{ background: theme.accent }} />
@@ -77,7 +77,7 @@ export function ThemePicker({ themes, activeId, userName, onSelect, onCustomize,
       <button
         type="button"
         onClick={onCustomize}
-        className="flex flex-col gap-[3px] rounded-[10px] border border-dashed border-line-strong p-3.5 text-left text-control hover:border-ink"
+        className="flex flex-col gap-[3px] rounded-[10px] border border-dashed border-line-strong p-3.5 text-left text-control hover:border-line-strong"
       >
         <span className="font-medium">+ Make your own theme</span>
         <span className="text-meta text-muted">Start from the current one and change fonts, color and layout.</span>
@@ -143,7 +143,7 @@ function ThemeThumbnail({
   const accent = { background: theme.accent };
   const name = (
     <span
-      className={cn("truncate text-[11px] font-medium text-ink", centered && "text-center")}
+      className={cn("truncate text-[11px] font-medium", centered && "text-center")}
       style={{ fontFamily: THEME_FONTS[theme.headFont].family, ...(banner && { color: onAccent }) }}
     >
       {userName}
@@ -172,8 +172,9 @@ function ThemeThumbnail({
       <span
         aria-hidden
         className={cn(
-          "flex h-[150px] w-full flex-col gap-2 overflow-hidden rounded-control bg-input px-3 py-3.5",
-          active ? "ring-2 ring-ink" : "ring-1 ring-line-popover group-hover:ring-line-strong",
+          // A sketch of a white page, in the documents' own ink, so it stays light in the dark scheme too.
+          "flex h-[150px] w-full flex-col gap-2 overflow-hidden rounded-control bg-white px-3 py-3.5 text-[#1d1c1a]",
+          active ? "ring-2 ring-primary" : "ring-1 ring-line-popover group-hover:ring-line-strong",
         )}
       >
         {banner ? (

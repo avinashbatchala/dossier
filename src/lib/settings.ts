@@ -25,6 +25,23 @@ export function formatDocumentDate(date: Date, format: DateFormat, locale = "en-
   return format === DateFormat.DAY_MONTH_YEAR ? `${day} ${month} ${year}` : `${month} ${day}, ${year}`;
 }
 
+/**
+ * How long a finished background job is kept (Settings → Your data). Its
+ * input and result hold what an AI task was given and wrote: a posting,
+ * a resume's text, drafts not yet in an application.
+ */
+export const JOB_RETENTION_OPTIONS: readonly { hours: number; label: string }[] = [
+  { hours: 1, label: "1 hour" },
+  { hours: 24, label: "24 hours" },
+  { hours: 24 * 7, label: "7 days" },
+  { hours: 24 * 30, label: "30 days" },
+];
+export const DEFAULT_JOB_RETENTION_HOURS = 24;
+export const isJobRetention = (hours: number) => JOB_RETENTION_OPTIONS.some((option) => option.hours === hours);
+/** "24 hours" */
+export const jobRetentionLabel = (hours: number) =>
+  JOB_RETENTION_OPTIONS.find((option) => option.hours === hours)?.label ?? `${hours} hours`;
+
 // ─── Stored settings ─────────────────────────────────────────────────────────
 // Settings are stored in the Setting table, one text row per key: enums by
 // name, flags as "true"/"false", lists as JSON. A missing key, or a value that
@@ -70,6 +87,8 @@ export const settingsSchema = z.object({
   includeRefs: flag(false),
   onePage: flag(true),
   nightlyBackup: flag(true),
+  /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */
+  jobRetentionHours: z.coerce.number().refine(isJobRetention).catch(DEFAULT_JOB_RETENTION_HOURS),
   /** A theme's id. loadSettings() reads a deleted one as Editorial. */
   baseThemeId: z.string().catch(DEFAULT_BASE_THEME),
   /** The Applications screen as last left (LST-7): view, filter and sort, e.g. "-match". */
@@ -94,11 +113,62 @@ export const settingsSchema = z.object({
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
   adzunaAppId: z.string().nullable().catch(null),
   adzunaKeyEnc: z.string().nullable().catch(null),
+  /** "Check for updates daily" in Settings → About (update-check.ts). */
+  updateCheck: flag(true),
+  // The newest release the update check has seen, the UTC day it last
+  // asked, and the release "Not now" hid the sidebar notice for. They belong
+  // to the install, not its data, so exports leave them out (INSTALL_SETTINGS).
+  latestVersion: z.string().nullable().catch(null),
+  latestVersionUrl: z.string().nullable().catch(null),
+  updateCheckDay: z.string().nullable().catch(null),
+  updateDismissed: z.string().nullable().catch(null),
+  // Gmail and Calendar (E15). Off until the Google account is connected.
+  // The OAuth client, entered in Settings → Google. Null means "not set in the
+  // app": DOSSIER_GOOGLE_CLIENT_ID and DOSSIER_GOOGLE_CLIENT_SECRET decide.
+  googleClientId: z.string().nullable().catch(null),
+  /** Encrypted like the API keys (GOOGLE_CLIENT_SECRET); never sent to the client. */
+  googleClientSecretEnc: z.string().nullable().catch(null),
+  /** Read replies from Gmail. */
+  gmailRead: flag(true),
+  /** Which mail the inbox check reads: only threads Dossier knows and company domains, or every new mail. */
+  gmailScope: z.enum(["known", "all"]).catch("known"),
+  /** Minutes between inbox checks. */
+  gmailInterval: z.coerce.number().int().min(5).max(120).catch(10),
+  /** Look in the calendar for free times when an employer asks to meet. */
+  calendarAvailability: flag(true),
+  /** Add agreed interviews to the calendar. */
+  calendarEvents: flag(true),
+  /** The calendar to read and write; "primary" is the account's own. */
+  calendarId: z.string().catch("primary"),
+  /** Working days, 1 = Monday … 7 = Sunday, as JSON. */
+  workDays: z
+    .string()
+    .transform((value): unknown => {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
+    })
+    .pipe(z.array(z.number().int().min(1).max(7)))
+    .catch([1, 2, 3, 4, 5]),
+  /** Working hours as "HH:MM". */
+  workStart: z.string().regex(/^\d{2}:\d{2}$/).catch("09:00"),
+  workEnd: z.string().regex(/^\d{2}:\d{2}$/).catch("17:00"),
+  /** The time zone for free slots and interviews; null means the browser's. */
+  workTimeZone: z.string().nullable().catch(null),
+  /** Interview length and the gap kept around other meetings, in minutes. */
+  slotMinutes: z.coerce.number().int().min(15).max(240).catch(45),
+  bufferMinutes: z.coerce.number().int().min(0).max(120).catch(15),
   // The usage ping (usage-ping.ts): this install's random ID, made by its
   // first ping, and the UTC day of the last one. They belong to the install,
   // not its data, so exports leave them out (INSTALL_SETTINGS).
   usagePingId: z.string().nullable().catch(null),
   usagePingDay: z.string().nullable().catch(null),
+  // The browser's time zone as it last told the server, for work done
+  // without a request, such as the inbox check (time-zone.ts). It belongs
+  // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).
+  browserTimeZone: z.string().nullable().catch(null),
 });
 export type SettingsData = z.output<typeof settingsSchema>;
 

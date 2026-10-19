@@ -9,3 +9,5 @@ export { REGENERATE_UNIT_VERSION, regenerateUnit } from "./regenerate-unit";
 export { TAILOR_RESUME_VERSION, tailorResume } from "./tailor-resume";
 export { WRITE_COVER_LETTER_VERSION, writeCoverLetter } from "./write-cover-letter";
 export { WRITE_EMAIL_VERSION, writeEmail } from "./write-email";
+export { CLASSIFY_REPLY_VERSION, classifyReply, type Classified } from "./classify-reply";
+export { DRAFT_REPLY_VERSION, draftReply, type DraftedReply } from "./draft-reply";

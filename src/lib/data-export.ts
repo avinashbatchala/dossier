@@ -28,8 +28,9 @@ import { appVersion } from "@/lib/version";
 // Everything a user keeps in Dossier as one JSON file (E10-4, SET-10): the
 // profile, custom themes, settings and applications with their history,
 // documents, chat and notes, and the postings kept from Find jobs (E14-9).
-// IDs are kept, so an import restores every link. Jobs, sign-in throttling
-// and built-in themes stay behind: they belong to the server, not the user.
+// IDs are kept, so an import restores every link. Jobs, sign-in throttling,
+// built-in themes, the Google account and the mail fetched from Gmail stay
+// behind: they belong to the server or the mailbox, not the user's data.
 
 export const EXPORT_FORMAT = "dossier-export";
 /** Bump when the file's shape changes; imports refuse versions they don't know. 2 added Find jobs' postings and keys (E14-9). */
@@ -41,8 +42,18 @@ export const EXPORT_SCHEMA_VERSIONS: readonly number[] = [1, 2];
 const API_KEY_SETTING = "apiKeyEnc";
 /** The settings that hold encrypted keys, which only this server can read: never exported as they are. */
 export const SECRET_SETTINGS: readonly string[] = [API_KEY_SETTING, "jsearchKeyEnc", "adzunaKeyEnc"];
-/** The settings that belong to this install rather than its data (the usage ping's): never exported, and kept by an import. */
-export const INSTALL_SETTINGS: readonly string[] = ["usagePingId", "usagePingDay"];
+/** The settings that belong to this install rather than its data (the usage ping's, the update check's, the Google client and the browser's time zone): never exported, and kept by an import. */
+export const INSTALL_SETTINGS: readonly string[] = [
+  "usagePingId",
+  "usagePingDay",
+  "latestVersion",
+  "latestVersionUrl",
+  "updateCheckDay",
+  "updateDismissed",
+  "googleClientId",
+  "googleClientSecretEnc",
+  "browserTimeZone",
+];
 
 const date = z.iso.datetime().transform((value) => new Date(value));
 const optionalDate = date.nullable();
@@ -260,6 +271,8 @@ export async function buildExport(
       tx.setting.findMany({ select: { key: true, value: true }, orderBy: { key: "asc" } }),
       tx.application.findMany({
         orderBy: { createdAt: "asc" },
+        // The Gmail thread belongs to the mailbox, not the data (E15-2).
+        omit: { emailThreadId: true, interviewEventId: true, interviewCalendarId: true },
         include: {
           events: { omit: { applicationId: true }, orderBy: { at: "asc" } },
           documents: {

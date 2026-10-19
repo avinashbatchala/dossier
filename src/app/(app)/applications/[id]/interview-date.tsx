@@ -57,7 +57,7 @@ export function InterviewDate({
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger
         aria-label={shown ? `Next interview: ${formatDateTime(shown, zone)}. Change` : "Add the interview date"}
-        className="flex items-center gap-2 rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm hover:border-ink data-[state=open]:border-ink"
+        className="flex items-center gap-2 rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm hover:border-line-strong data-[state=open]:border-primary"
       >
         {shown ? (
           <>

@@ -11,7 +11,7 @@ import { ApplicationsScreen } from "./applications-screen";
 
 vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })) }));
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 vi.mock("@/components/change-status", () => ({ changeStatus: vi.fn(async () => true) }));
 vi.mock("@/lib/application-actions", () => ({
   setArchived: vi.fn(async () => ({ ok: true, data: null })),

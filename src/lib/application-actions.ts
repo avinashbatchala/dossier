@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { action, ActionError } from "@/lib/action";
-import { cancelJob, findUnfinishedJobs } from "@/lib/jobs/runner";
+import { cancelApplicationJobs } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 
 // Archiving and deleting an application (E9-5, LST-8), from its page, a
@@ -32,23 +32,14 @@ export const setArchived = action(z.object({ id: z.string().min(1), archived: z.
 });
 
 /**
- * Deletes an application with its documents, chat, notes and status
- * history (the database cascades), and its background jobs, whose inputs
- * and results hold the posting and the documents too.
+ * Deletes an application with its documents and their versions, chat,
+ * notes, status history and background jobs, whose inputs and results hold
+ * the posting and the documents too (the database cascades).
  */
 export const deleteApplication = action(z.object({ id: z.string().min(1) }), async ({ id }) => {
-  const keys = [`application:${id}`, `units:${id}`, `refine:${id}`];
-  for (const key of keys) {
-    for (const job of await findUnfinishedJobs(key)) await cancelJob(job.id);
-  }
-  const deleted = await prisma.$transaction(async (tx) => {
-    const application = await tx.application.findUnique({ where: { id }, select: { id: true } });
-    if (!application) return false;
-    await tx.job.deleteMany({ where: { key: { in: keys } } });
-    await tx.application.delete({ where: { id } });
-    return true;
-  });
-  if (!deleted) throw new ActionError(GONE);
+  await cancelApplicationJobs(id);
+  const { count } = await prisma.application.deleteMany({ where: { id } });
+  if (count === 0) throw new ActionError(GONE);
   refreshEverything();
   return null;
 });

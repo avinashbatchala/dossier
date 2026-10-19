@@ -8,7 +8,7 @@
  * document-page.tsx), so this file never needs to know which theme is active.
  *
  * Documents keep their own colours: they're printed, so they don't follow the
- * app's colour scheme.
+ * app's colour scheme, and neither does the app UI drawn on the paper.
  */
 
 .page {
@@ -418,11 +418,11 @@
   box-shadow: var(--shadow-page);
 }
 
-/* App UI on the page, so in the app's colours. */
+/* App UI on the page, in the light scheme's colours to read on the paper in either scheme. */
 .pageEnd {
   position: absolute;
   inset-inline: 0;
-  border-top: 1px dashed var(--color-line-field);
+  border-top: 1px dashed rgb(29 28 26 / 0.14);
   pointer-events: none;
 }
 
@@ -432,7 +432,7 @@
   inset-inline-end: calc(var(--u) * 8);
   top: calc(var(--u) * 2);
   font: 500 10px/1.2 var(--font-sans);
-  color: var(--color-muted);
+  color: #69655d;
 }
 
 /* ─── Print ────────────────────────────────────────────────────────────── */

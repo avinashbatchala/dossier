@@ -233,3 +233,22 @@ describe("interviews in Worth a look (E9-9)", () => {
     ]);
   });
 });
+
+describe("replies in Worth a look (E15-3)", () => {
+  it("puts replies waiting for an answer first, in place of the application's other item", () => {
+    const replies = new Map([
+      ["quiet", { count: 1, summary: "Invites you to a call." }],
+      ["offer", { count: 2, summary: "Asks about your start date." }],
+    ]);
+    const { attention } = dashboardFigures(
+      [app("quiet", { lastStatusChange: daysAgo(10), sentAt: daysAgo(10) }), app("offer", { status: "OFFER", furthestStage: "OFFER" }), app("other", { status: "OFFER", furthestStage: "OFFER" })],
+      now,
+      { replies },
+    );
+    expect(attention.map((item) => [item.id, item.action, item.tab ?? null, item.reason])).toEqual([
+      ["quiet", "Answer", "conversation", "A reply is waiting: Invites you to a call."],
+      ["offer", "Answer", "conversation", "2 replies are waiting. Asks about your start date."],
+      ["other", "Review", null, "An offer is waiting on your decision."],
+    ]);
+  });
+});

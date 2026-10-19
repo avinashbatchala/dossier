@@ -10,7 +10,7 @@ import { ApplicationsScreen, type ApplicationsScreenProps } from "./applications
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })) }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 
 export const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => ({
   id,

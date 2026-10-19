@@ -19,10 +19,12 @@ import { JOB_SOURCES, JSEARCH_HOSTS } from "@/lib/job-search/search";
 import { cancelJob, startJob } from "@/lib/jobs/runner";
 import { checkForUpdate } from "@/lib/update-check";
 import { countTailoredDocuments, deleteAllDownloads, zipPdfsJob } from "@/lib/jobs/zip-pdfs";
+import { disconnectGoogle } from "@/lib/google/account";
 import { prisma } from "@/lib/prisma";
 import { applySecretChange, JOB_SOURCE_KEY } from "@/lib/secrets";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
+import { isJobRetention } from "@/lib/settings";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 
 // Settings → AI provider (E6-3). Every field saves on its own, so a test
@@ -174,6 +176,8 @@ export const updateSettings = action(
     includeRefs: z.boolean().optional(),
     onePage: z.boolean().optional(),
     nightlyBackup: z.boolean().optional(),
+    jobRetentionHours: z.number().refine(isJobRetention).optional(),
+    updateCheck: z.boolean().optional(),
   }),
   async (changes) => {
     await saveSettings(changes);
@@ -212,12 +216,16 @@ export const startZippingPdfs = action(z.object({}), async () => {
 export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }), async () => {
   const unfinished = await prisma.job.findMany({ where: { status: { in: [JobStatus.QUEUED, JobStatus.RUNNING] } }, select: { id: true } });
   for (const job of unfinished) await cancelJob(job.id);
+  // Revokes Dossier's access at Google too (E15-1).
+  await disconnectGoogle().catch(() => {});
 
   await prisma.$transaction(async (tx) => {
     await tx.job.deleteMany();
     // Find jobs' postings and past searches (E14-9, E14-10).
     await tx.posting.deleteMany();
     await tx.postingSearch.deleteMany();
+    // Mail fetched from Gmail (E15-3).
+    await tx.emailMessage.deleteMany();
     // Applications take their history, documents, chat and notes along.
     await tx.application.deleteMany();
     await tx.experience.deleteMany();
@@ -237,8 +245,9 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
   redirect("/");
 });
 
-/** "Check for updates" (E10-9): the latest release, asked for only now. */
+/** "Check for updates" (E10-9): the latest release, asked for now, and kept for the sidebar's notice. */
 export const checkUpdates = action(z.object({}), async () => {
   const result = await checkForUpdate();
+  revalidatePath("/", "layout");
   return result.status === "newer" ? result : { status: result.status };
 });

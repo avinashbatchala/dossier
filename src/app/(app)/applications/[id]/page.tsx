@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 
 import { activityTimeline } from "@/lib/activity";
 import { isAiConfigured } from "@/lib/ai/config";
@@ -10,6 +11,9 @@ import { refineJobKey } from "@/lib/jobs/refine";
 import { regenerateUnitJob, unitJobKey } from "@/lib/jobs/regenerate-unit";
 import { findUnfinishedJobs } from "@/lib/jobs/runner";
 import { emailJobKey } from "@/lib/jobs/write-email";
+import { googleConnection } from "@/lib/google/account";
+import { pullInterviewEvents } from "@/lib/google/availability";
+import { loadConversation } from "@/lib/google/inbox-data";
 import { refineSuggestions } from "@/lib/refine-suggestions";
 import { userTimeZone } from "@/lib/time-zone";
 
@@ -17,8 +21,16 @@ import { ApplicationView } from "./application-view";
 import { metaLine } from "./meta";
 import { tabFrom } from "./tabs";
 
+/**
+ * Takes an interview moved or deleted in Google Calendar into the
+ * application, once per request and before anything reads it:
+ * loadApplication is cached for the request, and the title reads it first.
+ */
+const pullCalendar = cache((id: string) => pullInterviewEvents({ applicationId: id, signal: AbortSignal.timeout(3_000) }).catch(() => 0));
+
 export async function generateMetadata({ params }: PageProps<"/applications/[id]">): Promise<Metadata> {
   const { id } = await params;
+  await pullCalendar(id);
   const application = await loadApplication(id);
   return { title: application.title.trim() || "Untitled application" };
 }
@@ -26,7 +38,8 @@ export async function generateMetadata({ params }: PageProps<"/applications/[id]
 /** One application (PRD §6.5): its status, tailored documents, email, posting and notes. */
 export default async function ApplicationPage({ params, searchParams }: PageProps<"/applications/[id]">) {
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
-  const [{ application, profile, settings, extracted, resume, letter, email, includeReferences, letterDate }, aiReady, unitJobs, refineJobs, emailJobs, timeZone] =
+  await pullCalendar(id);
+  const [{ application, profile, settings, extracted, resume, letter, email, includeReferences, letterDate }, aiReady, unitJobs, refineJobs, emailJobs, timeZone, google, emails] =
     await Promise.all([
       loadDocuments(id),
       isAiConfigured(),
@@ -34,6 +47,8 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
       findUnfinishedJobs(refineJobKey(id)),
       findUnfinishedJobs(emailJobKey(id)),
       userTimeZone(),
+      googleConnection(),
+      loadConversation(id),
     ]);
 
   const match = readJson(matchSchema, application.match);
@@ -90,6 +105,21 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
       email={email}
       writingEmail={emailJobs.at(-1)?.id ?? null}
       attachments={{ resume: resume ? fileName("RESUME") : null, letter: letter ? fileName("COVER_LETTER") : null }}
+      gmail={
+        google.status === "not-configured" && emails.length === 0
+          ? undefined
+          : {
+              sender:
+                google.status === "connected"
+                  ? google.canSend
+                    ? { from: google.email }
+                    : { from: null, reason: "no-permission" }
+                  : { from: null, reason: google.status === "not-configured" ? "not-configured" : "not-connected" },
+              sentBefore: application.emailThreadId !== null,
+              emails,
+              reading: google.status === "connected" && google.canRead && settings.gmailRead,
+            }
+      }
       profile={profile}
       paper={settings.paper}
       dateFormat={settings.dateFormat}

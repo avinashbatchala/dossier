@@ -53,7 +53,7 @@ vi.mock("./actions", () => ({
 vi.mock("@/lib/copy-text", () => ({ copyText: vi.fn(async () => true) }));
 vi.mock("@/lib/jobs/actions", () => ({ retry: vi.fn(async () => ({ ok: true, data: null })) }));
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 // Jobs report whatever the test says, as the real hook would.
 const jobs = vi.hoisted(() => ({ listeners: new Map<string, (job: unknown) => void>(), revisions: new Map<string, number>() }));
 vi.mock("@/hooks/use-job", async () => {

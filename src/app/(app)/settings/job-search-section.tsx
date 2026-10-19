@@ -99,15 +99,15 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
             value={entry.value}
             aria-label={entry.name}
             aria-describedby={`job-source-${entry.value}`}
-            className="group flex flex-col gap-1.5 rounded-card border border-line-card bg-card p-[18px] text-left hover:border-line-strong data-[state=checked]:border-ink data-[state=checked]:shadow-[0_0_0_1px_var(--color-ink)]"
+            className="group flex flex-col gap-1.5 rounded-card border border-line-card bg-card p-[18px] text-left hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:shadow-[0_0_0_1px_var(--color-primary)]"
           >
             <span className="flex items-center justify-between gap-2">
               <span className="text-[15px] font-medium">{entry.name}</span>
               <span
                 aria-hidden
-                className="grid size-4 place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-ink"
+                className="grid size-4 place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-primary"
               >
-                <RadioGroup.Indicator className="size-2 rounded-full bg-ink" />
+                <RadioGroup.Indicator className="size-2 rounded-full bg-primary" />
               </span>
             </span>
             <span id={`job-source-${entry.value}`} className="flex flex-col gap-1.5">

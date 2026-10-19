@@ -145,7 +145,7 @@ function CustomColor({ value, onChange }: { value: string; onChange: (accent: st
         title="Custom color"
         value={value}
         onChange={(event) => onChange(event.target.value.toLowerCase())}
-        className="size-[34px] flex-none cursor-pointer rounded-control border border-line-field bg-card p-[3px] hover:border-ink"
+        className="size-[34px] flex-none cursor-pointer rounded-control border border-line-field bg-card p-[3px] hover:border-line-strong"
       />
       <Input
         aria-label="Hex color"
@@ -213,7 +213,7 @@ function Choices<T extends string>({
               key={option.value}
               value={option.value}
               className={cn(
-                "rounded-control border border-line-field bg-card px-3 py-[7px] text-control text-ink hover:border-ink",
+                "rounded-control border border-line-field bg-card px-3 py-[7px] text-control text-ink hover:border-line-strong",
                 "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-on-primary",
                 "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line-field",
               )}

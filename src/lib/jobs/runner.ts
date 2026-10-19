@@ -103,15 +103,23 @@ export function isFinished(job: Pick<JobView, "status">): boolean {
   return job.status === JobStatus.DONE || job.status === JobStatus.FAILED;
 }
 
-/** Queues a job and returns its id right away. */
+/**
+ * Queues a job and returns its id right away. A job that works on an
+ * application names it, so deleting the application deletes the job too.
+ */
 export async function startJob<I, R>(
   definition: JobDefinition<I, R>,
   input: NoInfer<I>,
-  options: { key?: string } = {},
+  options: { key?: string; applicationId?: string } = {},
 ): Promise<string> {
   defineJob(definition);
   const job = await prisma.job.create({
-    data: { type: definition.type, key: options.key, input: definition.input.parse(input) as Prisma.InputJsonValue },
+    data: {
+      type: definition.type,
+      key: options.key,
+      applicationId: options.applicationId,
+      input: definition.input.parse(input) as Prisma.InputJsonValue,
+    },
     select: { id: true },
   });
   enqueue(job.id);
@@ -141,6 +149,15 @@ export async function cancelJob(id: string): Promise<void> {
   state.running.get(id)?.abort();
 }
 
+/** Stops every queued or running job that works on an application, e.g. before it's deleted. */
+export async function cancelApplicationJobs(applicationId: string): Promise<void> {
+  const unfinished = await prisma.job.findMany({
+    where: { applicationId, status: { in: [JobStatus.QUEUED, JobStatus.RUNNING] } },
+    select: { id: true },
+  });
+  for (const job of unfinished) await cancelJob(job.id);
+}
+
 /** Calls `listener` with the job's state after every change; returns how to stop. */
 export function subscribeJob(id: string, listener: Listener): () => void {
   const listeners = state.listeners.get(id) ?? new Set();
@@ -159,12 +176,13 @@ async function notify(id: string): Promise<void> {
   if (job) for (const listener of listeners) listener(job);
 }
 
+/** Records how a job ended; one deleted meanwhile (its application, a discarded import) just ends. */
 async function finish(
   id: string,
   data: { status: JobStatus; result?: Prisma.InputJsonValue; error?: string },
 ): Promise<void> {
-  await prisma.job.update({ where: { id }, data: { ...data, finishedAt: new Date() } });
-  await notify(id);
+  const { count } = await prisma.job.updateMany({ where: { id }, data: { ...data, finishedAt: new Date() } });
+  if (count > 0) await notify(id);
 }
 
 function enqueue(id: string): void {
@@ -215,8 +233,10 @@ async function execute(id: string, controller: AbortController): Promise<void> {
     const result = await definition.run(definition.input.parse(job.input), {
       signal: controller.signal,
       step: async (name) => {
-        await prisma.job.update({ where: { id }, data: { step: name } });
-        await notify(id);
+        // Deleted meanwhile: there's no one left to do it for.
+        const { count } = await prisma.job.updateMany({ where: { id }, data: { step: name } });
+        if (count === 0) controller.abort();
+        else await notify(id);
       },
     });
     await finish(id, { status: JobStatus.DONE, result: definition.result.parse(result) as Prisma.InputJsonValue });

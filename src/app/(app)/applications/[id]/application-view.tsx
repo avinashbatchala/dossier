@@ -48,7 +48,9 @@ import {
 } from "./actions";
 import { ApplicationHeader } from "./application-header";
 import { ApplicationMenu } from "./application-menu";
+import { ConversationTab } from "./conversation-tab";
 import { EmailTab, type Attachments } from "./email-tab";
+import type { GmailSender } from "./send-with-gmail";
 
 import { JobWatcher } from "./job-watcher";
 import { NotesTab } from "./notes-tab";
@@ -60,6 +62,7 @@ import { TrimmedNotice } from "./trimmed-notice";
 import { aboutWords, type Tab } from "./tabs";
 import { UnitFrame } from "./unit-frame";
 import { VersionHistory, type ViewedVersion } from "./version-history";
+import type { EmailView } from "@/lib/google/inbox-data";
 
 
 /** A unit on the page: its document and id, e.g. "RESUME summary". */
@@ -120,6 +123,8 @@ export type ApplicationViewProps = {
   writingEmail: string | null;
   /** The PDFs to attach to the email. */
   attachments: Attachments;
+  /** Sending through Gmail (E15-2), and the application's mail (E15-3). */
+  gmail?: { sender: GmailSender; sentBefore: boolean; emails: EmailView[]; reading: boolean };
   profile: ProfileData;
   paper: PaperSize;
   dateFormat: DateFormat;
@@ -159,6 +164,7 @@ export function ApplicationView({
   email,
   writingEmail,
   attachments,
+  gmail,
   profile,
   paper,
   dateFormat,
@@ -522,13 +528,14 @@ export function ApplicationView({
   );
   const viewed = (document: DocumentKind) => (viewing?.document === document ? viewing : null);
   const notes = activity.filter((entry) => entry.kind === "note").length;
+  const waiting = gmail?.emails.filter((email) => email.direction === "INCOMING" && !email.handled).length ?? 0;
 
   return (
     // Wide enough for the refine panel beside the documents, the page fills the
     // window: the document scrolls in its column and the panel keeps its input
     // in view. Narrower, the panel moves below and the page scrolls as usual.
     <div className="@container/page flex flex-1 flex-col">
-    <Tabs value={tab} onValueChange={selectTab} className="flex flex-1 flex-col @min-[780px]/page:h-screen @min-[780px]/page:flex-none">
+    <Tabs value={tab} onValueChange={selectTab} className="flex flex-1 flex-col @min-[780px]/page:h-panel @min-[780px]/page:flex-none">
       {Object.entries(rewrites).map(([key, { jobId, revision }]) =>
         jobId ? (
           <JobWatcher<RegenerateUnitResult>
@@ -548,7 +555,6 @@ export function ApplicationView({
       )}
       <ApplicationHeader
         title={application.title}
-        company={application.company}
         meta={meta}
         actions={
           <>
@@ -569,10 +575,15 @@ export function ApplicationView({
         }
       >
         {/* Its underline runs the header's full width, under the padding too. */}
-        <TabsList aria-label="Application" className="-mx-14 px-14">
+        <TabsList aria-label="Application" className="-mx-10 px-10">
           <TabsTrigger value="resume">Resume</TabsTrigger>
           <TabsTrigger value="letter">Cover letter</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
+          {gmail && (gmail.reading || gmail.emails.length > 0) && (
+            <TabsTrigger value="conversation">
+              {waiting > 0 ? `Conversation · ${waiting} new` : gmail.emails.length > 0 ? `Conversation · ${gmail.emails.length}` : "Conversation"}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="posting">{score ? `Job posting · ${score.hit}/${score.total} match` : "Job posting"}</TabsTrigger>
           <TabsTrigger value="notes">{notes > 0 ? `Notes · ${notes}` : "Notes"}</TabsTrigger>
         </TabsList>
@@ -656,7 +667,12 @@ export function ApplicationView({
             writing={emailJob !== null}
             onWrite={() => void writeEmail()}
             attachments={attachments}
+            gmail={gmail && { sender: gmail.sender, sentBefore: gmail.sentBefore }}
           />
+        </TabsContent>
+
+        <TabsContent value="conversation" className="flex min-h-0 min-w-0 flex-[999_1_480px]">
+          <ConversationTab emails={gmail?.emails ?? []} aiReady={aiReady} timeZone={timeZone} reading={gmail?.reading ?? false} />
         </TabsContent>
 
         <TabsContent value="posting" className="flex min-h-0 min-w-0 flex-[999_1_480px]">

@@ -128,7 +128,7 @@ export function PostingResults(props: PostingResultsProps) {
           : `No postings for “${searched.keywords}”${searched.place ? ` within ${searched.radiusKm} km of ${searched.place}` : ""}. Try a bigger radius or fewer words.`;
 
   return (
-    <div className="flex flex-wrap items-start gap-6 px-14 pb-16">
+    <div className="flex flex-wrap items-start gap-6 px-10 pb-16">
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
         <p className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-1 text-meta text-muted", mode !== "search" && visible.length === 0 && "hidden")}>
           <span>
@@ -247,7 +247,7 @@ function PostingList({
               onClick={() => onSelect(key, { reveal: true })}
               className={cn(
                 "flex w-full flex-col gap-1 rounded-card border bg-card px-4 py-3.5 text-left hover:border-line-strong",
-                current ? "border-ink shadow-[0_0_0_1px_var(--color-ink)]" : "border-line-card",
+                current ? "border-primary bg-selected shadow-[0_0_0_1px_var(--color-primary)]" : "border-line-card",
                 posting.state.dismissed && "opacity-60",
               )}
             >
@@ -330,7 +330,7 @@ function PostingDetail({
     <section
       ref={ref}
       aria-labelledby={headingId}
-      className="flex min-w-0 flex-[999_1_420px] scroll-mt-6 flex-col gap-4 rounded-panel border border-line-card bg-card p-7 max-lg:order-first max-lg:max-h-[75vh] lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
+      className="flex min-w-0 flex-[999_1_420px] scroll-mt-[121px] flex-col gap-4 rounded-panel border border-line-card bg-card p-7 max-lg:order-first max-lg:max-h-[75vh] lg:sticky lg:top-[121px] lg:max-h-[calc(100dvh-145px)]"
     >
       <div className="flex flex-col gap-1.5">
         <h2 id={headingId} className="font-serif text-section text-pretty">

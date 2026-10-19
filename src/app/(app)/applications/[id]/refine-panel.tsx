@@ -29,6 +29,7 @@ const SUBTITLES: Record<Tab, string> = {
   resume: "Ask for changes to your tailored resume. I'll only use what's in your profile.",
   letter: "Ask for changes to your cover letter. I'll only use what's in your profile.",
   email: "Ask for changes to your email. I'll only use what's in your profile.",
+  conversation: "Answers to employers are drafted right in the conversation.",
   posting: "Switch to the resume, cover letter or email to make changes.",
   notes: "Switch to the resume, cover letter or email to make changes.",
 };
@@ -83,7 +84,7 @@ export function RefinePanel({
       aria-labelledby="refine-heading"
       className="flex-[1_0_300px] border-t border-line bg-paper @min-[780px]:border-t-0 @min-[780px]:border-l"
     >
-      <div className="flex h-[min(100vh,680px)] flex-col @min-[780px]:h-full">
+      <div className="flex h-[min(100dvh,680px)] flex-col @min-[780px]:h-full">
         <div className="flex flex-col gap-1 px-6 pt-[26px] pb-3.5">
           <h2 id="refine-heading" className="text-[15px] font-medium">
             Refine with AI
@@ -121,14 +122,14 @@ export function RefinePanel({
                   type="button"
                   aria-disabled={thinking || undefined}
                   onClick={() => void send(suggestion)}
-                  className="rounded-full border border-line-field bg-card px-[11px] py-1.5 text-label hover:border-ink aria-disabled:cursor-not-allowed aria-disabled:text-muted"
+                  className="rounded-full border border-line-field bg-card px-[11px] py-1.5 text-label hover:border-line-strong aria-disabled:cursor-not-allowed aria-disabled:text-muted"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
           )}
-          <div className="flex flex-col gap-2 rounded-card border border-line-input bg-input px-3 py-2.5 focus-within:border-ink">
+          <div className="flex flex-col gap-2 rounded-card border border-line-input bg-input px-3 py-2.5 focus-within:border-primary">
             {target && (
               <div className="flex">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-track py-1 pr-1.5 pl-2.5 text-label">

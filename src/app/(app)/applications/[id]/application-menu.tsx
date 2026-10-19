@@ -17,7 +17,7 @@ export function ApplicationMenu({ id, archived }: { id: string; archived: boolea
         <DropdownMenuTrigger
           ref={trigger}
           aria-label="More actions"
-          className="grid size-10 place-items-center rounded-control border border-line-control text-muted hover:border-ink hover:text-ink data-[state=open]:border-ink data-[state=open]:text-ink"
+          className="grid size-10 place-items-center rounded-control border border-line-control text-muted hover:border-line-strong hover:text-ink data-[state=open]:border-primary data-[state=open]:text-ink"
         >
           <span aria-hidden="true" className="text-base leading-none">
             ⋯

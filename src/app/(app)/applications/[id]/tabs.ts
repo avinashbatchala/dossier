@@ -1,6 +1,6 @@
 // The tabs of an application's page, kept in the URL as ?tab=… (APP-3).
 
-export const TABS = ["resume", "letter", "email", "posting", "notes"] as const;
+export const TABS = ["resume", "letter", "email", "conversation", "posting", "notes"] as const;
 export type Tab = (typeof TABS)[number];
 
 /** The tab a ?tab= value asks for; the resume when it's missing or unknown. */

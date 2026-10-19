@@ -50,6 +50,31 @@ export function daysBetween(from: Date, to: Date, timeZone?: string): number {
   return Math.round((dayIn(to, timeZone) - dayIn(from, timeZone)) / 86_400_000);
 }
 
+/**
+ * "2026-10-22T14:00:00+02:00": the moment as a wall clock in `timeZone`,
+ * with that zone's offset then, for prompts that read times in the user's zone.
+ */
+export function isoInZone(date: Date, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(date)
+      .map((part) => [part.type, part.value]),
+  );
+  // "GMT+02:00", or "GMT" for UTC itself.
+  const offset = parts.timeZoneName.replace("GMT", "") || "+00:00";
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
+}
+
 /** "14:00" in a time zone. */
 export function formatTime(date: Date, timeZone?: string): string {
   return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(date);

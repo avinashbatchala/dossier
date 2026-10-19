@@ -84,10 +84,14 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
   const keptKeys = [...SECRET_SETTINGS.filter((key) => !fromFile[key]), ...INSTALL_SETTINGS];
   await db.$transaction(
     async (tx) => {
-      // Out with the old: applications take their history, documents, chat and notes along.
-      await tx.job.deleteMany({ where: { OR: ["application:", "units:", "refine:"].map((prefix) => ({ key: { startsWith: prefix } })) } });
+      // Out with the old. Applications take their history, documents, chat,
+      // notes and jobs along; the other jobs (a resume import, postings read
+      // for applications never created) hold the old data too.
+      await tx.job.deleteMany();
       await tx.posting.deleteMany();
       await tx.postingSearch.deleteMany();
+      // Mail from Gmail belongs to the applications being replaced; the next check fetches what's still relevant.
+      await tx.emailMessage.deleteMany();
       await tx.application.deleteMany();
       await tx.experience.deleteMany();
       await tx.skill.deleteMany();

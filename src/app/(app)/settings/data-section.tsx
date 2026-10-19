@@ -9,12 +9,14 @@ import { Button, buttonClassName } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import { useTrackSave } from "@/components/save-tracker";
 import { useJob } from "@/hooks/use-job";
 import { IMPORT_MAX_BYTES, IMPORT_TOO_BIG } from "@/lib/import-limits";
 import type { JobView } from "@/lib/jobs/runner";
 import { downloadFrom } from "@/lib/save-file";
+import { JOB_RETENTION_OPTIONS } from "@/lib/settings";
 
 import { deleteEverything, startZippingPdfs, updateSettings } from "./actions";
 import { SettingsSectionIntro } from "./settings-screen";
@@ -64,11 +66,23 @@ async function send(file: File, preview: boolean): Promise<{ ok: true; data: Rec
  * Settings → Your data (E10-4 to E10-8, SET-10, SET-11): take everything
  * out, bring it back, keep backups, or delete it all.
  */
-export function DataSection({ hasApiKey, exportName, backups }: { hasApiKey: boolean; exportName: string; backups: BackupStatus }) {
+export function DataSection({
+  hasApiKey,
+  exportName,
+  backups,
+  jobRetentionHours,
+}: {
+  hasApiKey: boolean;
+  exportName: string;
+  backups: BackupStatus;
+  /** How long finished background jobs are kept. */
+  jobRetentionHours: number;
+}) {
   const [includeKey, setIncludeKey] = useState(false);
   const router = useRouter();
   const track = useTrackSave();
   const [nightly, setNightly] = useState(backups.on);
+  const [retention, setRetention] = useState(jobRetentionHours);
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [importing, setImporting] = useState(false);
@@ -118,6 +132,17 @@ export function DataSection({ hasApiKey, exportName, backups }: { hasApiKey: boo
     });
   };
 
+  const changeRetention = (hours: number) => {
+    const before = retention;
+    setRetention(hours);
+    void track(updateSettings({ jobRetentionHours: hours })).then((result) => {
+      if (!result.ok) {
+        setRetention(before);
+        toast(result.error);
+      }
+    });
+  };
+
   const zipAll = async () => {
     setStarting(true);
     const result = await startZippingPdfs({});
@@ -130,7 +155,8 @@ export function DataSection({ hasApiKey, exportName, backups }: { hasApiKey: boo
   return (
     <>
       <SettingsSectionIntro title="Your data">
-        Everything lives in one database on your server. Nothing is tracked, nothing is sold. There&apos;s no one to sell it to.
+        Everything you enter lives in one database on your server, and nothing is sold: there&apos;s no one to sell it to. What leaves it goes to
+        the AI provider and job source you choose, Google if you connect Gmail, and the daily usage ping and update check (see About).
       </SettingsSectionIntro>
       <Card padding="none" className="flex flex-col px-7 pt-1.5 pb-2.5">
         <DataRow
@@ -202,6 +228,23 @@ export function DataSection({ hasApiKey, exportName, backups }: { hasApiKey: boo
                 {importing ? "Importing…" : "Choose file"}
               </Button>
             </>
+          }
+        />
+        <DataRow
+          title="Keep task data for"
+          description="What the AI was given and wrote for a task: a posting, your resume's text, drafts you didn't turn into an application. It's kept for reloads and Undo, then deleted. Applications keep their own documents until you delete them."
+          action={
+            <Select
+              aria-label="Keep task data for"
+              value={retention}
+              onChange={(event) => changeRetention(Number(event.target.value))}
+            >
+              {JOB_RETENTION_OPTIONS.map((option) => (
+                <option key={option.hours} value={option.hours}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           }
         />
         <div className="flex flex-col gap-2 border-t border-line py-4">

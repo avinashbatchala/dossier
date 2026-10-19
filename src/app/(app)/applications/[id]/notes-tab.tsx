@@ -75,7 +75,7 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
                 add();
               }
             }}
-            className="w-full resize-y rounded-control border border-line-input bg-input px-3 py-2.5 text-sm leading-normal placeholder:text-muted focus-visible:border-ink focus-visible:outline-offset-0"
+            className="w-full resize-y rounded-control border border-line-input bg-input px-3 py-2.5 text-sm leading-normal placeholder:text-muted focus-visible:border-primary focus-visible:outline-offset-0"
           />
           <div className="flex justify-end">
             <Button size="sm" aria-disabled={!draft.trim() || pending || undefined} onClick={add}>
@@ -114,7 +114,7 @@ export function NotesTab({ applicationId, activity }: { applicationId: string; a
                             save();
                           }
                         }}
-                        className="w-full resize-y rounded-control border border-ink bg-input px-3 py-2.5 text-sm leading-normal focus-visible:outline-offset-0"
+                        className="w-full resize-y rounded-control border border-primary bg-input px-3 py-2.5 text-sm leading-normal focus-visible:outline-offset-0"
                       />
                       <div className="flex justify-end gap-1.5">
                         <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>

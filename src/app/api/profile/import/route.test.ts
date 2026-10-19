@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isAiConfigured } from "@/lib/ai/config";
 import { getSession } from "@/lib/auth/session";
+import { discardProfileImports } from "@/lib/jobs/import-profile";
 import { startJob } from "@/lib/jobs/runner";
 import { RESUME_MESSAGES } from "@/lib/resume-text";
 import { docxWith } from "@/test/resume-files";
@@ -12,6 +13,10 @@ import { POST } from "./route";
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: vi.fn(async () => true) }));
 vi.mock("@/lib/jobs/runner", () => ({ startJob: vi.fn(async () => "job-1"), defineJob: (definition: unknown) => definition }));
+vi.mock("@/lib/jobs/import-profile", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/jobs/import-profile")>()),
+  discardProfileImports: vi.fn(async () => {}),
+}));
 
 const post = (body: BodyInit, headers: Record<string, string> = {}) =>
   POST(
@@ -28,6 +33,7 @@ const resume = docxWith(["John Doe", "Design Lead, Acme Payments, 2021 – prese
 beforeEach(() => {
   vi.mocked(getSession).mockResolvedValue({ persistent: false, issuedAt: new Date(), expiresAt: new Date() });
   vi.mocked(startJob).mockClear();
+  vi.mocked(discardProfileImports).mockClear();
 });
 
 describe("POST /api/profile/import (E4-10)", () => {
@@ -39,6 +45,8 @@ describe("POST /api/profile/import (E4-10)", () => {
       { resume: expect.stringContaining("Led the redesign of the payout flow") },
       { key: "profile-import" },
     );
+    // Only one resume's text is kept: earlier readings go first.
+    expect(vi.mocked(discardProfileImports).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(startJob).mock.invocationCallOrder[0]);
   });
 
   it("reads a Markdown file as plain text", async () => {
@@ -57,6 +65,7 @@ describe("POST /api/profile/import (E4-10)", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: RESUME_MESSAGES.wrongType });
     expect(startJob).not.toHaveBeenCalled();
+    expect(discardProfileImports).not.toHaveBeenCalled();
   });
 
   it("refuses a file that's too big before reading it", async () => {

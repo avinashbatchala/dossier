@@ -8,7 +8,7 @@ import { action, ActionError } from "@/lib/action";
 import { prisma } from "@/lib/prisma";
 import { fieldsFromBasics, inEntryOrder } from "@/lib/profile";
 import { findOrCreateSkill, firstSort, nextSort } from "@/lib/profile-entries";
-import { importProfileJob } from "@/lib/jobs/import-profile";
+import { discardProfileImports, importProfileJob } from "@/lib/jobs/import-profile";
 import { loadProfileName } from "@/lib/profile-data";
 import { importCounts } from "@/lib/profile-import";
 import { applyImportedProfile } from "@/lib/profile-import-apply";
@@ -276,8 +276,9 @@ export const sortEntriesByDate = action(z.object({ section }), async ({ section 
 
 /**
  * Merges the profile read from a resume into the profile, or replaces it.
- * Nothing is saved before this: the read profile waits in its job, and is
- * taken from there rather than from the browser.
+ * Nothing goes into the profile before this: the read profile waits in its
+ * job, and is taken from there rather than from the browser. Then the job is
+ * deleted, with the resume's text.
  */
 export const applyProfileImport = action(
   z.object({ jobId: id, mode: z.enum(["merge", "replace"]) }),
@@ -288,11 +289,18 @@ export const applyProfileImport = action(
     }
     const { profile } = importProfileJob.result.parse(job.result);
     await applyImportedProfile(prisma, profile, mode);
+    await prisma.job.deleteMany({ where: { id: jobId } });
     revalidatePath("/", "layout");
     toast(`${mode === "replace" ? "Your profile now holds" : "Added to your profile"}: ${importCounts(profile)}.`);
     return null;
   },
 );
+
+/** "Choose another file": the reading is deleted, with the resume's text, and stopped if it's under way. */
+export const discardProfileImport = action(z.object({ jobId: id }), async ({ jobId }) => {
+  await discardProfileImports(jobId);
+  return null;
+});
 
 // ─── References (PRO-8) ──────────────────────────────────────────────────────
 

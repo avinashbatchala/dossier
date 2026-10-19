@@ -43,6 +43,9 @@ createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${port}`);
   if (url.pathname === "/health") return send(response, 200, { ok: true });
   if (url.pathname === "/searches") return send(response, 200, { searches });
+  // The update check (DOSSIER_UPDATES_TEST_BASE_URL): no release is out, so
+  // what a test stores as the latest release stays as it is.
+  if (url.pathname === "/github/repos/AienTech/dossier/releases/latest") return send(response, 404, { message: "Not Found" });
 
   if (url.pathname === "/jsearch/search-v2") {
     if (request.headers["x-api-key"] !== JSEARCH_KEY) return send(response, 401, { status: "ERROR", error: { message: "Invalid API key" } });

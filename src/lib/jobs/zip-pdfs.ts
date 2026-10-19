@@ -41,7 +41,8 @@ function unique(name: string, taken: Set<string>): string {
   return candidate;
 }
 
-async function removeOldZips(now: number): Promise<void> {
+/** Removes zips nobody downloaded in time; the job sweep calls it too. */
+export async function removeOldZips(now: number): Promise<void> {
   const dir = downloadsDir();
   const names = await readdir(dir).catch(() => []);
   await Promise.all(

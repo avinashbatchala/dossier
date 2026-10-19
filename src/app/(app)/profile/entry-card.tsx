@@ -135,7 +135,7 @@ export function AddEntryButton({ children, onClick, disabled }: { children: Reac
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-panel border border-dashed border-line-strong p-4 text-center text-sm hover:border-ink hover:bg-ink/[0.03] disabled:cursor-wait disabled:opacity-60"
+      className="rounded-panel border border-dashed border-line-strong p-4 text-center text-sm hover:border-line-strong hover:bg-ink/[0.03] disabled:cursor-wait disabled:opacity-60"
     >
       + {children}
     </button>

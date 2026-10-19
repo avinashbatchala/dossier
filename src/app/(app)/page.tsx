@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { periodFromParam } from "@/lib/dashboard";
+import { waitingByApplication } from "@/lib/google/inbox-data";
 import { loadDashboard } from "@/lib/dashboard-data";
 import { dayPeriod, hourIn } from "@/lib/greeting";
 import { loadProfileName } from "@/lib/profile-data";
@@ -20,8 +21,9 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const [{ period: param }, settings, timeZone] = await Promise.all([searchParams, loadSettings(), userTimeZone()]);
   const range = periodFromParam(param) ?? settings.dashboardPeriod;
+  const replies = await waitingByApplication().catch(() => undefined);
   const [figures, name] = await Promise.all([
-    loadDashboard({ period: range, quietDays: settings.quietDays, timeZone }),
+    loadDashboard({ period: range, quietDays: settings.quietDays, timeZone, replies }),
     loadProfileName(),
   ]);
   return (

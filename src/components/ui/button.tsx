@@ -16,22 +16,22 @@ const base =
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-on-primary hover:bg-primary-hover disabled:bg-faint aria-disabled:bg-faint",
+    "bg-primary font-semibold text-on-primary shadow-cta hover:bg-primary-hover disabled:bg-faint aria-disabled:bg-faint",
   secondary:
-    "border border-line-control text-ink hover:border-ink disabled:border-line-field disabled:text-muted aria-disabled:text-muted",
+    "border border-line-control bg-input text-ink shadow-control hover:border-line-strong hover:bg-hover disabled:border-line-field disabled:text-muted aria-disabled:text-muted",
   // Text buttons have no horizontal padding so they line up with the text around them.
   text: "px-0! text-muted hover:text-ink disabled:text-faint aria-disabled:text-faint",
   "danger-text": "px-0! font-normal text-danger hover:text-error-strong disabled:text-faint",
   "danger-outline":
     "border border-danger-control bg-input text-error-strong hover:border-error-strong disabled:text-faint",
   danger:
-    "bg-error text-white hover:bg-error-strong disabled:bg-danger-disabled aria-disabled:bg-danger-disabled",
+    "bg-danger-fill text-white hover:bg-danger-fill-hover disabled:bg-danger-disabled aria-disabled:bg-danger-disabled",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  lg: "px-4 py-3 text-field",
-  md: "px-4 py-2.5 text-sm",
-  sm: "px-3.5 py-[9px] text-control",
+  lg: "min-h-10 px-4 py-2 text-field",
+  md: "min-h-[34px] px-3 py-1.5 text-sm",
+  sm: "min-h-[30px] px-3 py-1 text-control",
 };
 
 /** Button styles, for links that look like buttons: `<Link className={buttonClassName()}>`. */

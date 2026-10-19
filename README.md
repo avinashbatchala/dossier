@@ -19,7 +19,7 @@
 
 Dossier keeps your career history in one profile and turns it into a clean resume. For every job you apply to, it reads the posting, shows how you match, and drafts a tailored resume and cover letter that only use facts from your profile. You refine them in a chat, download them as PDFs and track each application from draft to offer.
 
-It's for one person on a small server: one password, your data in your own PostgreSQL database, and an AI model of your choice. That can be a local model through Ollama, so nothing leaves your server, or a hosted one (any OpenAI-compatible API, or Anthropic).
+It's for one person on a small server: one password, your data in your own PostgreSQL database, and an AI model of your choice. That can be a local model through Ollama, so your profile and documents never leave your server, or a hosted one (any OpenAI-compatible API, or Anthropic), which then receives what it writes from. [Privacy](#privacy) says what goes where.
 
 ## Demo
 
@@ -36,6 +36,7 @@ It's for one person on a small server: one password, your data in your own Postg
 - **Never invents experience:** drafts only use facts from your profile. What the posting asks for and your profile doesn't have is shown as a gap, not made up.
 - **Refine:** ask for changes in a chat, edit or regenerate any part (every part of the cover letter too: sender, date, recipient, greeting and sign-off, written in the letter's language), undo AI changes or go back to any earlier version, keep private notes.
 - **Send:** an email to go with each application, to whoever the posting says to send it to, ready to copy or open in your mail app, with the resume and cover letter PDFs to attach. Edit, rewrite or refine it like the documents.
+- **Gmail and Calendar (optional):** connect your Google account to send an application from your own address with its PDFs attached, see employers' replies next to each application, have the AI read what they ask and draft your answer from your profile, offer interview times you're free, and see your week or month on a Calendar screen, with interviews kept in step with Google Calendar both ways. Nothing is sent without your confirmation. Set it up by entering your Google OAuth client in Settings → Google, or with `DOSSIER_GOOGLE_CLIENT_ID` and `DOSSIER_GOOGLE_CLIENT_SECRET` (see `.env.example`).
 - **Track:** a board and a table of every application, and a dashboard with your funnel (last 30 days, 90 days or all time), a week-by-week chart and what's worth a look next, upcoming interviews included.
 - **Your data:** export and import everything as one file, nightly backups, and Delete everything.
 
@@ -55,6 +56,10 @@ It's for one person on a small server: one password, your data in your own Postg
   <tr>
     <td><img src=".github/images/resume.png" alt="The base resume next to its themes"><br>The base resume, with twelve themes and a theme builder</td>
     <td><img src=".github/images/profile.png" alt="The profile editor, with its sections and strength meter"><br>One profile that every resume and letter comes from</td>
+  </tr>
+  <tr>
+    <td><img src=".github/images/inbox.png" alt="The inbox: employers' replies from Gmail, what each one asks, and mail to link to an application"><br>Replies from Gmail, read by the AI, with answers it drafts</td>
+    <td><img src=".github/images/calendar.png" alt="The calendar's week: an interview next to the rest of the Google Calendar"><br>Your interviews in your Google Calendar's week, kept in step</td>
   </tr>
 </table>
 
@@ -183,6 +188,8 @@ Dossier is configured with environment variables; everything else is set in the 
 | `DOSSIER_JSEARCH_KEY` | none | A JSearch key, from OpenWeb Ninja or RapidAPI. |
 | `DOSSIER_JSEARCH_HOST` | `openwebninja` | Where that key is from: `openwebninja` or `rapidapi`. |
 | `DOSSIER_ADZUNA_APP_ID`, `DOSSIER_ADZUNA_KEY` | none | Adzuna's app ID and key. |
+| `DOSSIER_GOOGLE_CLIENT_ID`, `DOSSIER_GOOGLE_CLIENT_SECRET` | none | A Google OAuth client, for Gmail and Calendar (see [Connecting Gmail and Calendar](#connecting-gmail-and-calendar)). A client saved in Settings → Google wins. |
+| `DOSSIER_PUBLIC_URL` | the address in use | The address Dossier is reached at, e.g. `https://dossier.example.com`, for Google's redirect after you sign in. Only needed when your proxy doesn't pass on the host and protocol. |
 | `DOSSIER_IMAGE` | `ghcr.io/aientech/dossier:latest` | The image to run. Set a version, e.g. `ghcr.io/aientech/dossier:v1.4.1`, to upgrade only when you choose. |
 | `DOSSIER_PORT` | `3000` | The port on the server (`127.0.0.1`) that Dossier listens on, for the reverse proxy. |
 | `COMPOSE_PROFILES` | none | `ai` runs Ollama as well (see [Local model with Ollama](#local-model-with-ollama)). |
@@ -201,7 +208,7 @@ API keys are stored encrypted with `DOSSIER_SECRET` and never sent back to the b
 
 ### Local model with Ollama
 
-With a local model, nothing you write leaves your server. The Compose file can run Ollama next to Dossier. Switch it on, start it, and pull a model:
+With a local model, your profile, postings and documents never leave your server. The Compose file can run Ollama next to Dossier. Switch it on, start it, and pull a model:
 
 ```bash
 echo "COMPOSE_PROFILES=ai" >> .env
@@ -227,6 +234,23 @@ Find jobs is off until you pick a source in **Settings → Job search**. LinkedI
 
 The search starts from your profile's city, country and current role; change the place, radius (10 to 200 km), how recent and Remote only as you like. Every search is kept with what it found until you remove it, under **Past searches**, so going back to one, or reloading, doesn't spend another search.
 
+## Connecting Gmail and Calendar
+
+This is optional. With a Google account connected, Dossier sends an application from your own Gmail address with its PDFs attached, checks Gmail every few minutes for employers' replies and links them to their applications, has the AI read each reply and draft your answer, offers times you're free in Google Calendar, and adds agreed interviews to it. Nothing is sent, and no status changes, until you confirm it.
+
+The **Calendar** screen shows your week or month: the events in your Google Calendar, with your interviews linked to their applications. Interviews stay in step both ways: change or remove an interview's date in Dossier and its event moves or goes; move or delete the event in Google Calendar and Dossier follows.
+
+Google doesn't let one sign-in serve every server, so each install brings its own OAuth client:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Gmail API** and the **Google Calendar API**.
+2. Set up the **OAuth consent screen** as External, add yourself as a test user, then publish it (**In production**). While it's in Testing, Google stops the access after 7 days.
+3. Create an **OAuth client ID** of type Web application, with `https://<your Dossier address>/api/google/callback` as an authorised redirect URI. Settings → Google shows the exact address to copy.
+4. Enter the client's ID and secret in **Settings → Google**, or set `DOSSIER_GOOGLE_CLIENT_ID` and `DOSSIER_GOOGLE_CLIENT_SECRET`. Then press **Connect Google account** and choose what Dossier may do: send, read, and use your calendar.
+
+Google only verifies apps that read mail after a security review, so its sign-in page warns that the app isn't verified. It's your own client: continue under **Advanced**. The refresh token is stored encrypted with `DOSSIER_SECRET`. **Disconnect** revokes Dossier's access at Google.
+
+By default the inbox check only keeps mail in threads Dossier sent and mail from the companies you applied to. **Every new email** in Settings → Google keeps all new mail outside Promotions and Social, and the AI reads that too. [PRIVACY.md](PRIVACY.md#what-dossier-keeps) says what's kept, for how long, and what goes to Google and the AI.
+
 ## Backups and restore
 
 Run these from your Dossier folder (`~/dossier`).
@@ -251,6 +275,8 @@ Run these from your Dossier folder (`~/dossier`).
 Keep a copy of `.env` with your backups: saved API keys can't be read without its `DOSSIER_SECRET` (an export with the key included carries it in plain text instead).
 
 ## Upgrading
+
+When a new version is out, the sidebar says so, with a link to what's new; Settings → About shows it too. Dossier checks GitHub for it once on each day you use it (switch that off in Settings → About).
 
 Take a backup first (an export, or a database dump). Then, in your Dossier folder:
 
@@ -284,13 +310,15 @@ From 1.4, Dossier sends a usage ping (see [Privacy](#privacy)). If you'd rather 
 
 ## Privacy
 
-- Everything you enter stays in your PostgreSQL database and data directory.
-- With a **local model**, nothing leaves your server. With a **hosted provider**, Dossier sends it what the task needs: the job posting, your profile without contact details (no email, phone, address, date of birth or links), what you add when you create an application, and, when you refine, the drafts and your chat messages, though never a letter's sender or signature. Importing a resume sends its text, contact details included; the import page says so first. The notes you keep on an application are never sent.
-- **Usage ping:** on each day you use Dossier, your server sends `telemetry.dossier.aien.me` a random install ID and the version number, once, so the project knows how many installs are in use and how often. The ID is made at random and kept in your database. It isn't derived from anything about you or your server, and exports leave it out. Nothing else is sent: no profile, documents, applications, settings, server address or time of day. The receiver, a Cloudflare Worker, keeps the ID, the day and the version, and deletes them after a year. It doesn't keep the address the ping came from, though Cloudflare sees it on the way, as with any request. Set `DOSSIER_TELEMETRY=off` to stop it. Settings → About shows whether it's on and the ID it sends. To have your install's rows removed, send that ID to `dossier.app@pm.me`: everything kept under it is deleted, and you get a confirmation. Set `DOSSIER_TELEMETRY=off` first, so nothing new arrives afterwards.
-- No other tracking or analytics: Dossier loads nothing from other sites (its Content-Security-Policy forbids it, and the ping comes from your server, not your browser), and Next.js telemetry is off in the image.
-- **Check for updates** in Settings → About asks GitHub for the latest release, only when you press it, and sends nothing about you or your install.
-- **Fetch** on a new application asks the job site for the posting's page from your server, only when you press it. It never requests addresses on your own network.
-- **Find jobs** is off until you choose a source. Then it sends the source what you search for (keywords, place, country, radius and filters), from your server, and nothing from your profile: the profile only fills in the form. Each search is kept with what it found, until you remove it from Past searches. For a posting that came with only its start (Adzuna, sometimes the Arbeitsagentur), Dossier asks the posting's page for the rest, as Fetch does.
+Everything you enter is kept in your PostgreSQL database and data directory. [PRIVACY.md](PRIVACY.md) has the details: what's kept and for how long, what deleting removes, everything that leaves your server and who receives it, and a note on the GDPR.
+
+- **AI:** with a local model, your profile, postings and documents never leave your server. A hosted provider receives what each task needs: the posting, your profile without contact details (no email, phone, address, date of birth or links), what you tell it about the application, and, when you refine, the drafts and your chat messages, though never a letter's sender or signature. Importing a resume sends its whole text, contact details included; the import page says so first. The notes you keep on an application are never sent. How long the provider keeps what it receives, and where it processes it, depend on its terms and your account.
+- **Task data:** what an AI task was given and wrote (a posting being read, a resume's text, drafts you didn't turn into an application) is deleted after 24 hours, or as long as Settings → Your data says. Deleting an application deletes its task data at once.
+- **Usage ping:** on each day you use Dossier, your server sends `telemetry.dossier.aien.me` a random install ID and the version number, once, so the project knows how many installs are in use and how often. Nothing else is sent. Set `DOSSIER_TELEMETRY=off` to stop it. [PRIVACY.md](PRIVACY.md#usage-ping) says what the receiver keeps, for how long, and how to have it deleted.
+- **Update check:** once on each day you use Dossier, and when you press **Check for updates**, your server asks GitHub for the latest release, and sends nothing about you or your install. Switch the daily check off in Settings → About.
+- **Gmail and Calendar:** off until you connect a Google account. Dossier then keeps the mail about your applications (only their text, not attachments) and what the AI read in it, and a hosted AI provider receives each reply it reads or answers. Deleting an application deletes its mail; **Disconnect** revokes the access at Google.
+- **When you ask for it:** Find jobs, off until you choose a source, sends the source what you search for and nothing from your profile. **Fetch** asks a job site for a posting's page, from your server.
+- **No other tracking or analytics:** Dossier loads nothing from other sites (its Content-Security-Policy forbids it, and the ping comes from your server, not your browser), and Next.js telemetry is off in the image.
 
 ## Known limitations
 

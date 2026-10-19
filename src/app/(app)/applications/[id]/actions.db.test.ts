@@ -34,6 +34,11 @@ vi.mock("@/lib/auth/session", () => ({
   getSession: async () => ({ persistent: false, issuedAt: new Date(), expiresAt: new Date(Date.now() + 60_000) }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// The calendar's side is tested in src/lib/google; here it's off unless a test says otherwise.
+const calendar = vi.hoisted(() => ({
+  sync: vi.fn<(id: string) => Promise<{ inCalendar: boolean; eventLink: string | null }>>(async () => ({ inCalendar: false, eventLink: null })),
+}));
+vi.mock("@/lib/google/availability", () => ({ syncInterviewToCalendar: calendar.sync }));
 const ai = vi.hoisted(() => ({ ready: true }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready }));
 // Jobs are queued for real, but don't run.
@@ -41,9 +46,9 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => {
   const runner = await importOriginal<typeof import("@/lib/jobs/runner")>();
   return {
     ...runner,
-    startJob: vi.fn(async (definition: { type: string }, input: object, options: { key?: string }) => {
+    startJob: vi.fn(async (definition: { type: string }, input: object, options: { key?: string; applicationId?: string }) => {
       const { prisma } = await import("@/lib/prisma");
-      return (await prisma.job.create({ data: { type: definition.type, input, key: options.key } })).id;
+      return (await prisma.job.create({ data: { type: definition.type, input, key: options.key, applicationId: options.applicationId } })).id;
     }),
   };
 });
@@ -96,6 +101,21 @@ describe("setInterviewDate (E9-9)", () => {
     expect(await saved()).toEqual(new Date("2026-10-01T12:00:00Z"));
     expect(await setInterviewDate({ id: "app-1", at: null })).toMatchObject({ ok: true, toast: "Interview date removed." });
     expect(await saved()).toBeNull();
+  });
+
+  it("says when the calendar followed, and when it couldn't", async () => {
+    const { GoogleError } = await import("@/lib/google/errors");
+    calendar.sync.mockResolvedValueOnce({ inCalendar: true, eventLink: "https://calendar.google.com/event?eid=1" });
+    expect(await setInterviewDate({ id: "app-1", at: "2026-10-01T12:00:00.000Z" })).toMatchObject({ ok: true, toast: "Interview date saved, in your calendar too." });
+    expect(calendar.sync).toHaveBeenLastCalledWith("app-1");
+    calendar.sync.mockResolvedValueOnce({ inCalendar: true, eventLink: null });
+    expect(await setInterviewDate({ id: "app-1", at: null })).toMatchObject({ ok: true, toast: "Interview date removed, from your calendar too." });
+    calendar.sync.mockRejectedValueOnce(new GoogleError("unavailable", "Couldn't reach Google. Try again in a moment."));
+    expect(await setInterviewDate({ id: "app-1", at: "2026-10-02T12:00:00.000Z" })).toMatchObject({
+      ok: true,
+      toast: "Interview date saved, but your calendar wasn't changed: Couldn't reach Google. Try again in a moment.",
+    });
+    expect(await saved()).toEqual(new Date("2026-10-02T12:00:00Z"));
   });
 
   it("refuses what isn't a moment, and says so when the application is gone", async () => {
@@ -160,6 +180,7 @@ describe("startRegenerating (E8-4)", () => {
     expect(job).toMatchObject({
       type: "regenerate-unit",
       key: "units:app-1",
+      applicationId: "app-1",
       input: { applicationId: "app-1", document: "RESUME", unitId: "summary", from: resume[0].text },
     });
   });
@@ -229,6 +250,7 @@ describe("sendMessage (E8-5)", () => {
     expect(job).toMatchObject({
       type: "refine",
       key: "refine:app-1",
+      applicationId: "app-1",
       input: { applicationId: "app-1", messageId: message.id, request: "Shorter, please", viewing: "RESUME", target: { document: "RESUME", unitId: "summary" } },
     });
   });
@@ -482,6 +504,7 @@ describe("the email", () => {
     expect(await prisma().job.findUniqueOrThrow({ where: { id: first.ok ? first.data : "" } })).toMatchObject({
       type: "write-email",
       key: "email:app-1",
+      applicationId: "app-1",
       input: { applicationId: "app-1" },
     });
     expect(await startWritingEmail({ id: "app-1" })).toEqual(first);

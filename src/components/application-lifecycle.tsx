@@ -47,7 +47,7 @@ export function DeleteApplicationDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete this application?"
-      description="Its tailored resume and cover letter, the chat, your notes and its history go with it. This can't be undone. Archive it instead to keep it out of the way."
+      description="Its tailored resume and cover letter, the chat, your notes, its history and its mail from Gmail go with it. This can't be undone. Archive it instead to keep it out of the way."
       confirmLabel="Delete application"
       returnFocusTo={returnFocusTo}
       onConfirm={async () => {

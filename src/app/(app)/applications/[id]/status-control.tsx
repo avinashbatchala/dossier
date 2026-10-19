@@ -58,7 +58,7 @@ export function StatusControl({
           <button
             type="button"
             aria-label={`Status: ${label}`}
-            className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-ink data-[state=open]:border-ink"
+            className="flex items-center gap-[9px] rounded-full border border-line-control bg-card px-3.5 py-[9px] text-sm font-medium hover:border-line-strong data-[state=open]:border-primary"
           >
             <StatusDot status={shown} />
             {label}

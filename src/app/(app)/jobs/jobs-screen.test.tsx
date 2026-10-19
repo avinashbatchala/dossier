@@ -20,7 +20,7 @@ import {
 import { JobsScreen } from "./jobs-screen";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 vi.mock("next/link", () => ({ default: ({ href, ...props }: ComponentProps<"a">) => <a href={href} {...props} /> }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 vi.mock("./actions", () => ({

@@ -26,7 +26,7 @@ export function Input({
     <FieldShell {...field} label={label} hint={hint} error={error} className={className}>
       <input
         {...field.controlProps}
-        className={cn(controlClassName, "px-3 py-[11px]", inputClassName)}
+        className={cn(controlClassName, "h-10 px-3", inputClassName)}
         {...props}
       />
     </FieldShell>

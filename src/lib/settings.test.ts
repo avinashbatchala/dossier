@@ -44,6 +44,7 @@ describe("stored settings", () => {
       includeRefs: false,
       onePage: true,
       nightlyBackup: true,
+      jobRetentionHours: 24,
       baseThemeId: "editorial",
       applicationsView: "board",
       applicationsFilter: "all",
@@ -58,13 +59,41 @@ describe("stored settings", () => {
       jsearchHost: "openwebninja",
       adzunaAppId: null,
       adzunaKeyEnc: null,
+      updateCheck: true,
+      latestVersion: null,
+      latestVersionUrl: null,
+      updateCheckDay: null,
+      updateDismissed: null,
+      googleClientId: null,
+      googleClientSecretEnc: null,
+      gmailRead: true,
+      gmailScope: "known",
+      gmailInterval: 10,
+      calendarAvailability: true,
+      calendarEvents: true,
+      calendarId: "primary",
+      workDays: [1, 2, 3, 4, 5],
+      workStart: "09:00",
+      workEnd: "17:00",
+      workTimeZone: null,
+      slotMinutes: 45,
+      bufferMinutes: 15,
       usagePingId: null,
       usagePingDay: null,
+      browserTimeZone: null,
     });
   });
 
   it("reads back what it stores", () => {
-    const saved = { provider: "OPENAI", strict: false, paper: "LETTER", customLanguages: ["Farsi", "Hebrew"], docLanguage: "Dutch", quietDays: 14 } satisfies Partial<SettingsData>;
+    const saved = {
+      provider: "OPENAI",
+      strict: false,
+      paper: "LETTER",
+      customLanguages: ["Farsi", "Hebrew"],
+      docLanguage: "Dutch",
+      quietDays: 14,
+      jobRetentionHours: 168,
+    } satisfies Partial<SettingsData>;
     const rows = Object.entries(saved).map(([key, value]) => ({ key, value: settingValue(value)! }));
     expect(rows).toContainEqual({ key: "strict", value: "false" });
     expect(rows).toContainEqual({ key: "customLanguages", value: '["Farsi","Hebrew"]' });
@@ -80,9 +109,10 @@ describe("stored settings", () => {
       { key: "strict", value: "maybe" },
       { key: "customLanguages", value: "Farsi, Hebrew" },
       { key: "quietDays", value: "0" },
+      { key: "jobRetentionHours", value: "5" },
       { key: "theme", value: "dark" },
     ]);
-    expect(settings).toMatchObject({ provider: null, paper: "A4", strict: true, customLanguages: [], quietDays: 7 });
+    expect(settings).toMatchObject({ provider: null, paper: "A4", strict: true, customLanguages: [], quietDays: 7, jobRetentionHours: 24 });
     expect(settings).not.toHaveProperty("theme");
   });
 });

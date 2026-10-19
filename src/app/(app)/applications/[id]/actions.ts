@@ -11,6 +11,8 @@ import { editsSchema, extractedSchema, matchSchema, trimmedSchema, unitsSchema, 
 import { WRITTEN_EMAIL_UNITS } from "@/lib/application-email";
 import { updateDocuments } from "@/lib/document-units";
 import { DOCUMENT_LABELS } from "@/lib/file-name";
+import { syncInterviewToCalendar } from "@/lib/google/availability";
+import { GoogleError } from "@/lib/google/errors";
 import { isFrameUnit, withFrame, WRITTEN_FRAME_UNITS } from "@/lib/letter-frame";
 import { saveVersion } from "@/lib/document-versions";
 import { refineJob, refineJobKey } from "@/lib/jobs/refine";
@@ -39,15 +41,24 @@ export const setFollowThemeLayout = action(
 
 /**
  * The next interview's date and time (E9-9), or null to remove it. It shows
- * on the dashboard's "Worth a look" while the application is in Interview.
+ * on the dashboard's "Worth a look" while the application is in Interview,
+ * and while Dossier keeps interviews in Google Calendar, the event is added,
+ * moved or deleted to match.
  */
 export const setInterviewDate = action(
   z.object({ id: z.string().min(1), at: z.iso.datetime().nullable() }),
   async ({ id, at }, { toast }) => {
     const { count } = await prisma.application.updateMany({ where: { id }, data: { nextInterviewAt: at ? new Date(at) : null } });
     if (count === 0) throw new ActionError(GONE);
-    toast(at ? "Interview date saved. It'll show on your dashboard." : "Interview date removed.");
     refresh(id);
+    try {
+      const { inCalendar } = await syncInterviewToCalendar(id);
+      if (inCalendar) toast(at ? "Interview date saved, in your calendar too." : "Interview date removed, from your calendar too.");
+      else toast(at ? "Interview date saved. It'll show on your dashboard." : "Interview date removed.");
+    } catch (error) {
+      if (!(error instanceof GoogleError)) throw error;
+      toast(`${at ? "Interview date saved" : "Interview date removed"}, but your calendar wasn't changed: ${error.message}`);
+    }
     return null;
   },
 );
@@ -125,7 +136,7 @@ export const startRegenerating = action(
       const input = regenerateUnitJob.input.safeParse(job.input);
       if (input.success && input.data.document === document && input.data.unitId === unitId) return job.id;
     }
-    return startJob(regenerateUnitJob, { applicationId: id, document, unitId, from: unit.text }, { key: unitJobKey(id) });
+    return startJob(regenerateUnitJob, { applicationId: id, document, unitId, from: unit.text }, { key: unitJobKey(id), applicationId: id });
   },
 );
 
@@ -203,7 +214,7 @@ export const sendMessage = action(
       data: { applicationId: id, role: ChatRole.USER, text, targetUnit: targetLabel },
       select: { id: true },
     });
-    const jobId = await startJob(refineJob, { applicationId: id, messageId: message.id, request: text, target, viewing }, { key: refineJobKey(id) });
+    const jobId = await startJob(refineJob, { applicationId: id, messageId: message.id, request: text, target, viewing }, { key: refineJobKey(id), applicationId: id });
     refresh(id);
     return { jobId };
   },
@@ -426,7 +437,7 @@ export const startWritingEmail = action(z.object({ id: z.string().min(1) }), asy
   if (!(await prisma.application.count({ where: { id } }))) throw new ActionError(GONE);
   if (!(await isAiConfigured())) throw new ActionError("That needs an AI provider. Choose one in Settings → AI provider.");
   const [running] = await findUnfinishedJobs(emailJobKey(id));
-  return running?.id ?? startJob(writeEmailJob, { applicationId: id }, { key: emailJobKey(id) });
+  return running?.id ?? startJob(writeEmailJob, { applicationId: id }, { key: emailJobKey(id), applicationId: id });
 });
 
 /**

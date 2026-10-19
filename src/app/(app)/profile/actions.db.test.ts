@@ -11,6 +11,7 @@ import {
   createEducation,
   createExperience,
   createReference,
+  discardProfileImport,
   removeEducation,
   removeExperience,
   restoreExperience,
@@ -259,6 +260,16 @@ describe("applying a profile read from a resume (E4-10)", () => {
       toast: "Added to your profile: 0 roles, 0 degrees, 1 skill, 0 languages, 0 references.",
     });
     expect((await loadProfile()).basics.name).toBe("John Doe");
+    // The reading goes once it's used, with the resume's text.
+    expect(await prisma().job.count()).toBe(0);
+  });
+
+  it("deletes a reading set aside with Choose another file, and only that one", async () => {
+    const job = await prisma().job.create({ data: { type: "import-profile", input: { resume: "…" }, status: "DONE", result } });
+    const other = await prisma().job.create({ data: { type: "read-posting", input: {}, status: "DONE", result } });
+    expect(await discardProfileImport({ jobId: job.id })).toEqual({ ok: true, data: null });
+    expect(await discardProfileImport({ jobId: other.id })).toEqual({ ok: true, data: null });
+    expect(await prisma().job.findMany({ select: { id: true } })).toEqual([{ id: other.id }]);
   });
 
   it("refuses a reading that isn't done, or another kind of job", async () => {

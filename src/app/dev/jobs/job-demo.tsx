@@ -23,7 +23,7 @@ export function JobDemo({ initialId }: { initialId: string | null }) {
   return (
     <>
       <PageHeader title="Jobs" description="A demo job with named steps, to try the background runner. Reload while it runs: it carries on." />
-      <div className="flex flex-col gap-4 px-14">
+      <div className="flex flex-col gap-4 px-10">
         <div className="flex gap-2">
           <Button onClick={() => void start(false)}>Start a job</Button>
           <Button variant="secondary" onClick={() => void start(true)}>Start one that fails</Button>

@@ -1,6 +1,6 @@
 # Security
 
-Dossier is a single-user app you run on your own server. It holds your career history, your job applications and, if you use a hosted model, an AI provider's API key. This page covers what protects that data, what it expects from your setup, and how to report a problem.
+Dossier is a single-user app you run on your own server. It holds your career history, your job applications and, if you use a hosted model, an AI provider's API key. This page covers what protects that data, what it expects from your setup, and how to report a problem. What Dossier keeps, for how long and who receives what is in [PRIVACY.md](PRIVACY.md).
 
 ## Reporting a vulnerability
 
@@ -14,18 +14,20 @@ Please report it privately through GitHub: on the repository's **Security** tab,
 - **Content-Security-Policy.** Every page gets a policy with a fresh nonce: scripts run only when they carry it, nothing loads from other hosts, and no other site may frame Dossier. `next.config.ts` adds `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy` and `Permissions-Policy` to every response.
 - **API keys.** Stored encrypted with a key derived from `DOSSIER_SECRET`, never sent to the browser, never logged. The AI provider's key and the job sources' keys each have their own derived key, and each job source's key only goes to that source. The AI server's address is yours to set, so when a request carries a key, Dossier doesn't follow a redirect to another host.
 - **Job sources.** Find jobs is off until a source is chosen. Searches go from the server to that source's fixed address only, with a time and size limit; the browser never talks to a job source. A link in a result is kept only when it's `http(s)`, and postings sent back from the browser are checked the same way. Fetching the rest of a posting goes through the same guarded fetcher as Fetch, so it never reaches the server's own network.
+- **Google.** Gmail and Calendar are off until you enter your own OAuth client and connect. Signing in is OAuth's authorization code flow with a `state` signed by a key derived from `DOSSIER_SECRET`, valid for 10 minutes, and the callback needs your session too. The refresh token and the client's secret are stored encrypted, each with its own derived key, and never sent to the browser or logged; access tokens stay in the server's memory. Dossier asks only for the permissions of the features you choose (sending, reading, free/busy and events), and every send needs your confirmation.
 - **Errors.** Unexpected errors are logged on the server without the data involved; the browser only gets a generic message.
 
 ## AI and untrusted text
 
-A job posting is text someone else wrote, and it goes into prompts. A posting could try to steer the model ("ignore your instructions and…"). What limits the damage:
+A job posting, or a reply from Gmail, is text someone else wrote, and it goes into prompts. It could try to steer the model ("ignore your instructions and…"). What limits the damage:
 
 - The model has no tools: it can't read your other data, browse or change anything. It only returns text.
 - What it returns is shown as plain text, never as HTML, and checked against a schema before it's saved.
 - The fact guard flags claims in a draft that your profile doesn't back up.
-- You read every document before you send it.
+- You read every document before you send it, and a drafted answer to a mail only goes out when you confirm it.
+- Reading a mail only suggests a status for its application, which you take up or not.
 
-So the worst a hostile posting can do is get odd wording into its own draft.
+So the worst a hostile posting or mail can do is get odd wording into its own draft, or suggest the wrong status.
 
 ## Running it safely
 

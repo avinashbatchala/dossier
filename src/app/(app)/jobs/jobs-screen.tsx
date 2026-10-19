@@ -125,7 +125,7 @@ export function JobsScreen({ source, countries, view, query, search, missingSear
         ) : search ? (
           <PostingResults key={search.id} mode="search" search={search} today={today} onSearchAgain={() => run(search.query)} searching={pending} />
         ) : (
-          <p className="px-14 pb-16 text-sm text-muted">
+          <p className="px-10 pb-16 text-sm text-muted">
             {missingSearch
               ? "That search is no longer kept. Search again, or open one from Past searches."
               : "Search for a role, a skill or a company. Every search is kept with what it found, so you can come back to it without spending another search."}
@@ -181,7 +181,7 @@ function SearchForm({
       aria-label="Search postings"
       noValidate
       onSubmit={submit}
-      className="mx-14 mb-7 grid grid-cols-1 items-start gap-x-4 gap-y-4 rounded-panel border border-line-card bg-card p-6 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.3fr_1fr_1fr]"
+      className="mx-10 mb-7 grid grid-cols-1 items-start gap-x-4 gap-y-4 rounded-panel border border-line-card bg-card p-6 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.3fr_1fr_1fr]"
     >
       <Input
         label="What"
@@ -245,7 +245,7 @@ function ViewTabs({ view, counts }: { view: JobsView; counts: { searches: number
     { view: "dismissed", label: "Dismissed", href: viewHref("dismissed"), count: counts.dismissed },
   ] as const;
   return (
-    <nav aria-label="Find jobs views" className="flex flex-wrap gap-1.5 px-14 pb-[18px]">
+    <nav aria-label="Find jobs views" className="flex flex-wrap gap-1.5 px-10 pb-[18px]">
       {tabs.map((tab) => (
         <Link
           key={tab.view}
@@ -253,7 +253,7 @@ function ViewTabs({ view, counts }: { view: JobsView; counts: { searches: number
           aria-current={tab.view === view ? "page" : undefined}
           className={cn(
             "flex items-baseline gap-1.5 rounded-control border px-3 py-2 text-control",
-            tab.view === view ? "border-primary bg-primary text-on-primary hover:text-on-primary" : "border-line-field bg-card text-ink hover:border-ink hover:text-ink",
+            tab.view === view ? "border-primary bg-selected font-medium text-primary-text hover:text-primary-text" : "border-line-field bg-card text-ink hover:border-line-strong hover:bg-hover hover:text-ink",
           )}
         >
           {tab.label}
@@ -267,7 +267,7 @@ function ViewTabs({ view, counts }: { view: JobsView; counts: { searches: number
 /** Before a source is chosen: where to set one up. */
 function NoSource() {
   return (
-    <div className="mx-14 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
+    <div className="mx-10 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
       <h2 className="font-serif text-section">Choose where to search</h2>
       <p className="text-sm text-muted">
         Find jobs searches one job source for you: JSearch (LinkedIn, Indeed and more), Adzuna, or Germany&apos;s Bundesagentur für Arbeit. Pick
@@ -284,7 +284,7 @@ function NoSource() {
 function SearchProblem({ problem, message, onRetry }: { problem: Problem["problem"]; message: string; onRetry: () => void }) {
   const toSettings = problem === "no-key" || problem === "key" || problem === "country" || problem === "changed" || problem === "off";
   return (
-    <div role="alert" className="mx-14 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-6">
+    <div role="alert" className="mx-10 mb-16 flex max-w-[640px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-6">
       <p className="text-sm">{message}</p>
       {toSettings ? (
         <Link href={SETTINGS_HREF} className={buttonClassName("secondary", "sm")}>
