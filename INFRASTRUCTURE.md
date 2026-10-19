@@ -15,9 +15,9 @@ How this Dossier deployment is hosted on AWS, and how to operate it: SSH access,
 | OS | Ubuntu 24.04 LTS |
 | Static IP | Lightsail static IP named `dossier-ip` (actual address intentionally omitted) |
 | Hostname | `dossier.<STATIC_IP>.sslip.io` |
-| App image | `dossier:deepseek-fix` — local build from upstream `v1.5.0` with the DeepSeek thinking fix |
-| Rollback image | `dossier:deepseek-fix-20261018` |
-| Build source | `/home/ubuntu/dossier-src` (upstream `v1.5.0` plus the local DeepSeek patch) |
+| App image | `dossier:deepseek-fix` — local build from this fork at `v1.7.0-deepseek.1` (upstream `v1.7.0` plus the DeepSeek thinking fix) |
+| Rollback image | `dossier:deepseek-fix-20261019` |
+| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.7.0-deepseek.1`) |
 | Runtime | Docker Compose project `dossier` |
 | App directory | `/home/ubuntu/dossier` |
 | Compose file | `/home/ubuntu/dossier/compose.yml` |
@@ -177,7 +177,7 @@ Only after that works, edit `~/.ssh/authorized_keys` on the server and remove th
 | Path | Purpose |
 |---|---|
 | `/home/ubuntu/dossier` | Running Compose project: `compose.yml`, `.env` |
-| `/home/ubuntu/dossier-src` | Upstream v1.5.0 source plus the DeepSeek patch, used to rebuild the image |
+| `/home/ubuntu/dossier-src` | This fork's source at the deployed release tag, used to rebuild the image |
 | `/etc/caddy/Caddyfile` | Reverse proxy and TLS configuration |
 | Docker volume `dossier_pgdata` | PostgreSQL data |
 | Docker volume `dossier_data` | App `/data`: nightly backups and temporary PDF zips |
@@ -265,7 +265,7 @@ Do not prune volumes unless you intend to delete data. Never run `docker compose
 
 ## Updating Dossier
 
-This deployment runs a **locally built image**, `dossier:deepseek-fix`, from upstream `v1.5.0` plus the DeepSeek thinking patch. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
+This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.7.0-deepseek.1` tag: upstream `v1.7.0` plus the DeepSeek thinking fix. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
 
 ### 1. Back up first
 
@@ -285,22 +285,23 @@ Optionally take a Lightsail instance snapshot from the console or with `aws ligh
 
 ### 2. Update the source and rebuild
 
-The build source is `/home/ubuntu/dossier-src`, a checkout of upstream `v1.5.0` with the DeepSeek patch applied as uncommitted changes.
+The build source is `/home/ubuntu/dossier-src`, a checkout of this fork with the DeepSeek fix committed. The fork merges each upstream release and tags the result, so no patch is applied on the server.
 
 ```bash
 cd /home/ubuntu/dossier-src
 
-# Preserve the patch before changing the checkout
-git diff > "$HOME/dossier-deepseek.patch"
-
-git checkout -- .
-git fetch --tags
-git checkout v1.5.x          # the release you want
-
-# Re-apply the patch; resolve conflicts if upstream changed this file
-git apply "$HOME/dossier-deepseek.patch"
+git status --short        # should be empty
+git fetch origin --tags
+git checkout v1.7.0-deepseek.1   # the fork tag you want
 
 sudo docker build --target production -t dossier:deepseek-fix .
+```
+
+Before replacing the running image, keep the previous one for rollback:
+
+```bash
+# The old image is already tagged dossier:deepseek-fix-<date>; tag the new one too.
+sudo docker tag dossier:deepseek-fix "dossier:deepseek-fix-$(date +%F | tr -d -)"
 ```
 
 Then recreate the stack:
@@ -341,16 +342,9 @@ The patch in `src/lib/ai/providers/openai-compatible.ts`:
 - sends `thinking: { "type": "disabled" }`
 - raises the DeepSeek output budget to 8,192 tokens
 
-The same change is in this repository's `src/lib/ai/providers/openai-compatible.ts`. Keep it if you build your fork.
+The same change is committed in this fork's `src/lib/ai/providers/openai-compatible.ts`, with a regression test in `src/lib/ai/providers.test.ts`. Upstream does not have it, so keep it when merging a new release.
 
-To preserve the server-side patch before any source update:
-
-```bash
-cd /home/ubuntu/dossier-src
-git diff > "$HOME/dossier-deepseek.patch"
-```
-
-If upstream changes the provider code, `git apply` may conflict. Resolve it by keeping the DeepSeek detection, the `thinking` body field and the larger token budget.
+When merging an upstream release, resolve conflicts in that file by keeping the DeepSeek detection, the `thinking` body field and the larger token budget, then run `docker/bin/yarn test src/lib/ai/providers.test.ts` in the Docker dev environment.
 
 ### 4. If the release changes `compose.yml`
 
@@ -360,10 +354,12 @@ Release notes occasionally add environment variables, volumes, or services. Comp
 cd /home/ubuntu/dossier
 
 curl -fsSL -o compose.yml.new \
-  https://raw.githubusercontent.com/AienTech/dossier/main/compose.production.yml
+  https://raw.githubusercontent.com/avinashbatchala/dossier/v1.7.0-deepseek.1/compose.production.yml
 
 diff -u compose.yml compose.yml.new
 ```
+
+`v1.7.0` adds optional Gmail and Calendar settings (`DOSSIER_GOOGLE_CLIENT_ID`, `DOSSIER_GOOGLE_CLIENT_SECRET`, `DOSSIER_PUBLIC_URL`). They default to empty, so existing deployments keep working; enter the Google client in **Settings → Google**, or add the values to `.env`, when enabling that integration.
 
 If the diff is correct:
 
@@ -379,7 +375,7 @@ Your `.env` is not overwritten.
 The upstream image does not include the DeepSeek patch, so the cut-off error will return unless the provider is changed.
 
 ```dotenv
-DOSSIER_IMAGE=ghcr.io/aientech/dossier:v1.5.0
+DOSSIER_IMAGE=ghcr.io/aientech/dossier:v1.7.0
 ```
 
 ```bash
@@ -421,7 +417,8 @@ The image stays cached locally after it is pulled.
 The current image is tagged twice:
 
 - `dossier:deepseek-fix` — the image in use
-- `dossier:deepseek-fix-20261018` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261019` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261018` — the previous upstream v1.5.0 build
 
 If the app fails after an update:
 
@@ -436,7 +433,7 @@ sudo docker compose stop app
 sudo docker compose exec -T db pg_restore --clean --if-exists \
   -U dossier -d dossier < "$HOME/dossier-YYYY-MM-DD.dump"
 
-# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261018 or the previous version
+# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261019 (or 20261018 for the previous release)
 sudo docker compose up -d
 ```
 
@@ -905,10 +902,10 @@ This is the condensed disaster-recovery path.
 9. Build the patched image:
 
    ```bash
-   git clone --depth 1 --branch v1.5.0 \
-     https://github.com/AienTech/dossier.git /home/ubuntu/dossier-src
+   git clone --depth 1 --branch v1.7.0-deepseek.1 \
+     https://github.com/avinashbatchala/dossier.git /home/ubuntu/dossier-src
    cd /home/ubuntu/dossier-src
-   # apply the DeepSeek patch described above, or copy the patched file from this repo
+   # The DeepSeek fix is already committed on this tag.
    sudo docker build --target production -t dossier:deepseek-fix .
    ```
 
