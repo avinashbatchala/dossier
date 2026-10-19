@@ -1,0 +1,110 @@
+name: Bug report
+description: Something in Dossier doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Before you do:
+
+        - Look in [Troubleshooting](https://github.com/AienTech/dossier/blob/main/README.md#troubleshooting): the fix may already be there.
+        - Search the [open and closed issues](https://github.com/AienTech/dossier/issues?q=is%3Aissue), in case someone has reported it.
+        - Found a security problem? Don't report it here: [report it privately](https://github.com/AienTech/dossier/security/advisories/new) instead.
+
+        Everything you write here is public. Leave out passwords, API keys, values from your `.env`, and anything from your profile or applications you'd rather keep to yourself.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, and what Dossier did. Copy any error message word for word.
+      placeholder: When I press Download PDF on an application, the page says …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we make it happen?
+      description: The steps, starting from a page everyone has, such as the dashboard. Say whether it happens every time or only sometimes.
+      placeholder: |
+        1. Open Applications.
+        2. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Dossier version
+      description: Settings → About shows it.
+      placeholder: "1.7.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run Dossier?
+      options:
+        - Docker Compose, as in the README
+        - docker run
+        - Node.js, built from source
+        - CapRover
+        - Coolify
+        - Dokploy
+        - Another way (say which under Anything else)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai-provider
+    attributes:
+      label: AI provider
+      description: Only if the problem has to do with something the AI does, such as reading a posting or writing a draft.
+      options:
+        - Local model (Ollama or llama.cpp)
+        - OpenAI-compatible
+        - Anthropic
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: qwen2.5:7b
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and system
+      placeholder: Firefox 140 on Windows 11
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server log
+      description: The lines from around the time it happened. With Docker Compose, `docker compose logs app --tail 100` shows the last 100; on CapRover, Coolify or Dokploy, the app's logs. Check them for anything private first.
+      render: text
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, your reverse proxy, or anything else that might help. You can paste or drag images in here.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the issues, and this hasn't been reported yet.
+          required: true
+        - label: What I've written and pasted has no passwords, API keys or personal details in it.
+          required: true

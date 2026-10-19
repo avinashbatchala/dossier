@@ -1,0 +1,45 @@
+name: Feature request
+description: An idea for something Dossier could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Please search the [open and closed issues](https://github.com/AienTech/dossier/issues?q=is%3Aissue) first. If someone has asked for it already, a thumbs-up or a comment there helps more than a new issue.
+
+        Dossier is made for one person on a small server. [Known limitations](https://github.com/AienTech/dossier/blob/main/README.md#known-limitations) in the README lists what that leaves out for now.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation or the problem, more than the solution. "I apply in two languages, and …" helps more than "add a button for …".
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Dossier to do?
+      description: How you picture it working. Sketches, and screenshots of other apps that do it well, are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you manage without it today?
+      description: What you do instead, in Dossier or outside it, if anything.
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the issues, and nobody has asked for this yet.
+          required: true
