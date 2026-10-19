@@ -81,6 +81,19 @@ describe("OpenAICompatibleProvider", () => {
     expect(requests[0].url.href).toBe("https://api.example.com/v1/chat/completions");
     expect(requests[0].headers.get("authorization")).toBe("Bearer sk-test");
     expect(requests[0].body).toMatchObject({ model: "gpt-x", temperature: 0.9, max_tokens: 4096 });
+    expect(requests[0].body).not.toHaveProperty("thinking");
+  });
+
+  it("disables DeepSeek thinking, which counts towards max_tokens, and leaves room for the answer", async () => {
+    const requests = stubFetch(() => openaiChat("Hello!"));
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://api.deepseek.com", "sk-test", "deepseek-flash", 60_000);
+    expect(await provider.complete(ask)).toBe("Hello!");
+    expect(requests[0].url.href).toBe("https://api.deepseek.com/chat/completions");
+    expect(requests[0].body).toMatchObject({
+      model: "deepseek-flash",
+      max_tokens: 8192,
+      thinking: { type: "disabled" },
+    });
   });
 
   it("asks for a strict JSON schema", async () => {

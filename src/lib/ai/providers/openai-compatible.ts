@@ -18,9 +18,25 @@ type Quirks = { noTemperature: boolean; maxCompletionTokens: boolean; json: Json
 // servers only know `max_tokens`, and not all of them do JSON schemas.
 const quirks = new Map<string, Quirks>();
 
+/** DeepSeek's API, whose models think before answering unless told not to. */
+const DEEPSEEK_HOST = /(^|\.)deepseek\.com$/i;
+
+/** Enough for a resume, letter or email, even when the model is verbose. */
+const DEEPSEEK_MAX_TOKENS = 8_192;
+
+/** The hostname of a base URL; empty when it can't be parsed. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
 /** Any server that speaks the OpenAI chat completions API, including llama.cpp's server. */
 export class OpenAICompatibleProvider extends BaseProvider {
   private readonly client: OpenAI;
+  private readonly deepseek: boolean;
 
   constructor(
     readonly kind: "OPENAI" | "LOCAL",
@@ -30,6 +46,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
     timeoutMs: number,
   ) {
     super(model, timeoutMs);
+    this.deepseek = DEEPSEEK_HOST.test(hostOf(baseURL));
     // Local servers often need no key, but the SDK insists on one.
     this.client = new OpenAI({
       baseURL,
@@ -83,16 +100,21 @@ export class OpenAICompatibleProvider extends BaseProvider {
         : json === "object"
           ? { response_format: { type: "json_object" as const } }
           : {};
-    const completion = await this.client.chat.completions.create(
-      {
-        model: call.model,
-        messages: [{ role: "system", content: system }, ...call.messages],
-        ...(noTemperature || call.temperature === undefined ? {} : { temperature: call.temperature }),
-        ...(maxCompletionTokens ? { max_completion_tokens: call.maxTokens } : { max_tokens: call.maxTokens }),
-        ...responseFormat,
-      },
-      { signal: call.signal },
-    );
+    // DeepSeek thinks before answering unless told not to, and its reasoning
+    // counts towards max_tokens. Dossier's tasks don't need that reasoning, and
+    // with the 4k default it leaves no room for the answer. Disable it there,
+    // and allow a little more output for the longer documents.
+    const maxTokens = this.deepseek ? Math.max(call.maxTokens, DEEPSEEK_MAX_TOKENS) : call.maxTokens;
+    type CreateBody = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
+    const body: CreateBody & { thinking?: { type: "disabled" } } = {
+      model: call.model,
+      messages: [{ role: "system", content: system }, ...call.messages],
+      ...(noTemperature || call.temperature === undefined ? {} : { temperature: call.temperature }),
+      ...(maxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+      ...responseFormat,
+      ...(this.deepseek ? { thinking: { type: "disabled" as const } } : {}),
+    };
+    const completion = await this.client.chat.completions.create(body, { signal: call.signal });
     const choice = completion.choices[0];
     return { text: choice?.message?.content ?? "", cutOff: choice?.finish_reason === "length" };
   }
