@@ -171,6 +171,18 @@ docker compose exec -e JOBS_LIVE=arbeitsagentur app yarn vitest run src/lib/job-
 docker compose exec -e JOBS_LIVE=adzuna -e ADZUNA_TEST_APP_ID=… -e ADZUNA_TEST_KEY=… app yarn vitest run src/lib/job-search/sources.live.test.ts
 ```
 
+## Job agent
+
+The job agent (`/agent`, Settings → Job agent) reuses the Find jobs source and key, but runs on its own schedule and budget. It lives in `src/lib/agent`:
+
+- `run.ts`: one run searches only the first page, skips postings already in `AgentCandidate`, scores the newest with the `score-posting` AI task, and optionally prepares drafts with the same `read-posting` and `write-documents` jobs New application uses. `draftCandidate` claims a candidate before writing, so a retry or a second click can't make two applications.
+- `schedule.ts`: an in-process timer checks every 15 minutes for the configured hour, like the nightly backup and inbox check. It is only safe with one app instance.
+- `jobs.ts`: the `agent-scan` and `agent-draft` job types; `definitions.ts` imports it so a reload can recover them.
+- `actions.ts`: run now, prepare, approve and dismiss. Approving only marks the draft; it never sends.
+- `AgentCandidate` records a posting, its score and its draft. The dedupe key is a SHA-256 of the link (tracking parameters removed) or of company, title and place, so the same job can't come back from another source or a later run.
+
+Rate limits are deliberate: one source request per run, at most three runs in any 24 hours, and a manual run at most once an hour. `AGENT_MAX_RUNS_PER_DAY` and `AGENT_MANUAL_INTERVAL_MS` in `run.ts` are the hard limits; the score and draft caps are settings. Each run updates `agentLastRunAt` before asking the source, so a crash can't lead to a retry loop that spends the quota twice.
+
 ## Your data
 
 Settings → Your data exports everything (profile, custom themes, settings, applications with their history, documents, chat and notes, and the postings kept from Find jobs) as one JSON file, and imports such a file to restore it. An import replaces all data in one transaction, after writing a backup of the current data to `DOSSIER_DATA_DIR/backups` (default `/data`; `./data` in development, which git ignores). "Download all PDFs" zips every tailored document there too, in `downloads`, and removes the zip once it's downloaded.

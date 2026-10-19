@@ -274,6 +274,26 @@ enum ApplicationStatus {
   DECLINED
 }
 
+/// How an application was made: by the user, or by the job agent (E16).
+enum ApplicationOrigin {
+  MANUAL
+  AGENT
+}
+
+/// Where a job agent candidate stands (E16).
+enum AgentCandidateStatus {
+  /// Scored and waiting for a draft to be prepared.
+  SCORED
+  /// A draft is being written.
+  DRAFTING
+  /// A tailored draft is ready for review.
+  DRAFTED
+  /// The draft was approved and is a normal application.
+  APPROVED
+  /// The user passed on it.
+  DISMISSED
+}
+
 /// The stages the funnel counts, in order (PRD §8, DSH-3).
 enum FunnelStage {
   SENT
@@ -284,59 +304,67 @@ enum FunnelStage {
 }
 
 model Application {
-  id                String            @id @default(cuid())
-  title             String            @default("")
-  company           String            @default("")
-  role              String            @default("")
-  location          String            @default("")
+  id                  String            @id @default(cuid())
+  /// Whether the user made it, or the job agent prepared it (E16).
+  origin              ApplicationOrigin @default(MANUAL)
+  /// The agent's score for the posting, when the agent made this draft.
+  agentScore          Int?
+  /// The agent run that prepared it, for provenance.
+  agentJobId          String?
+  title               String            @default("")
+  company             String            @default("")
+  role                String            @default("")
+  location            String            @default("")
   /// Work mode as written in the posting, e.g. "Hybrid · 3 days in office".
-  mode              String            @default("")
-  salary            String            @default("")
-  deadline          DateTime?         @db.Date
+  mode                String            @default("")
+  salary              String            @default("")
+  deadline            DateTime?         @db.Date
   /// Saved, not fetched (NEW-1).
-  postingUrl        String            @default("")
-  postingText       String            @default("")
+  postingUrl          String            @default("")
+  postingText         String            @default("")
   /// What the AI read from the posting (extractedSchema).
-  extracted         Json?
+  extracted           Json?
   /// The prompt version that wrote `extracted`, e.g. "extract-posting@1" (E6-5).
-  extractedWith     String?
+  extractedWith       String?
   /// How the posting's requirements match the profile (matchSchema).
-  match             Json?
+  match               Json?
   /// The prompt version that wrote `match`.
-  matchedWith       String?
-  status            ApplicationStatus @default(DRAFT)
+  matchedWith         String?
+  status              ApplicationStatus @default(DRAFT)
   /// The furthest stage ever reached; null while never sent. Only the status module changes it.
-  furthestStage     FunnelStage?
-  sentAt            DateTime?
+  furthestStage       FunnelStage?
+  sentAt              DateTime?
   /// When the next interview is, while the application is in Interview (E9-9); shown on the dashboard.
-  nextInterviewAt   DateTime?
-  tone              Tone              @default(WARM)
+  nextInterviewAt     DateTime?
+  tone                Tone              @default(WARM)
   /// "Anything I should know?" (NEW-6).
-  userNote          String            @default("")
+  userNote            String            @default("")
   /// The language the documents were written in, e.g. "English".
-  language          String            @default("")
+  language            String            @default("")
   /// The tailored resume follows its theme's layout, sidebar included; off
   /// means a single column (APP-4, decided in E5-1 #42).
-  followThemeLayout Boolean           @default(false)
-  archivedAt        DateTime?
+  followThemeLayout   Boolean           @default(false)
+  archivedAt          DateTime?
   /// The Gmail thread the application was sent in, when it went out through Gmail (E15-2).
-  emailThreadId     String?
+  emailThreadId       String?
   /// The Google Calendar event of the next interview, and the calendar it's
   /// in, when Dossier added it: kept in step with nextInterviewAt both ways.
   interviewEventId    String?
   interviewCalendarId String?
   /// The Find jobs posting it was started from, if any (E14-8).
-  posting           Posting?
+  posting             Posting?
+  /// The agent candidate it was prepared from (E16).
+  agentCandidate      AgentCandidate?
   /// Mail sent and received about it through Gmail (E15-3).
-  emails            EmailMessage[]
-  events            StatusEvent[]
-  documents         Document[]
-  messages          ChatMessage[]
-  notes             Note[]
+  emails              EmailMessage[]
+  events              StatusEvent[]
+  documents           Document[]
+  messages            ChatMessage[]
+  notes               Note[]
   /// Its background jobs, deleted with it (their inputs and results hold the posting and the documents).
-  jobs              Job[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  jobs                Job[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   @@index([status])
   @@index([updatedAt])
@@ -518,6 +546,52 @@ model PostingSearch {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  @@index([createdAt])
+}
+
+// ─── Job agent (E16) ─────────────────────────────────────────────────────────
+
+/// A posting the job agent found and scored, and the draft it prepared from
+/// it. Kept after the draft is dismissed so the same posting never comes back.
+model AgentCandidate {
+  id            String               @id @default(cuid())
+  /// The agent run that found it, e.g. a Job id.
+  jobId         String?
+  source        PostingSource
+  /// The source's own id for it.
+  externalId    String
+  title         String               @default("")
+  company       String               @default("")
+  place         String               @default("")
+  remote        Boolean?
+  salary        String               @default("")
+  postedAt      DateTime?
+  /// Where to read it or apply; always http(s).
+  url           String               @default("")
+  via           String               @default("")
+  /// Plain text, as the source gave it.
+  description   String               @default("")
+  complete      Boolean              @default(false)
+  /// 0–100: how well the posting fits the profile.
+  score         Int                  @default(0)
+  /// Why it fits (stringList).
+  reasons       Json?
+  /// What gives pause (stringList).
+  redFlags      Json?
+  status        AgentCandidateStatus @default(SCORED)
+  /// Why preparing a draft failed, if it did.
+  error         String?
+  /// The tailored draft made from it.
+  applicationId String?              @unique
+  application   Application?         @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  /// A stable key for dedupe: the link reduced to what identifies the page,
+  /// else company, title and place. Unique across runs and sources.
+  dedupeKey     String               @unique
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([source, externalId])
+  @@index([status, score])
   @@index([createdAt])
 }
 

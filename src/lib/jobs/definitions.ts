@@ -10,3 +10,4 @@ import "./write-email";
 import "./zip-pdfs";
 import "./import-profile";
 import "./draft-reply";
+import "../agent/jobs";

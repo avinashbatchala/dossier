@@ -32,6 +32,7 @@ It's for one person on a small server: one password, your data in your own Postg
 - **Profile:** basics, skills and languages, experience, education and references, in the order you choose, with a strength meter. Start it from an existing resume (PDF, Word or Markdown) if you like.
 - **Base resume:** twelve themes and a theme builder, previewed live and printed to PDF on the server. Duplicate themes, or share them as files.
 - **Find jobs:** search postings near your city, or anywhere you choose, through JSearch (LinkedIn, Indeed and more), Adzuna or Germany's Bundesagentur für Arbeit. Save the good ones, dismiss the rest, and start an application from a posting with one click.
+- **Job agent:** one saved search runs once a day, removes duplicates, scores new postings against your profile, and can prepare tailored drafts for the best ones. Review and edit every draft; nothing is sent or applied for without you. Hard caps limit how many searches and AI calls a run can use.
 - **New application:** paste a posting; Dossier pulls out the details and requirements, matches them against your profile, and writes a tailored resume and cover letter in the tone you pick.
 - **Never invents experience:** drafts only use facts from your profile. What the posting asks for and your profile doesn't have is shown as a gap, not made up.
 - **Refine:** ask for changes in a chat, edit or regenerate any part (every part of the cover letter too: sender, date, recipient, greeting and sign-off, written in the letter's language), undo AI changes or go back to any earlier version, keep private notes.
@@ -233,6 +234,17 @@ Find jobs is off until you pick a source in **Settings → Job search**. LinkedI
 | **Bundesagentur für Arbeit** | Germany's federal job board, with whole postings. Germany only. | No key, free. It isn't an official API (it's the access the agency's own site uses), so it can change without notice. |
 
 The search starts from your profile's city, country and current role; change the place, radius (10 to 200 km), how recent and Remote only as you like. Every search is kept with what it found until you remove it, under **Past searches**, so going back to one, or reloading, doesn't spend another search.
+
+## Job agent
+
+The **Job agent** runs one saved search for you, once a day, using the source and key from Settings → Job search. It keeps only postings you haven't seen, saved, dismissed or applied to, scores the newest ones against your profile, and puts the best in one of two queues:
+
+- **Scored postings:** the score, why it fits and anything worth knowing. Press **Prepare draft** to turn one into a tailored resume and cover letter.
+- **Drafts to review:** a normal Draft application, with its documents ready to edit. **Approve** keeps it in Applications; **Dismiss** removes it and never suggests that posting again.
+
+**Run now** asks for one extra run, at most once an hour and at most three runs in any 24 hours. Every run makes exactly one search request: the agent never pages through results or spends a second request. On JSearch's free plan that is at most about 90 searches a month, well under its 200. Each run scores at most the number in Settings → Job agent and prepares at most that many drafts, so AI use stays bounded too.
+
+The agent never sends an application and never changes a status beyond Draft. Approved drafts are still yours to review and send from the application page.
 
 ## Connecting Gmail and Calendar
 

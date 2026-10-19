@@ -16,6 +16,8 @@ import { prisma } from "@/lib/prisma";
 // as a single instance, so an in-process queue is enough.
 
 export type JobContext = {
+  /** The job's id, for provenance such as the agent run; absent when a task is run directly in a test. */
+  id?: string;
   /** Names the step now in progress, e.g. "Reading the posting". */
   step: (name: string) => Promise<void>;
   /** Aborts when the job is cancelled; pass it on to AI calls. */
@@ -231,6 +233,7 @@ async function execute(id: string, controller: AbortController): Promise<void> {
     if (!definition) throw new Error(`No job type "${job.type}" is defined.`);
 
     const result = await definition.run(definition.input.parse(job.input), {
+      id,
       signal: controller.signal,
       step: async (name) => {
         // Deleted meanwhile: there's no one left to do it for.

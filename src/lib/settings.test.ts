@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DateFormat } from "@/generated/prisma/enums";
+import { EMPTY_QUERY } from "@/lib/job-search/search";
 
 import { DATE_FORMATS, formatDocumentDate, settingsFromRows, settingValue, type SettingsData } from "./settings";
 
@@ -59,6 +60,14 @@ describe("stored settings", () => {
       jsearchHost: "openwebninja",
       adzunaAppId: null,
       adzunaKeyEnc: null,
+      agentEnabled: false,
+      agentQuery: EMPTY_QUERY,
+      agentHour: 7,
+      agentMinScore: 70,
+      agentMaxScores: 15,
+      agentMaxDrafts: 3,
+      agentAutoDraft: true,
+      agentLastRunAt: null,
       updateCheck: true,
       latestVersion: null,
       latestVersionUrl: null,
@@ -93,11 +102,13 @@ describe("stored settings", () => {
       docLanguage: "Dutch",
       quietDays: 14,
       jobRetentionHours: 168,
+      agentQuery: { ...EMPTY_QUERY, keywords: "designer", country: "nl" },
     } satisfies Partial<SettingsData>;
     const rows = Object.entries(saved).map(([key, value]) => ({ key, value: settingValue(value)! }));
     expect(rows).toContainEqual({ key: "strict", value: "false" });
     expect(rows).toContainEqual({ key: "customLanguages", value: '["Farsi","Hebrew"]' });
     expect(rows).toContainEqual({ key: "quietDays", value: "14" });
+    expect(rows).toContainEqual({ key: "agentQuery", value: JSON.stringify(saved.agentQuery) });
     expect(settingsFromRows(rows)).toMatchObject(saved);
     expect(settingValue(null)).toBeNull();
   });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
-import { JOB_SOURCES, JSEARCH_HOSTS } from "@/lib/job-search/search";
+import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
 export const DATE_FORMATS: readonly { value: DateFormat; label: string }[] = [
@@ -113,6 +113,34 @@ export const settingsSchema = z.object({
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
   adzunaAppId: z.string().nullable().catch(null),
   adzunaKeyEnc: z.string().nullable().catch(null),
+  // Job agent (E16): one search, run on a schedule. Off until it's chosen.
+  // The source is the one in Settings → Job search, so its key and country
+  // rules are shared with Find jobs.
+  agentEnabled: flag(false),
+  /** The search the agent runs; keywords must not be empty to run. */
+  agentQuery: z
+    .string()
+    .transform((value): unknown => {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
+    })
+    .pipe(searchQuerySchema)
+    .catch(EMPTY_QUERY),
+  /** The hour (server time) the daily run starts. */
+  agentHour: z.coerce.number().int().min(0).max(23).catch(7),
+  /** Postings below this score are kept out of the queue. */
+  agentMinScore: z.coerce.number().int().min(0).max(100).catch(70),
+  /** The most postings one run scores, to keep AI and source use bounded. */
+  agentMaxScores: z.coerce.number().int().min(1).max(30).catch(15),
+  /** The most drafts one run prepares automatically. */
+  agentMaxDrafts: z.coerce.number().int().min(0).max(10).catch(3),
+  /** Whether a run writes drafts for the best postings, or only scores them. */
+  agentAutoDraft: flag(true),
+  /** The last run, for the daily guard and the screen. */
+  agentLastRunAt: z.string().datetime().nullable().catch(null),
   /** "Check for updates daily" in Settings → About (update-check.ts). */
   updateCheck: flag(true),
   // The newest release the update check has seen, the UTC day it last
@@ -180,5 +208,5 @@ export function settingsFromRows(rows: readonly { key: string; value: string }[]
 /** The text stored for a setting's value, or null for "not set", whose row is removed. */
 export function settingValue(value: SettingsData[keyof SettingsData]): string | null {
   if (value === null) return null;
-  return Array.isArray(value) ? JSON.stringify(value) : String(value);
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 }

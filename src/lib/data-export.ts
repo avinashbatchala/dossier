@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
+  ApplicationOrigin,
   ApplicationStatus,
   ChatRole,
   DateStyle,
@@ -149,6 +150,10 @@ const chatMessage = z.object({
 const note = z.object({ id: text, body: text, createdAt: date, updatedAt: date });
 const application = z.object({
   id: text,
+  /** How it was made (E16); absent in older files. */
+  origin: z.enum(ApplicationOrigin).optional(),
+  /** The agent's score, when it prepared the draft. */
+  agentScore: int.nullable().optional(),
   title: text,
   company: text,
   role: text,

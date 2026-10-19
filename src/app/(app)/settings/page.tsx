@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 
 import { loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
 import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
+import { COUNTRIES } from "@/lib/job-search/countries";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
@@ -21,6 +22,7 @@ import { USAGE_PING_HOST, usagePingEnabled } from "@/lib/usage-ping";
 
 import { AiBehaviour } from "./ai-behaviour";
 import { AiProviderSection } from "./ai-provider-section";
+import { AgentSection } from "./agent-section";
 import { DataSection } from "./data-section";
 import { DocumentsSection } from "./documents-section";
 import { GoogleSection } from "./google-section";
@@ -47,6 +49,20 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </>
       ) : section === "jobs" ? (
         <JobSearchSection initial={jobSearchView(await loadJobSearchConfig())} />
+      ) : section === "agent" ? (
+        <AgentSection
+          initial={{
+            enabled: settings.agentEnabled,
+            query: settings.agentQuery,
+            hour: settings.agentHour,
+            minScore: settings.agentMinScore,
+            maxScores: settings.agentMaxScores,
+            maxDrafts: settings.agentMaxDrafts,
+            autoDraft: settings.agentAutoDraft,
+          }}
+          source={(await loadJobSearchConfig()).source}
+          countries={COUNTRIES}
+        />
       ) : section === "google" ? (
         <>
           <GoogleNotice outcome={typeof params.google === "string" ? params.google : null} />

@@ -65,6 +65,11 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     };
   },
 
+  posting_score: () => ({
+    score: 88,
+    reasons: ["Figma and design systems are both in the profile", "The seniority matches the last two roles"],
+    redFlags: ["The posting asks for Kubernetes, which the profile doesn't show"],
+  }),
   tailored_resume: (messages) => {
     const profile = section(messages[1].content, "The candidate's profile:\n") as Profile;
     return {

@@ -22,6 +22,10 @@ export async function register() {
     const { startInboxSchedule } = await import("@/lib/google/sync");
     startInboxSchedule();
 
+    // The job agent's daily search (E16).
+    const { startAgentSchedule } = await import("@/lib/agent/schedule");
+    startAgentSchedule();
+
     // Says what the usage ping sends and how to stop it, while it's on.
     const { USAGE_PING_NOTICE, usagePingEnabled } = await import("@/lib/usage-ping");
     if (usagePingEnabled()) console.log(USAGE_PING_NOTICE);

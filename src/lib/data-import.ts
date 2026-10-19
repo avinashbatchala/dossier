@@ -88,6 +88,7 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       // notes and jobs along; the other jobs (a resume import, postings read
       // for applications never created) hold the old data too.
       await tx.job.deleteMany();
+      await tx.agentCandidate.deleteMany();
       await tx.posting.deleteMany();
       await tx.postingSearch.deleteMany();
       // Mail from Gmail belongs to the applications being replaced; the next check fetches what's still relevant.

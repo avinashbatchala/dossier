@@ -4,20 +4,13 @@ import { z } from "zod";
 
 import { JobStatus, Tone } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
-import { summaryText, tailoringSummary } from "@/lib/ai/tailoring-summary";
+import { createApplicationFromDocuments } from "@/lib/application-create";
 import { matchSchema } from "@/lib/application-data";
 import { readPostingJob } from "@/lib/jobs/read-posting";
 import { startJob } from "@/lib/jobs/runner";
 import { writeDocumentsJob } from "@/lib/jobs/write-documents";
 import { fetchPosting } from "@/lib/posting-fetch";
 import { prisma } from "@/lib/prisma";
-import { loadProfile } from "@/lib/profile-data";
-import { loadSettings } from "@/lib/settings-data";
-import { logServerError } from "@/lib/log";
-import { calendarDay } from "@/lib/application-documents";
-import { documentLanguage } from "@/lib/document-language";
-import { newFrame, withFrame } from "@/lib/letter-frame";
-import { describeTrim, fitResumeToOnePage } from "@/lib/one-page";
 
 /** "Read the posting →": starts reading it in the background and returns the job's id (E7-2). */
 export const startReadingPosting = action(
@@ -125,111 +118,16 @@ export const createApplication = action(
     const input = writeDocumentsJob.input.parse(job.input);
     const documents = writeDocumentsJob.result.parse(job.result);
     const reading = await finishedReading(input.readJobId);
-    const link = postingLink(postingUrl);
-    const [settings, profile] = await Promise.all([loadSettings(), loadProfile()]);
 
-    const { extracted, extractedWith, matchedWith } = reading.result;
-    const language = settings.docLanguage ?? extracted.language ?? "English";
-    // E8-11: every part of the letter is a unit. The AI wrote the recipient
-    // and greeting; the sender and signature come from the profile, and the
-    // date is written now, in the letter's language.
-    const letter = withFrame(
-      documents.letter,
-      newFrame({
-        basics: profile.basics,
-        company: details.company,
-        location: details.location,
-        date: calendarDay(),
-        dateFormat: settings.dateFormat,
-        lang: documentLanguage(language, documents.letter.map((unit) => unit.text).join(" ")).lang,
-      }),
-    );
-    const summary = tailoringSummary({
-      profile,
-      company: details.company,
-      role: details.role,
-      match: input.match,
-      resume: documents.resume,
-      letter: documents.letter,
+    return createApplicationFromDocuments({
+      reading: { input: reading.input, result: reading.result },
+      documents,
+      details,
+      postingUrl: postingLink(postingUrl),
+      postingId: postingId ?? null,
       tone: input.tone,
       note: input.note,
-      references: !settings.includeRefs ? "setting-off" : extracted.asksForReferences ? "included" : "not-asked",
-      strict: settings.strict,
-      showChanges: settings.showDiff,
+      claim: { kind: "manual", writeJobId, readJobId: input.readJobId },
     });
-
-    const created = await prisma.$transaction(async (tx) => {
-      // Claim the job first: a second click waits here, then finds it taken.
-      const { count } = await tx.job.updateMany({ where: { id: writeJobId, key: null }, data: { key: `${CLAIMED}pending` } });
-      if (count === 0) {
-        const claimed = await tx.job.findUniqueOrThrow({ where: { id: writeJobId }, select: { key: true } });
-        if (claimed.key?.startsWith(CLAIMED) && claimed.key !== `${CLAIMED}pending`) return claimed.key.slice(CLAIMED.length);
-        throw new ActionError("This application is already being created.");
-      }
-
-      const application = await tx.application.create({
-        data: {
-          title: details.title || [details.role, details.company].filter(Boolean).join(" · ") || "Untitled application",
-          company: details.company,
-          role: details.role,
-          location: details.location,
-          mode: details.mode,
-          salary: details.salary,
-          deadline: details.deadline ? new Date(`${details.deadline}T00:00:00Z`) : null,
-          postingUrl: link,
-          postingText: reading.input.posting,
-          extracted,
-          extractedWith,
-          match: input.match,
-          matchedWith,
-          tone: input.tone,
-          userNote: input.note,
-          language,
-          documents: {
-            create: [
-              // Each starts its history with the first draft (E8-10).
-              {
-                kind: "RESUME",
-                units: documents.resume,
-                themeId: settings.baseThemeId,
-                writtenWith: documents.resumeWith,
-                versions: { create: { units: documents.resume, cause: "WRITTEN" } },
-              },
-              {
-                kind: "COVER_LETTER",
-                units: letter,
-                themeId: settings.baseThemeId,
-                writtenWith: documents.letterWith,
-                versions: { create: { units: letter, cause: "WRITTEN" } },
-              },
-            ],
-          },
-          messages: { create: { role: "AI", text: summaryText(summary) } },
-        },
-        select: { id: true },
-      });
-      const key = `${CLAIMED}${application.id}`;
-      await tx.job.updateMany({ where: { id: { in: [writeJobId, input.readJobId] } }, data: { key, applicationId: application.id } });
-      // The posting it came from shows it as applied for (E14-8); one already linked keeps its application.
-      if (postingId) await tx.posting.updateMany({ where: { id: postingId, applicationId: null }, data: { applicationId: application.id } });
-      return { id: application.id, isNew: true };
-    });
-    if (typeof created === "string") return created;
-
-    // E10-10: once created, a resume that runs over is trimmed to one page,
-    // and the opening message says what was cut. A failure here leaves the
-    // resume as written rather than failing the application.
-    if (settings.onePage) {
-      try {
-        const { trimmed, fits } = await fitResumeToOnePage(created.id, profile);
-        if (trimmed.length > 0 && settings.showDiff) {
-          const text = summaryText({ ...summary, list: [...summary.list, ...describeTrim(trimmed, profile, fits)] });
-          await prisma.chatMessage.updateMany({ where: { applicationId: created.id, role: "AI", writtenWith: null }, data: { text } });
-        }
-      } catch (error) {
-        logServerError("one-page trimming", error);
-      }
-    }
-    return created.id;
   },
 );
