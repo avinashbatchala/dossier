@@ -313,7 +313,7 @@ What protects your data, how to run Dossier safely and how to report a problem: 
 
 ## Development
 
-Working on Dossier itself: see [DEVELOPMENT.md](DEVELOPMENT.md).
+Working on Dossier itself: see [DEVELOPMENT.md](DEVELOPMENT.md). For this deployment's AWS/Lightsail operations — SSH, updates, backups, password and secret rotation — see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 
 ## License
 
