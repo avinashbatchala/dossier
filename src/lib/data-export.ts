@@ -295,7 +295,7 @@ export const exportSchema = z.object({
   searches: z.array(postingSearch).default([]),
   /** The job agent's candidates (E16); absent in older files. */
   agentCandidates: z.array(agentCandidate).default([]),
-  /** The uploaded PNG signature (E17), base64, absent when none is uploaded. */
+  /** The uploaded signature image (E17), base64, absent when none is uploaded. */
   signature: z.object({ data: text, mimeType: text }).optional(),
 });
 export type DossierExport = z.infer<typeof exportSchema>;

@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SIGNATURE_MAX_BYTES, SIGNATURE_MESSAGES } from "@/lib/signature";
 
-/** The PNG signature upload and the "sign new letters" default (E17). */
+/** The signature upload and the "sign new letters" default (E17). */
 export function SignatureCard({
   signature,
   signCoverLetters,
@@ -27,17 +27,19 @@ export function SignatureCard({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.type !== "image/png") return void toast(SIGNATURE_MESSAGES.notPng);
+    if (file.type !== "image/png" && file.type !== "image/jpeg" && file.type !== "image/jpg") {
+      return void toast(SIGNATURE_MESSAGES.notImage);
+    }
     if (file.size > SIGNATURE_MAX_BYTES) return void toast(SIGNATURE_MESSAGES.tooBig);
 
     const before = preview;
     setPreview(await dataUrl(file));
     setUploading(true);
     try {
-      const response = await fetch("/api/signature", { method: "POST", headers: { "content-type": "image/png" }, body: file });
+      const response = await fetch("/api/signature", { method: "POST", headers: { "content-type": file.type }, body: file });
       if (!response.ok) {
         const answer = (await response.json().catch(() => null)) as { error?: string } | null;
-        toast(answer?.error ?? SIGNATURE_MESSAGES.notPng);
+        toast(answer?.error ?? SIGNATURE_MESSAGES.notImage);
         setPreview(before);
         return;
       }
@@ -74,8 +76,8 @@ export function SignatureCard({
       <div className="flex flex-col gap-1">
         <h3 className="font-serif text-[18px]">Signature</h3>
         <p className="text-sm text-pretty text-muted">
-          Upload a PNG of your handwritten signature, ideally with a transparent background. It sits above your typed name on
-          cover letters you choose to sign. It stays on your server.
+          Upload a PNG or JPG of your handwritten signature. PNG with a transparent background works best. It sits above your typed
+          name on cover letters you choose to sign. It stays on your server.
         </p>
       </div>
 
@@ -92,10 +94,10 @@ export function SignatureCard({
 
       <div className="flex flex-wrap items-center gap-2.5">
         <label aria-disabled={uploading || undefined} className={buttonClassName("secondary", "sm", uploading ? "pointer-events-none opacity-60" : "cursor-pointer")}>
-          {preview ? "Replace PNG" : "Upload PNG"}
+          {preview ? "Replace image" : "Upload signature"}
           <input
             type="file"
-            accept="image/png"
+            accept="image/png,image/jpeg"
             disabled={uploading}
             className="sr-only"
             onChange={(event) => void choose(event)}
@@ -106,7 +108,7 @@ export function SignatureCard({
             Remove
           </Button>
         )}
-        <span className="text-meta text-muted">PNG, up to 500 KB</span>
+        <span className="text-meta text-muted">PNG or JPG, up to 500 KB</span>
       </div>
 
       <Checkbox

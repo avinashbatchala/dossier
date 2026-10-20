@@ -64,7 +64,7 @@ export function TailoredLetter({
   date: Date;
   dateFormat: DateFormat;
   language: string;
-  /** The uploaded PNG as a data URL, when this letter is signed (E17). */
+  /** The uploaded image as a data URL, when this letter is signed (E17). */
   signature?: string | null;
   renderUnit?: UnitRenderer;
 }) {

@@ -30,8 +30,9 @@ model ProfileField {
   updatedAt DateTime @updatedAt
 }
 
-/// The PNG signature drawn on cover letters, if one is uploaded. At most one
-/// row, with id "signature" (E17): it belongs to the profile, not a document.
+/// The PNG or JPEG signature drawn on cover letters, if one is uploaded. At
+/// most one row, with id "signature" (E17): it belongs to the profile, not a
+/// document.
 model Signature {
   id        String   @id @default("signature")
   data      Bytes

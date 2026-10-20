@@ -58,7 +58,7 @@ describe("CoverLetterDocument", () => {
     expect(screen.getByText("Met vriendelijke groet,")).toBeInTheDocument();
   });
 
-  it("draws the uploaded PNG signature when the letter is signed (E17)", () => {
+  it("draws the uploaded signature image when the letter is signed (E17)", () => {
     render(<CoverLetterDocument {...letter} signature="data:image/png;base64,iVBORw0KGgo=" />);
     const page = screen.getByRole("article", { name: "Cover letter" });
     const image = page.querySelector("img");

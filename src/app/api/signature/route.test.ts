@@ -19,6 +19,7 @@ const request = (method: string, body?: BodyInit, headers: Record<string, string
   });
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 13]);
 
 beforeEach(() => {
   vi.mocked(getSession).mockResolvedValue({ persistent: false, issuedAt: new Date(), expiresAt: new Date() });
@@ -30,11 +31,17 @@ describe("POST /api/signature (E17)", () => {
   it("stores a PNG sent as the body", async () => {
     const response = await POST(request("POST", PNG, { "content-type": "image/png" }), undefined);
     expect(await response.json()).toEqual({ ok: true });
-    expect(saveSignature).toHaveBeenCalledWith(expect.any(Uint8Array));
+    expect(saveSignature).toHaveBeenCalledWith(expect.any(Uint8Array), "image/png");
   });
 
-  it("refuses another type, bytes that aren't a PNG, and a file that's too big", async () => {
-    expect((await POST(request("POST", PNG, { "content-type": "image/jpeg" }), undefined)).status).toBe(415);
+  it("stores a JPEG too", async () => {
+    const response = await POST(request("POST", JPEG, { "content-type": "image/jpeg" }), undefined);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(saveSignature).toHaveBeenCalledWith(expect.any(Uint8Array), "image/jpeg");
+  });
+
+  it("refuses another type, bytes that aren't an image, and a file that's too big", async () => {
+    expect((await POST(request("POST", PNG, { "content-type": "image/gif" }), undefined)).status).toBe(415);
     expect((await POST(request("POST", Buffer.from("hello"), { "content-type": "image/png" }), undefined)).status).toBe(415);
     const big = new Uint8Array(513 * 1024);
     big.set(PNG);
@@ -44,7 +51,7 @@ describe("POST /api/signature (E17)", () => {
 
   it("says the same thing whatever went wrong, without leaking the body", async () => {
     const response = await POST(request("POST", Buffer.from("hello"), { "content-type": "image/png" }), undefined);
-    expect(await response.json()).toEqual({ error: SIGNATURE_MESSAGES.notPng });
+    expect(await response.json()).toEqual({ error: SIGNATURE_MESSAGES.notImage });
   });
 
   it("needs a signed-in session", async () => {

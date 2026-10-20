@@ -80,7 +80,7 @@ const units = async () =>
 afterAll(() => prisma().$disconnect());
 
 describe("the cover letter's signature (E17)", () => {
-  it("signs only when a PNG is uploaded, and can be turned off per application", async () => {
+  it("signs only when a signature image is uploaded, and can be turned off per application", async () => {
     expect(await setSignatureOnLetter({ id: "app-1", sign: true })).toMatchObject({ ok: false, error: expect.stringMatching(/Upload/) });
 
     await prisma().signature.create({
