@@ -11,6 +11,7 @@ In short: everything you enter is kept in your own PostgreSQL database and data 
 | Your profile: basics with contact details, skills, languages, roles, projects, education, and references with their email and phone | Database | You change or delete it |
 | Each application: the posting, what was read from it, the match, what you told the AI, its status history | Database | You delete the application |
 | Each application's resume, cover letter and email, every earlier version of them, the refine chat and your private notes | Database | You delete the application |
+| Your signature, if you upload one: the PNG, and which cover letters draw it | Database | You replace or remove it in Settings → Documents, or Delete everything |
 | Postings you saved or dismissed in Find jobs, and your past searches with what they found | Database | You remove them. A posting stays, unlinked, when you delete the application made from it |
 | The job agent's finds: each posting it scored, with its score, reasons and red flags, and the drafts it prepared. Of a posting you dismissed, only its source's ID, its title and company, and a fingerprint of its link, so it never comes back | Database | Dismissing a posting trims it at once and deletes its draft. Delete everything removes them all |
 | The scores of postings you scored with **Score** in Find jobs, or the job agent scored: each score with its reasons and red flags | Database | Scoring again replaces one. Importing a file or Delete everything removes them; exports leave them out, since they can be made again |
@@ -28,7 +29,7 @@ Exports you download and database dumps you take are copies outside Dossier's re
 ## What deleting removes
 
 - **Deleting an application** removes it at once with its documents and their versions, the chat, notes, status history, task data and its mail from Gmail (which stays in Gmail). Nightly backups taken before still hold it until they expire, and so do exports you downloaded.
-- **Delete everything** (Settings → Your data) removes the profile, every application, postings and searches, the job agent's finds, custom themes, settings, task data, backups and zips, the mail from Gmail and the Google account, after revoking Dossier's access at Google. It can't reach your own exports and dumps, what's in your Gmail and calendar, or what a hosted AI provider kept.
+- **Delete everything** (Settings → Your data) removes the profile, every application, postings and searches, the job agent's finds, the uploaded signature, custom themes, settings, task data, backups and zips, the mail from Gmail and the Google account, after revoking Dossier's access at Google. It can't reach your own exports and dumps, what's in your Gmail and calendar, or what a hosted AI provider kept.
 - **Disconnect** (Settings → Google) revokes Dossier's access at Google and forgets the account. Mail already in Dossier stays, with its applications.
 
 ## What leaves your server

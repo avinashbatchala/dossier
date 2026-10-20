@@ -18,6 +18,7 @@ import { TONES } from "@/lib/tones";
 import { useAutosave } from "@/hooks/use-autosave";
 
 import { addDocumentLanguage, updateSettings } from "./actions";
+import { SignatureCard } from "./signature-card";
 import { SettingsSectionIntro } from "./settings-screen";
 
 export type DocumentSettings = {
@@ -30,6 +31,7 @@ export type DocumentSettings = {
   customLanguages: string[];
   fileNamePattern: string;
   includeRefs: boolean;
+  signCoverLetters: boolean;
   pageLimit: PageLimit;
 };
 
@@ -43,10 +45,13 @@ const OTHER_LANGUAGE = "__other";
 export function DocumentsSection({
   initial,
   preview,
+  signature,
 }: {
   initial: DocumentSettings;
   /** For the file name's preview: the user's name and the latest application, or sample values. */
   preview: { name: string; company: string; role: string };
+  /** The uploaded PNG as a data URL, or null (E17). */
+  signature: string | null;
 }) {
   const track = useTrackSave();
   const [settings, setSettings] = useState(initial);
@@ -231,6 +236,12 @@ export function DocumentsSection({
           onCheckedChange={(includeRefs) => change({ includeRefs })}
         />
       </Card>
+
+      <SignatureCard
+        signature={signature}
+        signCoverLetters={settings.signCoverLetters}
+        onDefaultChange={(signCoverLetters) => change({ signCoverLetters })}
+      />
     </>
   );
 }

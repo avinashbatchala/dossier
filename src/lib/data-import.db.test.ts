@@ -196,6 +196,20 @@ describe("importExport (E10-6)", () => {
     expect(await prisma().application.findUniqueOrThrow({ where: { id: draft.id } })).toMatchObject({ origin: "MANUAL", awaitingReview: false });
   });
 
+  it("restores the uploaded signature and which letters are signed (E17)", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await prisma().signature.create({ data: { id: "signature", data: png, mimeType: "image/png" } });
+    await prisma().application.updateMany({ data: { signatureOnLetter: true } });
+    const file = await asFile();
+    expect(file.signature).toEqual({ data: png.toString("base64"), mimeType: "image/png" });
+
+    await prisma().signature.deleteMany();
+    await importExport(prisma(), file);
+    expect(await prisma().signature.findUniqueOrThrow({ where: { id: "signature" } })).toMatchObject({ mimeType: "image/png" });
+    expect(Buffer.from((await prisma().signature.findUniqueOrThrow({ where: { id: "signature" } })).data)).toEqual(png);
+    expect(await prisma().application.count({ where: { signatureOnLetter: true } })).toBe(await prisma().application.count());
+  });
+
   it("reads files from before projects as having none (PRO-13)", async () => {
     const file = JSON.parse(JSON.stringify(await buildExport(prisma(), { now })));
     const parsed = parseExport(JSON.stringify({ ...file, schemaVersion: 2, profile: { ...file.profile, projects: undefined } }));

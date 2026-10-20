@@ -21,6 +21,7 @@ import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { emailJobKey, writeEmailJob } from "@/lib/jobs/write-email";
 import { prisma } from "@/lib/prisma";
 import { findOrCreateSkill } from "@/lib/profile-entries";
+import { loadSignature } from "@/lib/signature-data";
 import { cleanUnitText, unitName } from "@/lib/unit-text";
 
 const GONE = "That application no longer exists.";
@@ -33,6 +34,20 @@ export const setFollowThemeLayout = action(
   z.object({ id: z.string().min(1), follow: z.boolean() }),
   async ({ id, follow }) => {
     const { count } = await prisma.application.updateMany({ where: { id }, data: { followThemeLayout: follow } });
+    if (count === 0) throw new ActionError(GONE);
+    refresh(id);
+    return null;
+  },
+);
+
+/** The cover letter's signature switch (E17): draw the uploaded PNG, or the typed name only. */
+export const setSignatureOnLetter = action(
+  z.object({ id: z.string().min(1), sign: z.boolean() }),
+  async ({ id, sign }) => {
+    if (sign && !(await loadSignature())) {
+      throw new ActionError("Upload your signature in Settings → Documents first.");
+    }
+    const { count } = await prisma.application.updateMany({ where: { id }, data: { signatureOnLetter: sign } });
     if (count === 0) throw new ActionError(GONE);
     refresh(id);
     return null;

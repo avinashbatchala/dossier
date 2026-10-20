@@ -92,6 +92,17 @@ describe("buildExport (E10-4)", () => {
     expect(withKeys.jobSourceKeys).toEqual({ jsearch: "ak-test" });
   });
 
+  it("carries the uploaded signature and whether each letter signs (E17)", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await prisma().signature.create({ data: { id: "signature", data: png, mimeType: "image/png" } });
+    await prisma().application.updateMany({ data: { signatureOnLetter: true } });
+
+    const data = await buildExport(prisma(), { now });
+    expect(data.signature).toEqual({ data: png.toString("base64"), mimeType: "image/png" });
+    expect(data.applications.every((application) => application.signatureOnLetter)).toBe(true);
+    expect(exportSchema.parse(JSON.parse(JSON.stringify(data))).signature).toEqual(data.signature);
+  });
+
   it("names the file after the day", () => {
     expect(exportFileName(new Date(2026, 8, 7, 23))).toBe("dossier-export-2026-09-07.json");
   });

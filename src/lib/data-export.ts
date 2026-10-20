@@ -195,6 +195,8 @@ const application = z.object({
   origin: z.enum(ApplicationOrigin).optional(),
   agentScore: int.nullable().optional(),
   awaitingReview: z.boolean().optional(),
+  /** Whether the uploaded signature is drawn on its cover letter (E17); absent in older files. */
+  signatureOnLetter: z.boolean().optional(),
   archivedAt: optionalDate,
   createdAt: date,
   updatedAt: date,
@@ -293,6 +295,8 @@ export const exportSchema = z.object({
   searches: z.array(postingSearch).default([]),
   /** The job agent's candidates (E16); absent in older files. */
   agentCandidates: z.array(agentCandidate).default([]),
+  /** The uploaded PNG signature (E17), base64, absent when none is uploaded. */
+  signature: z.object({ data: text, mimeType: text }).optional(),
 });
 export type DossierExport = z.infer<typeof exportSchema>;
 
@@ -314,7 +318,7 @@ export async function buildExport(
   { includeApiKey = false, now = new Date() }: { includeApiKey?: boolean; now?: Date } = {},
 ): Promise<DossierExport> {
   return db.$transaction(async (tx) => {
-    const [fields, skills, languages, experience, projects, education, references, themes, settings, applications, postings, searches, agentCandidates] = await Promise.all([
+    const [fields, skills, languages, experience, projects, education, references, themes, settings, applications, postings, searches, agentCandidates, signature] = await Promise.all([
       tx.profileField.findMany({ select: { key: true, value: true }, orderBy: { key: "asc" } }),
       tx.skill.findMany({ select: { id: true, name: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
       tx.language.findMany({ select: { id: true, name: true, level: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
@@ -342,6 +346,7 @@ export async function buildExport(
       tx.posting.findMany({ orderBy: { createdAt: "asc" } }),
       tx.postingSearch.findMany({ orderBy: { createdAt: "asc" } }),
       tx.agentCandidate.findMany({ orderBy: { createdAt: "asc" } }),
+      tx.signature.findUnique({ where: { id: "signature" }, select: { data: true, mimeType: true } }),
     ]);
 
     // Keys only when asked for, decrypted; one that's unreadable here too (DOSSIER_SECRET changed) has nothing to export.
@@ -383,6 +388,7 @@ export async function buildExport(
       postings,
       searches,
       agentCandidates,
+      ...(signature ? { signature: { data: Buffer.from(signature.data).toString("base64"), mimeType: signature.mimeType } } : {}),
     };
   });
 }

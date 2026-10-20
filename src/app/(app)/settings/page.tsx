@@ -18,6 +18,7 @@ import { appVersion } from "@/lib/version";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
+import { loadSignature } from "@/lib/signature-data";
 import { availableUpdate } from "@/lib/update-check";
 import { USAGE_PING_HOST, usagePingChoice } from "@/lib/usage-ping";
 
@@ -116,9 +117,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             customLanguages: settings.customLanguages,
             fileNamePattern: settings.fileNamePattern,
             includeRefs: settings.includeRefs,
+            signCoverLetters: settings.signCoverLetters,
             pageLimit: settings.pageLimit,
           }}
           preview={await filePreview()}
+          signature={await loadSignature()}
         />
       ) : (
         <AboutSection

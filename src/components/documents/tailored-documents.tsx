@@ -52,6 +52,7 @@ export function TailoredLetter({
   date,
   dateFormat,
   language,
+  signature,
   renderUnit,
 }: {
   letter: DocumentData;
@@ -63,6 +64,8 @@ export function TailoredLetter({
   date: Date;
   dateFormat: DateFormat;
   language: string;
+  /** The uploaded PNG as a data URL, when this letter is signed (E17). */
+  signature?: string | null;
   renderUnit?: UnitRenderer;
 }) {
   return (
@@ -77,6 +80,7 @@ export function TailoredLetter({
       date={date}
       dateFormat={dateFormat}
       language={language}
+      signature={signature}
       renderUnit={renderUnit}
     />
   );

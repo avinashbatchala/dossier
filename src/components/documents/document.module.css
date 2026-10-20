@@ -259,6 +259,15 @@
   color: var(--doc-ink);
 }
 
+.signatureImage {
+  display: block;
+  width: auto;
+  max-width: calc(var(--u) * 220);
+  max-height: calc(var(--u) * 55);
+  margin-top: calc(var(--u) * 6);
+  object-fit: contain;
+}
+
 /* ─── Theme structures ─────────────────────────────────────────────────── */
 
 /*

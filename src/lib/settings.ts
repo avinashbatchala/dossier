@@ -122,6 +122,8 @@ export const settingsSchema = z.object({
   customLanguages: stringList.catch([]),
   fileNamePattern: z.string().catch("{name} – {company} – {doc}"),
   includeRefs: flag(false),
+  /** Draw the uploaded PNG signature on new cover letters (E17). */
+  signCoverLetters: flag(false),
   pageLimit: pageLimit.catch("1"),
   nightlyBackup: flag(true),
   /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */

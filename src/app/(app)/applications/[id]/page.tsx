@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: PageProps<"/applications/[id]
 export default async function ApplicationPage({ params, searchParams }: PageProps<"/applications/[id]">) {
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   await pullCalendar(id);
-  const [{ application, profile, settings, extracted, resume, letter, email, includeReferences, letterDate }, aiReady, unitJobs, refineJobs, emailJobs, timeZone, google, emails] =
+  const [{ application, profile, settings, extracted, resume, letter, email, includeReferences, letterDate, signature }, aiReady, unitJobs, refineJobs, emailJobs, timeZone, google, emails] =
     await Promise.all([
       loadDocuments(id),
       isAiConfigured(),
@@ -65,7 +65,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
     }))
     // Settings → "Show what changed" off hides the list of what was tailored (SET-5).
     .filter((message) => settings.showDiff || !message.opening);
-  const { title, company, location, status, tone, language, followThemeLayout, nextInterviewAt } = application;
+  const { title, company, location, status, tone, language, followThemeLayout, signatureOnLetter, nextInterviewAt } = application;
   // Units still being rewritten, so a reload keeps showing it.
   const rewriting = unitJobs.flatMap((job) => {
     const input = regenerateUnitJob.input.safeParse(job.input);
@@ -86,6 +86,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
         tone,
         language,
         followThemeLayout,
+        signatureOnLetter,
         archived: application.archivedAt !== null,
         awaitingReview: application.awaitingReview,
         nextInterviewAt,
@@ -124,6 +125,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
       profile={profile}
       paper={settings.paper}
       dateFormat={settings.dateFormat}
+      signature={signature}
       includeReferences={includeReferences}
       letterDate={letterDate}
       score={match && match.items.length > 0 ? matchScore(match) : null}

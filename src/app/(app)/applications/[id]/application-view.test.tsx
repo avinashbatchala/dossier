@@ -90,6 +90,7 @@ const props: ApplicationViewProps = {
     tone: "WARM",
     language: "English",
     followThemeLayout: false,
+    signatureOnLetter: false,
     archived: false,
     nextInterviewAt: null,
   },

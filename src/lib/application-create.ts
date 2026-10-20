@@ -120,6 +120,7 @@ export async function createApplicationFromDocuments({ reading, documents, match
       data: {
         // An agent draft stays on the Agent screen until it's approved (#195).
         ...(claim.kind === "agent" ? { origin: ApplicationOrigin.AGENT, agentScore: claim.score, awaitingReview: true } : {}),
+        signatureOnLetter: settings.signCoverLetters,
         title: details.title || [details.role, details.company].filter(Boolean).join(" · ") || "Untitled application",
         company: details.company,
         role: details.role,

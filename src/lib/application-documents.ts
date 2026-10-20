@@ -12,6 +12,7 @@ import { extractedSchema, trimmedSchema, unitsSchema, type Trimmed, type Unit } 
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
+import { loadSignature } from "@/lib/signature-data";
 import { loadTheme, THEME_FIELDS } from "@/lib/theme-data";
 import { BUILT_IN_THEMES, type ThemeData } from "@/lib/themes";
 
@@ -56,7 +57,12 @@ export type DocumentData = { units: Unit[]; theme: ThemeData; trimmed?: Trimmed 
  * the same for the page and for printing (E8-8).
  */
 export async function loadDocuments(id: string) {
-  const [application, profile, settings] = await Promise.all([loadApplication(id), loadProfile(), loadSettings()]);
+  const [application, profile, settings, signature] = await Promise.all([
+    loadApplication(id),
+    loadProfile(),
+    loadSettings(),
+    loadSignature(),
+  ]);
   const baseTheme = (await loadTheme(settings.baseThemeId)) ?? BUILT_IN_THEMES[0];
   const documentData = (kind: DocumentKind): DocumentData | null => {
     const document = application.documents.find((entry) => entry.kind === kind);
@@ -76,6 +82,8 @@ export async function loadDocuments(id: string) {
     email: documentData(DocumentKind.EMAIL)?.units ?? null,
     /** Settings → "Include references", when the posting asks for them (SET-9). */
     includeReferences: settings.includeRefs && extracted?.asksForReferences === true,
+    /** The uploaded PNG as a data URL, when there is one (E17). */
+    signature,
     /** Dated the day it was sent; until then, today. */
     letterDate: calendarDay(application.sentAt ?? undefined),
   };

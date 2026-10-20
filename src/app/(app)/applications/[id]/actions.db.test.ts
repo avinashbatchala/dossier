@@ -16,6 +16,7 @@ import {
   sendMessage,
   setFollowThemeLayout,
   setInterviewDate,
+  setSignatureOnLetter,
   startRegenerating,
   startWritingEmail,
   undoEmailRewrite,
@@ -77,6 +78,21 @@ const units = async () =>
   (await prisma().document.findUniqueOrThrow({ where: { applicationId_kind: { applicationId: "app-1", kind: "RESUME" } } }))
     .units as typeof resume;
 afterAll(() => prisma().$disconnect());
+
+describe("the cover letter's signature (E17)", () => {
+  it("signs only when a PNG is uploaded, and can be turned off per application", async () => {
+    expect(await setSignatureOnLetter({ id: "app-1", sign: true })).toMatchObject({ ok: false, error: expect.stringMatching(/Upload/) });
+
+    await prisma().signature.create({
+      data: { id: "signature", data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), mimeType: "image/png" },
+    });
+    expect(await setSignatureOnLetter({ id: "app-1", sign: true })).toMatchObject({ ok: true, data: null });
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } })).toMatchObject({ signatureOnLetter: true });
+
+    expect(await setSignatureOnLetter({ id: "app-1", sign: false })).toMatchObject({ ok: true });
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } })).toMatchObject({ signatureOnLetter: false });
+  });
+});
 
 describe("setFollowThemeLayout (E8-2)", () => {
   it("saves the layout switch on the application", async () => {

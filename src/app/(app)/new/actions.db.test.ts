@@ -176,6 +176,15 @@ describe("createApplication", () => {
     expect(await prisma().documentVersion.findFirstOrThrow({ where: { documentId: letter.id } })).toMatchObject({ units });
   });
 
+  it("marks a new letter to be signed when Settings → Documents says so (E17)", async () => {
+    await finishedJobs();
+    await prisma().setting.create({ data: { key: "signCoverLetters", value: "true" } });
+    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: result.ok ? result.data : "" } })).toMatchObject({
+      signatureOnLetter: true,
+    });
+  });
+
   it("returns the same application when asked twice", async () => {
     await finishedJobs();
     const [first, second] = await Promise.all([

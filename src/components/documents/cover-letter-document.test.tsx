@@ -58,6 +58,15 @@ describe("CoverLetterDocument", () => {
     expect(screen.getByText("Met vriendelijke groet,")).toBeInTheDocument();
   });
 
+  it("draws the uploaded PNG signature when the letter is signed (E17)", () => {
+    render(<CoverLetterDocument {...letter} signature="data:image/png;base64,iVBORw0KGgo=" />);
+    const page = screen.getByRole("article", { name: "Cover letter" });
+    const image = page.querySelector("img");
+    expect(image).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=");
+    expect(image).toHaveAttribute("alt", "");
+    expect(page).toHaveTextContent(/Warm regards,Jane Doe$/);
+  });
+
   it("addresses the hiring team when the company is unknown", () => {
     render(<CoverLetterDocument {...letter} company="" location="" />);
     expect(screen.getByText("Hiring team")).toBeInTheDocument();

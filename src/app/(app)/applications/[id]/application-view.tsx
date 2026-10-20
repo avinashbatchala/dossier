@@ -41,6 +41,7 @@ import {
   restoreUnit,
   restoreVersion,
   saveUnit,
+  setSignatureOnLetter,
   sendMessage,
   setFollowThemeLayout,
   startRegenerating,
@@ -103,6 +104,8 @@ export type ApplicationViewProps = {
     /** The documents' language, e.g. "English". */
     language: string;
     followThemeLayout: boolean;
+    /** Whether this cover letter draws the uploaded signature (E17). */
+    signatureOnLetter: boolean;
     archived: boolean;
     /** A job agent draft not approved yet (#195): it isn't in Applications. */
     awaitingReview?: boolean;
@@ -132,6 +135,8 @@ export type ApplicationViewProps = {
   profile: ProfileData;
   paper: PaperSize;
   dateFormat: DateFormat;
+  /** The uploaded PNG as a data URL, when there is one (E17). */
+  signature?: string | null;
   /** Settings → "Include references", when the posting asks for them (SET-9). */
   includeReferences: boolean;
   /** The date on the letter, at UTC midnight. */
@@ -172,6 +177,7 @@ export function ApplicationView({
   profile,
   paper,
   dateFormat,
+  signature,
   includeReferences,
   letterDate,
   score,
@@ -185,6 +191,7 @@ export function ApplicationView({
   const router = useRouter();
   const [tab, setTab] = useState(initialTab);
   const [followLayout, showFollowLayout] = useOptimistic(application.followThemeLayout);
+  const [signLetter, showSignLetter] = useOptimistic(application.signatureOnLetter);
   const [, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
   // Texts being saved, shown in place until the page has the saved version.
@@ -227,6 +234,13 @@ export function ApplicationView({
     startTransition(async () => {
       showFollowLayout(follow);
       toastResult(await setFollowThemeLayout({ id: application.id, follow }));
+    });
+
+  const changeSignature = (sign: boolean) =>
+    startTransition(async () => {
+      showSignLetter(sign);
+      const result = toastResult(await setSignatureOnLetter({ id: application.id, sign }));
+      if (result.ok) toast(sign ? "Cover letter signed." : "This cover letter now shows the typed name only.");
     });
 
   const save = (kind: DocumentKind, unit: Unit, text: string) => {
@@ -648,6 +662,13 @@ export function ApplicationView({
               label={
                 <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <span>Cover letter · {aboutWords(paragraphs)}</span>
+                  {signature ? (
+                    <SignatureSwitch checked={signLetter} onCheckedChange={changeSignature} />
+                  ) : (
+                    <Link href="/settings?section=documents" className="text-meta text-muted underline hover:text-ink">
+                      Add your signature
+                    </Link>
+                  )}
                   {historyButton(DocumentKind.COVER_LETTER)}
                 </span>
               }
@@ -664,6 +685,7 @@ export function ApplicationView({
                 date={letterDate}
                 dateFormat={dateFormat}
                 language={application.language}
+                signature={signLetter ? signature : null}
                 renderUnit={viewed(DocumentKind.COVER_LETTER) ? plainUnit : unitsOf(DocumentKind.COVER_LETTER, letterUnits, letterStored)}
               />
             </DocumentPreview>
@@ -768,6 +790,25 @@ function useFlashing() {
 }
 
 /** The Resume tab's switch between the theme's sidebar layout and a single column (decided in E5-1 #42). */
+function SignatureSwitch({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  const id = useId();
+  return (
+    <span className="flex items-center gap-2">
+      <Switch.Root
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="flex h-4 w-7 shrink-0 items-center rounded-full bg-toggle-off p-0.5 data-[state=checked]:bg-primary motion-safe:transition-colors"
+      >
+        <Switch.Thumb className="block size-3 rounded-full bg-white shadow-knob data-[state=checked]:translate-x-3 motion-safe:transition-transform" />
+      </Switch.Root>
+      <label htmlFor={id} className="cursor-pointer text-meta">
+        {checked ? "Signed" : "Sign this letter"}
+      </label>
+    </span>
+  );
+}
+
 function LayoutSwitch({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   const id = useId();
   return (

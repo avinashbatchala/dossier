@@ -208,6 +208,14 @@ The job agent (`src/lib/agent`, the `/agent` screen and Settings → Job agent) 
 
 The end-to-end spec `e2e/agent.spec.ts` runs it against the fake JSearch and the fake AI, which scores by title (`posting_score` in `e2e/fake-ai.mts`).
 
+## Signing cover letters
+
+A PNG signature is uploaded in Settings → Documents through `POST /api/signature` (max 500 KB, checked by its PNG header) and kept in the one-row `Signature` table, so it is read only when a cover letter is drawn or the upload is shown, not on every settings read. `DELETE /api/signature` removes it.
+
+`Application.signatureOnLetter` says whether a letter is signed. It starts from the `signCoverLetters` setting when the application is created (`src/lib/application-create.ts`), and the switch on the Cover letter tab changes it through `setSignatureOnLetter` in the application's actions. Both the application preview (`loadDocuments()`) and the print page load the PNG as a data URL; `CoverLetterDocument` draws it between the sign-off and the typed name, so the PDF and preview stay identical. The screenshot/print pages never fetch the image over the network, which keeps the PDF browser's network rule intact.
+
+Exports carry the PNG as base64 and each application's `signatureOnLetter`, so a restore keeps signatures and which letters use them.
+
 ## Usage ping
 
 The usage ping is opt-in. A production server asks once after sign-in (`src/app/(app)/usage-ping-dialog.tsx`, shown by the signed-in layout while nobody has answered and `DOSSIER_TELEMETRY` isn't set) and sends nothing before a yes. After one, on each day someone signed in opens a page, it sends `https://telemetry.dossier.aien.me/ping` the install's random ID and the version, once (`src/lib/usage-ping.ts`, called with `after()` from the signed-in layout). `DOSSIER_TELEMETRY=on` or `off` answers in advance and wins while it's set.

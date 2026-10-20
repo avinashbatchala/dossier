@@ -12,6 +12,7 @@ vi.mock("./actions", () => ({
   addDocumentLanguage: vi.fn(async ({ name }: { name: string }) => ({ ok: true, data: { language: name, added: true } })),
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const initial: DocumentSettings = {
   paper: "A4",
@@ -22,10 +23,11 @@ const initial: DocumentSettings = {
   customLanguages: ["Farsi"],
   fileNamePattern: "{name} – {company} – {doc}",
   includeRefs: false,
+  signCoverLetters: false,
   pageLimit: "1",
 };
 const preview = { name: "Jane Doe", company: "Ledgerly", role: "Senior Product Designer" };
-const open = () => render(<DocumentsSection initial={initial} preview={preview} />);
+const open = () => render(<DocumentsSection initial={initial} preview={preview} signature={null} />);
 
 beforeEach(() => {
   vi.mocked(updateSettings).mockClear();

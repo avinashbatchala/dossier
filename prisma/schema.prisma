@@ -30,6 +30,16 @@ model ProfileField {
   updatedAt DateTime @updatedAt
 }
 
+/// The PNG signature drawn on cover letters, if one is uploaded. At most one
+/// row, with id "signature" (E17): it belongs to the profile, not a document.
+model Signature {
+  id        String   @id @default("signature")
+  data      Bytes
+  mimeType  String   @default("image/png")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Skill {
   id          String            @id @default(cuid())
   /// Unique ignoring case ("Figma" and "figma" are the same skill).
@@ -346,6 +356,8 @@ model Application {
   agentScore          Int?
   /// An agent draft not approved yet: only the Agent screen shows it (#195).
   awaitingReview      Boolean           @default(false)
+  /// Draw the uploaded signature on this application's cover letter.
+  signatureOnLetter   Boolean           @default(false)
   title               String            @default("")
   company             String            @default("")
   role                String            @default("")

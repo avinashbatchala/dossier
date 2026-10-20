@@ -180,6 +180,7 @@ export const updateSettings = action(
       .optional(),
     fileNamePattern: z.string().max(200).optional(),
     includeRefs: z.boolean().optional(),
+    signCoverLetters: z.boolean().optional(),
     pageLimit: z.enum(["1", "2", "none"]).optional(),
     nightlyBackup: z.boolean().optional(),
     jobRetentionHours: z.number().refine(isJobRetention).optional(),
@@ -229,6 +230,8 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     await tx.job.deleteMany();
     // The agent's queue (E16).
     await tx.agentCandidate.deleteMany();
+    // The uploaded signature (E17).
+    await tx.signature.deleteMany();
     // Find jobs' postings and past searches (E14-9, E14-10).
     await tx.posting.deleteMany();
     await tx.postingSearch.deleteMany();

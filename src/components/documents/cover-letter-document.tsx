@@ -27,6 +27,8 @@ type CoverLetterDocumentProps = {
   dateFormat: DateFormat;
   /** Overrides the "sign-off" unit; without either, the tone's sign-off. */
   signOff?: string;
+  /** The uploaded PNG as a data URL, when this letter is signed (E17). */
+  signature?: string | null;
   /** The language it's written in (SET-7); without one, it's read from the text. */
   language?: string | null;
   /** Draws each part; the preview's adds editing (E8-3). */
@@ -57,6 +59,7 @@ export function CoverLetterDocument({
   date,
   dateFormat,
   signOff,
+  signature,
   language,
   renderUnit = plainUnit,
 }: CoverLetterDocumentProps) {
@@ -101,6 +104,8 @@ export function CoverLetterDocument({
       </div>
       <div className={styles.signOff}>
         {renderUnit({ id: SIGN_OFF_UNIT, children: closing })}
+        {/* eslint-disable-next-line @next/next/no-img-element -- a data URL from the database, printed with the PDF */}
+        {signature && <img src={signature} alt="" className={styles.signatureImage} />}
         {renderUnit({ id: "signature", children: text("signature") })}
       </div>
     </DocumentPage>

@@ -75,7 +75,7 @@ const json = (value: unknown) => (value === null || value === undefined ? Prisma
  * install's own settings (the usage ping's) stay as they are.
  */
 export async function importExport(db: PrismaClient, data: DossierExport): Promise<void> {
-  const { profile, themes, settings, applications, postings, searches, agentCandidates, apiKey, jobSourceKeys } = data;
+  const { profile, themes, settings, applications, postings, searches, agentCandidates, signature, apiKey, jobSourceKeys } = data;
   const fromFile: Record<string, string | null> = {
     apiKeyEnc: apiKey ? encryptApiKey(apiKey) : null,
     jsearchKeyEnc: jobSourceKeys?.jsearch ? encryptSecret(JOB_SOURCE_KEY, jobSourceKeys.jsearch) : null,
@@ -89,6 +89,8 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       // for applications never created) hold the old data too.
       await tx.job.deleteMany();
       await tx.agentCandidate.deleteMany();
+      // The uploaded signature belongs to the profile being replaced (E17).
+      await tx.signature.deleteMany();
       await tx.posting.deleteMany();
       await tx.postingSearch.deleteMany();
       await tx.agentCandidate.deleteMany();
@@ -184,6 +186,11 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
           applicationId: candidate.applicationId && applicationIds.has(candidate.applicationId) ? candidate.applicationId : null,
         })),
       });
+      if (signature) {
+        await tx.signature.create({
+          data: { id: "signature", data: Buffer.from(signature.data, "base64"), mimeType: signature.mimeType },
+        });
+      }
     },
     // A big export takes longer than the default five seconds.
     { timeout: 120_000, maxWait: 10_000 },
