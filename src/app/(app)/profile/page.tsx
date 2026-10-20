@@ -15,7 +15,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
     <ProfileEditor
       initial={profile}
       section={sectionFromParam(section)}
-      order={{ experience: settings.experienceOrder, education: settings.educationOrder }}
+      order={{ experience: settings.experienceOrder, projects: settings.projectOrder, education: settings.educationOrder }}
     />
   );
 }

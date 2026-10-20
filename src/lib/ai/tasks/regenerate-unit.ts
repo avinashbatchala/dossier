@@ -6,7 +6,7 @@ import { emailParts } from "@/lib/application-email";
 import { isFrameUnit } from "@/lib/letter-frame";
 import type { ProfileData } from "@/lib/profile";
 import { TONES } from "@/lib/tones";
-import { bulletLines, isRoleUnit } from "@/lib/unit-text";
+import { bulletLines, isBulletUnit } from "@/lib/unit-text";
 
 import { guardSources, guardUnits } from "../fact-guard";
 
@@ -23,7 +23,7 @@ import {
   type Task,
 } from "./prompt-parts";
 
-export const REGENERATE_UNIT_VERSION = "regenerate-unit@4";
+export const REGENERATE_UNIT_VERSION = "regenerate-unit@5";
 
 /** What the letter's frame parts are, for the model (E8-11). */
 const FRAME_PARTS: Record<string, string> = {
@@ -65,13 +65,18 @@ export type RegenerateInput = {
 /** APP-5: a fresh version of one part, the rest left alone; the unit comes back with its new text. */
 export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, input, options) => {
   const { kind, unit, document, profile, extracted, tone, note, posting } = input;
-  const isRole = isRoleUnit(unit.id);
+  const bullets = isBulletUnit(unit.id);
+  const isProject = unit.id.startsWith("project:");
   const what = DOCUMENT_NAMES[kind];
   const answer = await provider.complete({
     system: system(
       `You write a new version of one part of a candidate's ${what} for one job, as JSON with the new text.`,
       `Keep its purpose and about its length, but phrase it differently from the current version, and don't repeat what other parts already say.${
-        isRole ? " It's a role: answer 2–5 bullets, one per line, each starting with a verb, without bullet characters." : ""
+        bullets
+          ? isProject
+            ? " It's a project: answer 1–3 bullets, one per line, each starting with a verb, without bullet characters."
+            : " It's a role: answer 2–5 bullets, one per line, each starting with a verb, without bullet characters."
+          : ""
       }`,
       // The letter's greeting and address block aren't where its argument goes.
       kind === DocumentKind.COVER_LETTER && !isFrameUnit(unit.id) && COVER_LETTER_APPROACH,
@@ -103,7 +108,7 @@ export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, inpu
     creativity: options.creativity,
     signal: options.signal,
   });
-  const text = isRole ? bulletLines(answer.text) : answer.text.trim();
+  const text = bullets ? bulletLines(answer.text) : answer.text.trim();
   // An English sign-off stays the tone's.
   const english = /^english$/i.test(options.language ?? extracted.language ?? "English");
   const updated = { ...unit, text: unit.id === SIGN_OFF_UNIT && english ? TONES[tone].signOff : text || unit.text };

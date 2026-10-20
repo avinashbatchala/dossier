@@ -35,7 +35,7 @@ export const LEVELS_BY_LABEL = new Map<string, LanguageLevel>(
 
 /** The sample profile as `loadProfile()` returns it, with the prototype's ids. */
 export function demoProfile(): ProfileData {
-  const { experience, education, skills, languages, references, showAge, ...basics } = sample.profile;
+  const { experience, projects, education, skills, languages, references, showAge, ...basics } = sample.profile;
   const skillId = (name: string) => `skill-${skills.indexOf(name) + 1}`;
   return {
     basics: {
@@ -67,6 +67,14 @@ export function demoProfile(): ProfileData {
       ...dateSpan(entry.start, entry.end),
       skillIds: entry.skills.map(skillId),
     })),
+    projects: projects.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      link: entry.link,
+      bullets: entry.bullets,
+      ...dateSpan(entry.start, entry.end),
+      skillIds: entry.skills.map(skillId),
+    })),
     education: education.map((entry) => ({
       id: entry.id,
       degree: entry.degree,
@@ -87,13 +95,14 @@ export function demoProfile(): ProfileData {
 
 /**
  * The prototype's tailored resume for Ledgerly, as units in reading order.
- * Pass how to turn the sample's entry ids ("e1", "d1") into real ones.
+ * Pass how to turn the sample's entry ids ("e1", "d1", "p1") into real ones.
  */
 export function demoResumeUnits(
   experienceId: (sampleId: string) => string = (id) => id,
   educationId: (sampleId: string) => string = (id) => id,
+  projectId: (sampleId: string) => string = (id) => id,
 ): Unit[] {
-  const { experience, education, skills, languages } = sample.profile;
+  const { experience, projects, education, skills, languages } = sample.profile;
   const { resume, requirements } = sample.ledgerly;
   // Skills the posting asks for come first.
   const asked = requirements.flatMap((requirement) =>
@@ -106,6 +115,7 @@ export function demoResumeUnits(
       label: `${entry.company} role`,
       text: resume.experience[entry.id as keyof typeof resume.experience],
     })),
+    ...projects.map((entry) => ({ id: `project:${projectId(entry.id)}`, label: `${entry.name} project`, text: entry.bullets })),
     { id: "skills", label: "Skills", text: [...asked, ...skills.filter((skill) => !asked.includes(skill))].join(" · ") },
     ...education.map((entry) => ({
       id: `education:${educationId(entry.id)}`,

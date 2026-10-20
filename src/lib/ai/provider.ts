@@ -5,7 +5,7 @@ import type { AiProvider as AiProviderKind, Creativity } from "@/generated/prism
 import { AiError, toAiError } from "./errors";
 
 // One interface for every AI provider (E6-1): a local model through Ollama or
-// llama.cpp, any OpenAI-compatible server, or Anthropic.
+// llama.cpp, LM Studio, any OpenAI-compatible server, Anthropic or Mistral.
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 

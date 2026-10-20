@@ -2,338 +2,362 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/page-header";
+import { ScoreBadge } from "@/components/score-badge";
 import { toast, toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useJob } from "@/hooks/use-job";
-import { cn } from "@/lib/cn";
-import { dismissAgentCandidate, prepareAgentDraft, runAgentNow, approveAgentCandidate } from "@/lib/agent/actions";
-import type { AgentCandidateView, AgentView } from "@/lib/agent/data";
-import { AgentCandidateStatus } from "@/generated/prisma/enums";
-import { SOURCE_INFO } from "@/lib/job-search/sources";
+import type { AgentCandidateView, AgentView } from "@/lib/agent/view";
 
-type ScanResult = { found: number; fresh: number; scored: number; drafted: number; skipped: number; message: string | null };
+import { approveAgentDraft, dismissAgentCandidate, prepareAgentDraft, restoreAgentCandidate, runAgentNow } from "./actions";
+
+type ScanResult = { message: string };
 type DraftResult = { applicationId: string };
 
-/** The job agent's screen: run it, then review scored postings and prepared drafts. */
+const SETTINGS: Record<NonNullable<AgentView["setupSection"]>, { href: string; label: string }> = {
+  agent: { href: "/settings?section=agent", label: "Settings → Job agent" },
+  ai: { href: "/settings?section=ai", label: "Settings → AI provider" },
+  jobs: { href: "/settings?section=jobs", label: "Settings → Job search" },
+};
+
+/**
+ * The Agent screen (E16-6): what the job agent searches, when it runs, the
+ * drafts it prepared and the postings it scored, waiting for a look. Nothing
+ * here sends anything.
+ */
 export function AgentScreen({ view }: { view: AgentView }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [runJobId, setRunJobId] = useState<string | null>(
-    view.job && (view.job.status === "QUEUED" || view.job.status === "RUNNING") ? view.job.id : null,
-  );
-  const [draftJob, setDraftJob] = useState<{ id: string; candidateId: string } | null>(null);
-  const [dismissId, setDismissId] = useState<string | null>(null);
+  const [runJobId, setRunJobId] = useState(view.runJobId);
+  const [showBelow, setShowBelow] = useState(false);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState<AgentCandidateView | null>(null);
 
-  const runJob = useJob<ScanResult>(runJobId, 0, (job) => {
-    if (job.status === "DONE" || job.status === "FAILED") {
-      setRunJobId(null);
-      toast(job.status === "DONE" ? (job.result?.message ?? "Agent run finished.") : (job.error ?? "The agent run failed."));
-      router.refresh();
-    }
+  const run = useJob<ScanResult>(runJobId, 0, (job) => {
+    if (job.status !== "DONE" && job.status !== "FAILED") return;
+    setRunJobId(null);
+    toast(job.status === "DONE" ? (job.result?.message ?? "The run is done.") : (job.error ?? "The run didn't finish."));
+    router.refresh();
   });
-  const draft = useJob<DraftResult>(draftJob?.id ?? null, 0, (job) => {
-    if (job.status === "DONE" && job.result) {
-      setDraftJob(null);
-      toast("Draft ready for review.");
-      router.refresh();
-    } else if (job.status === "FAILED") {
-      setDraftJob(null);
-      toast(job.error ?? "The draft couldn't be prepared.");
-      router.refresh();
-    }
-  });
+  const running = Boolean(runJobId) && (!run || run.status === "QUEUED" || run.status === "RUNNING");
 
-  const running = pending || Boolean(runJob && (runJob.status === "QUEUED" || runJob.status === "RUNNING")) || Boolean(draftJob);
-  const drafted = view.queue.filter((candidate) => candidate.status === AgentCandidateStatus.DRAFTED);
-  const scored = view.queue.filter((candidate) => candidate.status === AgentCandidateStatus.SCORED);
-  const drafting = view.queue.filter((candidate) => candidate.status === AgentCandidateStatus.DRAFTING);
-  const lastMessage = view.job?.result && typeof view.job.result === "object" && "message" in view.job.result
-    ? String((view.job.result as { message?: unknown }).message ?? "")
-    : "";
-
-  const run = () =>
+  const runNow = () =>
     startTransition(async () => {
       const result = toastResult(await runAgentNow({}));
-      if (!result.ok) return;
-      setRunJobId(result.data.jobId);
-      if (result.data.reused) toast("The agent is already running.");
+      if (result.ok) setRunJobId(result.data.jobId);
     });
 
-  const prepare = (candidateId: string) =>
+  const hide = (id: string, gone: boolean) =>
+    setHidden((current) => {
+      const next = new Set(current);
+      if (gone) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const dismiss = (candidate: AgentCandidateView) =>
     startTransition(async () => {
-      const result = toastResult(await prepareAgentDraft({ candidateId }));
-      if (!result.ok) return;
-      if (result.data.applicationId) {
-        router.push(`/applications/${result.data.applicationId}`);
-        return;
+      hide(candidate.id, true);
+      const result = await dismissAgentCandidate({ candidateId: candidate.id });
+      if (!result.ok) {
+        hide(candidate.id, false);
+        return toast(result.error);
       }
-      if (result.data.jobId) setDraftJob({ id: result.data.jobId, candidateId });
+      const undo = result.data.undo;
+      if (!undo) return toast("Dismissed, with its draft. It won't come back.");
+      toast("Dismissed. It won't come back.", {
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void restoreAgentCandidate({ ...undo, reasons: stringList(undo.reasons), redFlags: stringList(undo.redFlags) }).then((restored) => {
+              if (!toastResult(restored).ok) return;
+              hide(candidate.id, false);
+              router.refresh();
+            }),
+        },
+      });
+      router.refresh();
     });
 
-  const approve = (candidateId: string) =>
-    startTransition(async () => {
-      const result = toastResult(await approveAgentCandidate({ candidateId }));
-      if (result.ok) router.push(`/applications/${result.data.applicationId}`);
-    });
-
-  const dismiss = (candidateId: string) => {
-    setDismissId(null);
-    startTransition(async () => {
-      if (toastResult(await dismissAgentCandidate({ candidateId })).ok) router.refresh();
-    });
-  };
+  const drafts = view.drafts.filter((candidate) => !hidden.has(candidate.id));
+  const scored = view.scored.filter((candidate) => !hidden.has(candidate.id));
+  const below = view.belowMinimum.filter((candidate) => !hidden.has(candidate.id));
+  const empty = drafts.length === 0 && scored.length === 0;
 
   return (
     <>
       <PageHeader
         title="Job agent"
-        description="It searches once a day, scores new postings against your profile, and prepares drafts for the best ones. You review every draft; nothing is sent without you."
+        description="Once a day it searches for new postings, scores them against your profile, and keeps the best here for you. Drafts wait for your review, and nothing is ever sent."
         actions={
-          <Button onClick={() => void run()} disabled={running || !view.enabled}>
-            {running ? "Working…" : "Run now"}
+          <Button aria-disabled={running || pending || undefined} onClick={() => !running && !pending && runNow()}>
+            {running ? "Running…" : "Run now"}
           </Button>
         }
       />
+      <div className="flex flex-col gap-8 px-10 pb-20">
+        <Notices view={view} />
 
-      <div className="flex flex-col gap-6 px-10 pb-20">
-        {!view.enabled && (
-          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-            The job agent is off. Turn it on in{" "}
-            <Link href="/settings?section=agent" className="underline">
-              Settings → Job agent
-            </Link>
-            . You can still review anything already in the queue.
-          </p>
-        )}
-
-        {(runJob || draft) && (
-          <p role="status" className="rounded-card border border-line-card bg-card px-4 py-3 text-meta text-muted">
-            {runJob ? (runJob.step ?? "Starting the agent…") : draft?.step ?? "Preparing a draft…"}
-          </p>
-        )}
-
-        <Card className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatusItem label="Search" value={view.searchLine || "Not set"} />
-          <StatusItem label="Source" value={view.source ? SOURCE_INFO[view.source].name : "Not chosen"} />
-          <StatusItem label="Schedule" value={`Every day at ${String(view.hour).padStart(2, "0")}:00`} />
-          <StatusItem label="Next run" value={view.nextRunLabel ?? (view.enabled ? "Not scheduled" : "Paused")} />
-          <StatusItem label="Last run" value={view.lastRunAt ?? "Never"} />
-          <StatusItem label="Minimum score" value={String(view.minScore)} />
-          <StatusItem
-            label="Per run"
-            value={`Scores ${view.maxScores} · ${view.autoDraft && view.maxDrafts > 0 ? `drafts ${view.maxDrafts}` : "no drafts"}`}
-          />
-          <StatusItem label="Queue" value={`${drafted.length} drafts · ${scored.length} scored`} />
+        <Card padding="none" className="px-7 py-2">
+          <dl>
+            <Fact label="Searches for">{view.search ?? "Nothing yet"}</Fact>
+            <Fact label="Last run">
+              {view.lastRun ? (
+                <>
+                  {view.lastRun.at}
+                  {view.lastRun.message && <span className="block text-muted">{view.lastRun.message}</span>}
+                </>
+              ) : (
+                "Not yet"
+              )}
+            </Fact>
+            <Fact label="Next run">{view.nextRun ?? "Off"}</Fact>
+          </dl>
+          {running && (
+            <p role="status" className="border-t border-line py-3.5 text-sm text-muted">
+              {run?.step ?? "Starting the run…"}
+            </p>
+          )}
         </Card>
 
-        {lastMessage && !runJob && <p className="text-meta text-muted">Last run: {lastMessage}</p>}
-
-        <section aria-labelledby="agent-drafts" className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 id="agent-drafts" className="font-serif text-section">
-              Drafts to review
-            </h2>
-            <p className="text-meta text-muted">{drafted.length} waiting</p>
-          </div>
-          {drafted.length === 0 ? (
-            <p className="rounded-card border border-line-card bg-card px-4 py-5 text-sm text-muted">
-              {view.enabled
-                ? "No prepared drafts yet. A run will put the best matches here."
-                : "Turn the agent on to start preparing drafts."}
-            </p>
+        <Section title="Drafts to review" count={drafts.length}>
+          {drafts.length === 0 ? (
+            <Empty>
+              {view.autoDraft
+                ? "No drafts yet. After a run, the best new postings get a draft here."
+                : "No drafts yet. Prepare one from a scored posting, or let the agent prepare them in Settings → Job agent."}
+            </Empty>
           ) : (
             <ul className="flex flex-col gap-3">
-              {drafted.map((candidate) => (
+              {drafts.map((candidate) => (
                 <li key={candidate.id}>
-                  <CandidateCard
-                    candidate={candidate}
-                    minScore={view.minScore}
-                    busy={running}
-                    onPrepare={() => void prepare(candidate.id)}
-                    onApprove={() => void approve(candidate.id)}
-                    onDismiss={() => setDismissId(candidate.id)}
-                  />
+                  <CandidateCard candidate={candidate}>
+                    <Link href={`/applications/${candidate.applicationId}`} className={buttonClassName("primary", "sm", "hover:text-on-primary")}>
+                      Review draft
+                    </Link>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        startTransition(async () => {
+                          if (toastResult(await approveAgentDraft({ candidateId: candidate.id })).ok) router.refresh();
+                        })
+                      }
+                    >
+                      Approve
+                    </Button>
+                    <OpenPosting url={candidate.url} />
+                    <Button variant="danger-text" size="sm" className="ml-auto" onClick={() => setConfirming(candidate)}>
+                      Dismiss
+                    </Button>
+                  </CandidateCard>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </Section>
 
-        <section aria-labelledby="agent-scored" className="flex flex-col gap-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 id="agent-scored" className="font-serif text-section">
-              Scored postings
-            </h2>
-            <p className="text-meta text-muted">{scored.length} waiting</p>
-          </div>
-          {drafting.length > 0 && (
-            <p className="text-meta text-muted">
-              {drafting.length} {drafting.length === 1 ? "draft is" : "drafts are"} being prepared.
-            </p>
-          )}
+        <Section title="Scored postings" count={scored.length}>
           {scored.length === 0 ? (
-            <p className="rounded-card border border-line-card bg-card px-4 py-5 text-sm text-muted">
-              No scored postings waiting. The agent keeps the best matches and skips ones you saved, dismissed or applied to.
-            </p>
+            <Empty>{empty ? "Nothing waiting yet. A run puts the postings that fit you best here." : "No postings waiting for a draft."}</Empty>
           ) : (
             <ul className="flex flex-col gap-3">
               {scored.map((candidate) => (
                 <li key={candidate.id}>
-                  <CandidateCard
-                    candidate={candidate}
-                    minScore={view.minScore}
-                    busy={running}
-                    onPrepare={() => void prepare(candidate.id)}
-                    onApprove={() => void approve(candidate.id)}
-                    onDismiss={() => setDismissId(candidate.id)}
-                  />
+                  <ScoredCard candidate={candidate} onDismiss={() => dismiss(candidate)} />
                 </li>
               ))}
             </ul>
           )}
-        </section>
+          {below.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <button type="button" aria-expanded={showBelow} onClick={() => setShowBelow(!showBelow)} className="w-fit text-meta text-muted underline underline-offset-2 hover:text-ink">
+                {below.length} below your minimum score of {view.minScore} · {showBelow ? "Hide" : "Show"}
+              </button>
+              {showBelow && (
+                <ul className="flex flex-col gap-3">
+                  {below.map((candidate) => (
+                    <li key={candidate.id}>
+                      <ScoredCard candidate={candidate} onDismiss={() => dismiss(candidate)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Section>
       </div>
 
       <ConfirmDialog
-        open={dismissId !== null}
-        onOpenChange={(open) => {
-          if (!open) setDismissId(null);
-        }}
-        title="Dismiss this posting?"
-        description="The agent won't suggest it again. If a draft was prepared, it will be removed from Applications too."
-        confirmLabel="Dismiss"
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title="Dismiss this draft?"
+        description="Its resume, cover letter and chat are deleted, and the posting won't come back."
+        confirmLabel="Dismiss draft"
         onConfirm={() => {
-          if (dismissId) dismiss(dismissId);
+          if (confirming) dismiss(confirming);
+          setConfirming(null);
         }}
       />
     </>
   );
 }
 
-function StatusItem({ label, value }: { label: string; value: string }) {
+const stringList = (value: unknown): string[] | null => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : null);
+
+/** Why the agent isn't running, and where to fix it. */
+function Notices({ view }: { view: AgentView }) {
+  const note = (children: ReactNode) => (
+    <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+      {children}
+    </p>
+  );
+  if (!view.enabled) {
+    return note(
+      <>
+        The job agent is off.{" "}
+        <Link href={SETTINGS.agent.href} className="font-medium text-warning underline underline-offset-2">
+          Turn it on in Settings → Job agent
+        </Link>
+        {view.drafts.length + view.scored.length > 0 && ". What it found before is still here."}
+      </>,
+    );
+  }
+  if (view.setupProblem && view.setupSection) {
+    return note(
+      <>
+        {view.setupProblem.replace(/ in Settings → [^.]+ first\.$/, ".")}{" "}
+        <Link href={SETTINGS[view.setupSection].href} className="font-medium text-warning underline underline-offset-2">
+          Go to {SETTINGS[view.setupSection].label}
+        </Link>
+      </>,
+    );
+  }
+  if (view.limitReached) return note("The agent has run 3 times in the past 24 hours, as many as it may. It runs again once a day has passed since the first.");
+  return null;
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs font-medium text-muted">{label}</span>
-      <span className="text-sm text-ink">{value}</span>
+    <div className="flex flex-col gap-0.5 border-t border-line py-3.5 text-sm first:border-t-0 sm:flex-row sm:justify-between sm:gap-4">
+      <dt className="text-muted">{label}</dt>
+      <dd className="sm:text-right">{children}</dd>
     </div>
   );
 }
 
-function CandidateCard({
-  candidate,
-  minScore,
-  busy,
-  onPrepare,
-  onApprove,
-  onDismiss,
-}: {
-  candidate: AgentCandidateView;
-  minScore: number;
-  busy: boolean;
-  onPrepare: () => void;
-  onApprove: () => void;
-  onDismiss: () => void;
-}) {
-  const drafted = candidate.status === AgentCandidateStatus.DRAFTED;
-  const drafting = candidate.status === AgentCandidateStatus.DRAFTING;
-  const title = candidate.title.trim() || "Untitled posting";
-  const company = candidate.company.trim() || "Unknown company";
-  const source = SOURCE_INFO[candidate.source];
-  const facts = [candidate.place, candidate.remote ? "Remote" : "", candidate.salary].filter(Boolean).join(" · ");
-
+function Section({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  const id = `agent-${title.toLowerCase().replace(/\W+/g, "-")}`;
   return (
-    <Card className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className="font-serif text-[21px] leading-tight text-pretty">{title}</h3>
-          <p className="text-sm text-muted">{company}</p>
-          {facts && <p className="text-meta text-muted">{facts}</p>}
-          <p className="text-xs text-muted">
-            {source.name}
-            {candidate.via ? ` · via ${candidate.via}` : ""}
-            {candidate.posted ? ` · posted ${candidate.posted}` : ""}
-          </p>
-        </div>
-        <span
-          aria-label={`Match score ${candidate.score} of 100`}
-          className={cn(
-            "grid size-12 flex-none place-items-center rounded-full border text-sm font-semibold",
-            candidate.score >= Math.max(minScore, 85)
-              ? "border-primary bg-primary text-on-primary"
-              : candidate.score >= minScore
-                ? "border-warning-line bg-warning-surface text-warning"
-                : "border-line-field bg-input text-muted",
-          )}
-        >
-          {candidate.score}
-        </span>
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id={id} className="font-serif text-section">
+          {title}
+        </h2>
+        <p className="text-meta text-muted">{count} waiting</p>
       </div>
+      {children}
+    </section>
+  );
+}
 
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="rounded-card border border-line-card bg-card px-5 py-4 text-sm text-muted">{children}</p>;
+}
+
+function OpenPosting({ url }: { url: string }) {
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={buttonClassName("secondary", "sm")}>
+      Open posting <span className="sr-only">(opens in a new tab)</span>
+    </a>
+  );
+}
+
+/** A posting the agent found: what it is, its score and why. The actions go below. */
+function CandidateCard({ candidate, children }: { candidate: AgentCandidateView; children: ReactNode }) {
+  return (
+    <Card padding="none" className="flex flex-col gap-3.5 px-6 py-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>
+          {candidate.company && <p className="text-sm text-ink">{candidate.company}</p>}
+          {candidate.facts && <p className="text-meta text-muted">{candidate.facts}</p>}
+          {candidate.origin && <p className="text-xs text-muted">{candidate.origin}</p>}
+        </div>
+        <ScoreBadge score={candidate.score} />
+      </div>
       {candidate.reasons.length > 0 && (
-        <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted">
+        <ul aria-label="Why it fits" className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted">
           {candidate.reasons.map((reason, index) => (
             <li key={index}>{reason}</li>
           ))}
         </ul>
       )}
-
       {candidate.redFlags.length > 0 && (
         <div className="rounded-card bg-warning-surface px-3.5 py-2.5 text-meta text-warning">
           <p className="font-medium">Worth knowing</p>
-          <ul className="mt-1 flex list-disc flex-col gap-1 pl-4">
+          <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4">
             {candidate.redFlags.map((flag, index) => (
               <li key={index}>{flag}</li>
             ))}
           </ul>
         </div>
       )}
-
       {candidate.error && (
         <p role="alert" className="text-meta text-error">
           {candidate.error}
         </p>
       )}
-
-      {candidate.description && (
-        <details className="text-sm text-muted">
-          <summary className="w-fit cursor-pointer text-meta text-muted hover:text-ink">Posting text</summary>
-          <p className="mt-2 max-h-64 overflow-y-auto text-pretty whitespace-pre-wrap">{candidate.description.slice(0, 4000)}</p>
-        </details>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2.5 border-t border-line pt-3.5">
-        {drafted && candidate.applicationId ? (
-          <>
-            <Link href={`/applications/${candidate.applicationId}`} className={buttonClassName("primary", "sm")}>
-              Review draft
-            </Link>
-            <Button variant="secondary" size="sm" onClick={onApprove} disabled={busy}>
-              Approve
-            </Button>
-          </>
-        ) : drafting ? (
-          <Button variant="secondary" size="sm" disabled>
-            Preparing draft…
-          </Button>
-        ) : (
-          <Button variant="primary" size="sm" onClick={onPrepare} disabled={busy}>
-            Prepare draft
-          </Button>
-        )}
-        {candidate.url && (
-          <a href={candidate.url} target="_blank" rel="noreferrer noopener" className={buttonClassName("secondary", "sm")}>
-            Open posting
-          </a>
-        )}
-        <Button variant="danger-text" size="sm" onClick={onDismiss} disabled={busy} className="ml-auto">
-          Dismiss
-        </Button>
-      </div>
+      <div className="flex flex-wrap items-center gap-2.5 border-t border-line pt-3.5">{children}</div>
     </Card>
+  );
+}
+
+/** A scored posting: Prepare draft (following the job while it writes), Open posting, Dismiss. */
+function ScoredCard({ candidate, onDismiss }: { candidate: AgentCandidateView; onDismiss: () => void }) {
+  const router = useRouter();
+  const [jobId, setJobId] = useState(candidate.draftJobId);
+  const [starting, startTransition] = useTransition();
+  const job = useJob<DraftResult>(jobId, 0, (update) => {
+    if (update.status === "DONE") {
+      setJobId(null);
+      toast("The draft is ready for your review.");
+      router.refresh();
+    } else if (update.status === "FAILED") {
+      setJobId(null);
+      toast(update.error ?? "The draft couldn't be prepared.");
+      router.refresh();
+    }
+  });
+  const preparing = starting || Boolean(jobId);
+
+  const prepare = () =>
+    startTransition(async () => {
+      const result = toastResult(await prepareAgentDraft({ candidateId: candidate.id }));
+      if (!result.ok) return;
+      if (result.data.applicationId) router.refresh();
+      else setJobId(result.data.jobId);
+    });
+
+  return (
+    <CandidateCard candidate={candidate}>
+      <Button size="sm" aria-disabled={preparing || undefined} onClick={() => !preparing && prepare()}>
+        {preparing ? "Preparing draft…" : "Prepare draft"}
+      </Button>
+      <OpenPosting url={candidate.url} />
+      {preparing && job?.step && (
+        <span role="status" className="text-meta text-muted">
+          {job.step}
+        </span>
+      )}
+      <Button variant="danger-text" size="sm" className="ml-auto" onClick={onDismiss}>
+        Dismiss
+      </Button>
+    </CandidateCard>
   );
 }

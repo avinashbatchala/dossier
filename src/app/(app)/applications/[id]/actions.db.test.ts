@@ -470,7 +470,7 @@ describe("versions (E8-10)", () => {
     expect((await versions()).map((version) => version.cause)).toEqual(["RESTORED", "REGENERATED", "WRITTEN"]);
   });
 
-  it("puts parts left out to fit one page back in the restored version's list", async () => {
+  it("puts parts left out to fit the page limit back in the restored version's list", async () => {
     const { id: documentId } = await document();
     const full = [...resume, { id: "experience:e2", label: "Studio role", text: "Did things" }];
     const written = await prisma().documentVersion.create({ data: { documentId, units: full, cause: "WRITTEN", createdAt: new Date("2026-09-29T08:00:00Z") } });

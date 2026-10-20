@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { PostingSource } from "@/generated/prisma/enums";
 import { daysBetween, formatShortCalendarDate } from "@/lib/dates";
+import type { PostingFit } from "@/lib/fit";
 
 import { countryCodeFor } from "./countries";
 
@@ -98,6 +99,8 @@ export type PostingState = {
   dismissed: boolean;
   /** The application made from it, or from the same link before Find jobs. */
   applicationId: string | null;
+  /** How well it fits the profile, once it's scored (#208). */
+  score: PostingFit | null;
 };
 
 /** A posting as Find jobs shows it. */

@@ -325,7 +325,7 @@ export const restoreNote = action(
 );
 
 /**
- * "Put back" (E10-10): restores a role or bullets left out to fit one page.
+ * "Put back" (E10-10): restores a role or bullets left out to fit the page limit.
  * Putting back twice changes nothing more.
  */
 export const putBackTrimmed = action(z.object({ id: z.string().min(1), index: z.number().int().min(0) }), async ({ id, index }) => {
@@ -401,7 +401,7 @@ export const restoreVersion = action(z.object({ id: z.string().min(1), versionId
         await saveVersion(tx, version.document.id, current, { cause: VersionCause.BEFORE_RESTORE });
       }
       documents[kind] = units;
-      // Parts left out to fit one page that the restored version has again are no longer left out.
+      // Parts left out to fit the page limit that the restored version has again are no longer left out.
       if (kind !== DocumentKind.RESUME) return null;
       const row = await tx.document.findUniqueOrThrow({ where: { id: version.document.id }, select: { trimmed: true } });
       const trimmed = trimmedSchema.safeParse(row.trimmed);

@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 
+import { ScoreBadge } from "@/components/score-badge";
 import { toast, toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
+import { useJob } from "@/hooks/use-job";
 import { cn } from "@/lib/cn";
+import { fitBand, type PostingFit } from "@/lib/fit";
+import type { JobView } from "@/lib/jobs/runner";
 import { postedAgo, postingKey, type FoundPosting, type PostingState, type ShownPosting, type StoredSearch } from "@/lib/job-search/search";
 import { SOURCE_INFO } from "@/lib/job-search/sources";
 
-import { dismissFoundPosting, loadFullText, restorePosting, savePostingForLater, showMorePostings, unsavePosting } from "./actions";
+import { dismissFoundPosting, loadFullText, restorePosting, savePostingForLater, showMorePostings, startScoringPosting, unsavePosting } from "./actions";
 import { useStartApplication } from "./use-start-application";
 
 /** Narrow windows show the posting above the list. */
@@ -49,6 +53,8 @@ export function PostingResults(props: PostingResultsProps) {
   const detail = useRef<HTMLElement>(null);
   const now = new Date(props.today);
   const { starting, start } = useStartApplication();
+  // Postings being scored (#208), with the step under way, by postingKey.
+  const [scoring, setScoring] = useState<Record<string, { jobId: string; step: string | null }>>({});
 
   const updateState = (key: string, change: Partial<PostingState>) =>
     setPostings((list) => list.map((posting) => (postingKey(posting) === key ? { ...posting, state: { ...posting.state, ...change } } : posting)));
@@ -105,6 +111,24 @@ export function PostingResults(props: PostingResultsProps) {
     });
   };
 
+  const score = async (posting: ShownPosting) => {
+    const key = postingKey(posting);
+    if (scoring[key]) return;
+    setScoring((current) => ({ ...current, [key]: { jobId: "", step: null } }));
+    const result = toastResult(await startScoringPosting({ posting: withoutState(posting) }));
+    setScoring((current) => (result.ok ? { ...current, [key]: { jobId: result.data.jobId, step: null } } : without(current, key)));
+  };
+
+  const scoringChanged = (key: string, job: JobView<PostingFit>) => {
+    if (job.status === "DONE" || job.status === "FAILED") {
+      setScoring((current) => without(current, key));
+      if (job.status === "DONE" && job.result) updateState(key, { score: job.result });
+      else toast(job.error ?? "The posting couldn't be scored. Try again.");
+      return;
+    }
+    setScoring((current) => (current[key] ? { ...current, [key]: { ...current[key], step: job.step } } : current));
+  };
+
   const showMore = async () => {
     if (props.mode !== "search" || !next || loadingMore) return;
     setLoadingMore(true);
@@ -129,6 +153,9 @@ export function PostingResults(props: PostingResultsProps) {
 
   return (
     <div className="flex flex-wrap items-start gap-6 px-10 pb-16">
+      {Object.entries(scoring).map(([key, { jobId }]) =>
+        jobId ? <ScoreWatcher key={jobId} jobId={jobId} onChange={(job) => scoringChanged(key, job)} /> : null,
+      )}
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
         <p className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-1 text-meta text-muted", mode !== "search" && visible.length === 0 && "hidden")}>
           <span>
@@ -163,7 +190,14 @@ export function PostingResults(props: PostingResultsProps) {
         {visible.length === 0 ? (
           <div className="rounded-panel border border-line-card bg-card px-5 py-9 text-center text-sm text-muted">{empty}</div>
         ) : (
-          <PostingList postings={visible} selectedKey={selected ? postingKey(selected) : null} now={now} onSelect={select} />
+          <PostingList
+            postings={visible}
+            selectedKey={selected ? postingKey(selected) : null}
+            now={now}
+            onSelect={select}
+            scoring={scoring}
+            onScore={(posting) => void score(posting)}
+          />
         )}
 
         {next && (
@@ -183,6 +217,8 @@ export function PostingResults(props: PostingResultsProps) {
           onUnsave={() => void unsave(selected)}
           onDismiss={() => void dismiss(selected)}
           onRestore={() => void restore(selected, false)}
+          scoring={scoring[postingKey(selected)] ?? null}
+          onScore={() => void score(selected)}
         >
           {!selected.state.dismissed && (
             <StartButton starting={starting === postingKey(selected)} onClick={() => void start(withoutState(selected), postingKey(selected))} />
@@ -191,6 +227,19 @@ export function PostingResults(props: PostingResultsProps) {
       )}
     </div>
   );
+}
+
+/** A copy of `record` without `key`. */
+function without<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const copy = { ...record };
+  delete copy[key];
+  return copy;
+}
+
+/** Follows a posting's scoring job (#208). */
+function ScoreWatcher({ jobId, onChange }: { jobId: string; onChange: (job: JobView<PostingFit>) => void }) {
+  useJob<PostingFit>(jobId, 0, onChange);
+  return null;
 }
 
 /** "Start application →" on a posting (E14-8). */
@@ -209,16 +258,24 @@ function withoutState(posting: ShownPosting): FoundPosting {
   return found;
 }
 
+/** The Score pill on an unscored posting in the list, and the room the card keeps for it. */
+const pill = "inline-flex h-6 items-center rounded-full border px-2 text-xs";
+
 function PostingList({
   postings,
   selectedKey,
   now,
   onSelect,
+  scoring,
+  onScore,
 }: {
   postings: ShownPosting[];
   selectedKey: string | null;
   now: Date;
   onSelect: (key: string, options?: { reveal?: boolean }) => void;
+  /** Postings being scored, by postingKey. */
+  scoring: Record<string, unknown>;
+  onScore: (posting: ShownPosting) => void;
 }) {
   // Up and down move through the list, as in a mail inbox.
   const move = (event: KeyboardEvent<HTMLUListElement>) => {
@@ -238,28 +295,55 @@ function PostingList({
       {postings.map((posting) => {
         const key = postingKey(posting);
         const current = key === selectedKey;
+        const title = posting.title || "Untitled posting";
+        const pillLabel = scoring[key] ? "Scoring…" : "Score";
         return (
-          <li key={key}>
+          <li key={key} className={cn("group relative", posting.state.dismissed && "opacity-60")}>
             <button
               type="button"
               data-posting={key}
               aria-pressed={current}
               onClick={() => onSelect(key, { reveal: true })}
               className={cn(
-                "flex w-full flex-col gap-1 rounded-card border bg-card px-4 py-3.5 text-left hover:border-line-strong",
+                "flex w-full flex-col gap-1 rounded-card border bg-card px-4 py-3.5 text-left group-hover:border-line-strong",
                 current ? "border-primary bg-selected shadow-[0_0_0_1px_var(--color-primary)]" : "border-line-card",
-                posting.state.dismissed && "opacity-60",
               )}
             >
               <span className="flex items-start justify-between gap-3">
-                <span className="text-field font-medium text-pretty">{posting.title || "Untitled posting"}</span>
-                <StateBadges state={posting.state} />
+                <span className="text-field font-medium text-pretty">{title}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <StateBadges state={posting.state} />
+                  {posting.state.score ? (
+                    <ScoreBadge score={posting.state.score.score} size="sm" />
+                  ) : (
+                    <span aria-hidden className={cn(pill, "invisible")}>
+                      {pillLabel}
+                    </span>
+                  )}
+                </span>
               </span>
               <span className="text-meta text-muted">{[posting.company, posting.place, posting.remote ? "Remote" : ""].filter(Boolean).join(" · ")}</span>
               <span className="truncate text-xs text-muted">
                 {[postedAgo(posting.postedAt, now), posting.via && `via ${posting.via}`, posting.salary].filter(Boolean).join(" · ")}
               </span>
             </button>
+            {/* A button can't hold another, so the pill lies over the room the card keeps for it, with the card's border and padding. */}
+            {!posting.state.score && (
+              <span className="pointer-events-none absolute inset-0 flex items-start justify-end border border-transparent px-4 py-3.5">
+                <button
+                  type="button"
+                  aria-label={`${pillLabel} “${title}”`}
+                  aria-disabled={scoring[key] ? true : undefined}
+                  onClick={scoring[key] ? undefined : () => onScore(posting)}
+                  className={cn(
+                    pill,
+                    "pointer-events-auto border-dashed border-line-strong text-muted hover:border-muted hover:text-ink aria-disabled:cursor-default aria-disabled:hover:border-line-strong aria-disabled:hover:text-muted motion-safe:aria-disabled:animate-pulse",
+                  )}
+                >
+                  {pillLabel}
+                </button>
+              </span>
+            )}
           </li>
         );
       })}
@@ -281,6 +365,37 @@ function StateBadges({ state }: { state: PostingState }) {
   );
 }
 
+/** A posting's score (#208): its band, why it fits, and what gives pause. */
+function Fit({ fit }: { fit: PostingFit }) {
+  return (
+    <div className="flex items-start gap-3.5 rounded-card border border-line-card bg-paper px-4 py-3.5">
+      <ScoreBadge score={fit.score} />
+      <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+        <p className="font-medium">
+          {fitBand(fit.score)} · {fit.score} of 100
+        </p>
+        {fit.reasons.length > 0 && (
+          <ul aria-label="Why it fits" className="flex list-disc flex-col gap-0.5 pl-5 text-muted">
+            {fit.reasons.map((reason, index) => (
+              <li key={index}>{reason}</li>
+            ))}
+          </ul>
+        )}
+        {fit.redFlags.length > 0 && (
+          <div className="text-meta text-warning">
+            <p className="font-medium">Worth knowing</p>
+            <ul className="flex list-disc flex-col gap-0.5 pl-5">
+              {fit.redFlags.map((flag, index) => (
+                <li key={index}>{flag}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type Text = { status: "ready"; text: string } | { status: "loading" } | { status: "partial"; text: string };
 
 /** The selected posting: its facts, what to do with it, and its whole text. */
@@ -292,6 +407,8 @@ function PostingDetail({
   onUnsave,
   onDismiss,
   onRestore,
+  scoring,
+  onScore,
   children,
 }: {
   ref: Ref<HTMLElement>;
@@ -301,6 +418,9 @@ function PostingDetail({
   onUnsave: () => void;
   onDismiss: () => void;
   onRestore: () => void;
+  /** While it's being scored (#208): the step under way. */
+  scoring: { step: string | null } | null;
+  onScore: () => void;
   /** More actions, before Save (E14-8). */
   children?: ReactNode;
 }) {
@@ -351,7 +471,7 @@ function PostingDetail({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+      <div className="flex flex-wrap items-center gap-2">
         {children}
         {state.dismissed ? (
           <Button variant="secondary" size="sm" onClick={onRestore}>
@@ -363,17 +483,28 @@ function PostingDetail({
           </Button>
         )}
         {posting.url && (
-          <a href={posting.url} target="_blank" rel="noopener noreferrer" className={buttonClassName("text", "sm")}>
-            Open posting<span aria-hidden> ↗</span>
+          <a href={posting.url} target="_blank" rel="noopener noreferrer" className={buttonClassName("secondary", "sm")}>
+            Open posting<span aria-hidden>↗</span>
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         )}
+        <Button variant="secondary" size="sm" aria-disabled={scoring ? true : undefined} onClick={scoring ? undefined : onScore}>
+          {scoring ? "Scoring…" : state.score ? "Score again" : "Score"}
+        </Button>
         {!state.dismissed && (
-          <Button variant="text" size="sm" onClick={onDismiss}>
+          <Button variant="secondary" size="sm" onClick={onDismiss}>
             Dismiss
           </Button>
         )}
       </div>
+
+      {scoring ? (
+        <p role="status" className="text-meta text-muted">
+          {scoring.step ?? "Starting…"}
+        </p>
+      ) : (
+        state.score && <Fit fit={state.score} />
+      )}
 
       {/* Only the text scrolls, so the title and actions stay in view; focusable, so it scrolls from the keyboard too. */}
       <div tabIndex={0} role="region" aria-label="Posting text" className="-mx-1 min-h-0 flex-1 overflow-y-auto border-t border-line px-1 pt-4">

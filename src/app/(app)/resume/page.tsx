@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { loadProfile } from "@/lib/profile-data";
+import { maxPages } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
 import { loadThemes, loadThemeUsage } from "@/lib/theme-data";
 
@@ -19,7 +20,8 @@ export default async function BaseResumePage() {
       baseThemeId={settings.baseThemeId}
       paper={settings.paper}
       includeReferences={settings.includeRefs}
-      onePage={settings.onePage}
+      language={settings.resumeLanguage}
+      maxPages={maxPages(settings.pageLimit)}
     />
   );
 }

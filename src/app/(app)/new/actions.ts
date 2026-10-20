@@ -92,6 +92,7 @@ function postingLink(value: string): string {
   throw new ActionError("The link to the posting doesn't look like a web address. Fix it or leave it empty.");
 }
 
+/** A write-documents job's key once an application was made from it: "application:<id>". */
 const CLAIMED = "application:";
 
 /**
@@ -118,16 +119,15 @@ export const createApplication = action(
     const input = writeDocumentsJob.input.parse(job.input);
     const documents = writeDocumentsJob.result.parse(job.result);
     const reading = await finishedReading(input.readJobId);
-
     return createApplicationFromDocuments({
-      reading: { input: reading.input, result: reading.result },
+      reading: { posting: reading.input.posting, ...reading.result },
       documents,
+      match: input.match,
       details,
       postingUrl: postingLink(postingUrl),
-      postingId: postingId ?? null,
       tone: input.tone,
       note: input.note,
-      claim: { kind: "manual", writeJobId, readJobId: input.readJobId },
+      claim: { kind: "manual", writeJobId, readJobId: input.readJobId, postingId: postingId ?? null },
     });
   },
 );

@@ -15,7 +15,8 @@ const flavours = new Map<string, Flavour>();
  * A model on the user's own hardware (SET-1): Ollama through its own API, or
  * llama.cpp's server (and anything like it) through its OpenAI-compatible
  * endpoint. Asks the server once which one it is: only Ollama answers
- * `GET /api/version`.
+ * `GET /api/version` with a version. (LM Studio answers it too, with a 200
+ * and an error.)
  */
 export class LocalProvider implements AIProvider {
   readonly kind = "LOCAL" as const;
@@ -35,7 +36,8 @@ export class LocalProvider implements AIProvider {
       const probe = AbortSignal.timeout(10_000);
       try {
         const response = await fetch(`${this.host}/api/version`, { signal: signal ? AbortSignal.any([signal, probe]) : probe });
-        flavour = response.ok ? "ollama" : "openai";
+        const answer = response.ok ? ((await response.json().catch(() => null)) as { version?: unknown } | null) : null;
+        flavour = typeof answer?.version === "string" ? "ollama" : "openai";
       } catch (error) {
         throw toAiError(error, { model: this.model ?? "", cancelled: signal?.aborted, timedOut: probe.aborted });
       }

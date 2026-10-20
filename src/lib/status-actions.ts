@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
+import { approveCandidate } from "@/lib/agent/draft";
 import { prisma } from "@/lib/prisma";
 
 import { statusInfo } from "./status";
@@ -26,6 +27,11 @@ function refreshEverything() {
 export const setStatus = action(
   z.object({ id: z.string().min(1), to: z.enum(ApplicationStatus) }),
   async ({ id, to }, { toast }) => {
+    // An agent draft still waiting for review is approved by moving it on: it's being pursued (#195).
+    if (to !== ApplicationStatus.DRAFT) {
+      const pending = await prisma.agentCandidate.findFirst({ where: { applicationId: id, application: { awaitingReview: true } }, select: { id: true } });
+      if (pending) await approveCandidate(pending.id);
+    }
     const result = await applyStatusChange(prisma, id, to);
     if (result.outcome === "not-found") throw new ActionError(NOT_FOUND);
     if (result.outcome === "unchanged") return { eventId: null };

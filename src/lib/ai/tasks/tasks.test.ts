@@ -154,6 +154,10 @@ describe("tailorResume", () => {
       { id: "e1", bullets: ["Led the carrier portal redesign", " Owned the design system "] },
       { id: "e9", bullets: ["Invented role"] },
     ],
+    projects: [
+      { id: "p1", bullets: ["Built an open-source Figma plugin for design tokens"] },
+      { id: "p9", bullets: ["Invented project"] },
+    ],
     skills: ["Design systems", "figma", "Kubernetes", "User research"],
     education: [{ id: "d1", notes: "Thesis on trust in automation" }],
   };
@@ -162,10 +166,11 @@ describe("tailorResume", () => {
     const provider = model(answer);
     await tailorResume(provider, { profile, extracted, match: null, note: "Mention my interest in fintech.", posting }, options);
     const text = prompt(provider);
-    for (const secret of ["jane.doe@example.com", "+31 6 1234 5678", "Westersingel", "1992-04-18", "linkedin.com", "John Doe"]) {
+    for (const secret of ["jane.doe@example.com", "+31 6 1234 5678", "Westersingel", "1992-04-18", "linkedin.com", "John Doe", "github.com/janedoe"]) {
       expect(text).not.toContain(secret);
     }
     expect(text).toContain('"skillsUsed"');
+    expect(text).toContain('"name": "Tidewater design tokens"');
     expect(text).toMatch(/Never invent or embellish an employer/);
     expect(text).toMatch(/same language as the job posting/);
     expect(text).toContain("Mention my interest in fintech.");
@@ -175,8 +180,23 @@ describe("tailorResume", () => {
 
   it("returns units, keeping only real roles and the profile's own skills (APP-4)", async () => {
     const { data, promptVersion } = await tailorResume(model(answer), { profile, extracted, match: null, note: "", posting }, options);
-    expect(promptVersion).toBe("tailor-resume@3");
-    expect(data.map((unit) => unit.id)).toEqual(["summary", "experience:e1", "experience:e2", "experience:e3", "skills", "education:d1", "education:d2", "languages"]);
+    expect(promptVersion).toBe("tailor-resume@4");
+    expect(data.map((unit) => unit.id)).toEqual([
+      "summary",
+      "experience:e1",
+      "experience:e2",
+      "experience:e3",
+      "project:p1",
+      "skills",
+      "education:d1",
+      "education:d2",
+      "languages",
+    ]);
+    expect(data.find((unit) => unit.id === "project:p1")).toEqual({
+      id: "project:p1",
+      label: "Tidewater design tokens project",
+      text: "Built an open-source Figma plugin for design tokens",
+    });
     expect(data.find((unit) => unit.id === "experience:e1")?.text).toBe("Led the carrier portal redesign\nOwned the design system");
     // A role the model skipped keeps its own bullets.
     expect(data.find((unit) => unit.id === "experience:e2")?.text).toBe(profile.experience[1].bullets);
@@ -184,13 +204,24 @@ describe("tailorResume", () => {
     expect(data.find((unit) => unit.id === "languages")?.text).toBe("Dutch: Native · English: Fluent (C2) · German: Intermediate (B1)");
   });
 
-  it("asks for a one-page resume when that's on (E10-10)", async () => {
-    const provider = model({ summary: "Designer.", roles: [], skills: [], education: [] });
-    await tailorResume(provider, { profile, extracted, match: null, note: "", posting }, { ...options, onePage: true });
-    expect(sent(provider).system).toMatch(/has to fit on one page/);
-    const without = model({ summary: "Designer.", roles: [], skills: [], education: [] });
-    await tailorResume(without, { profile, extracted, match: null, note: "", posting }, options);
-    expect(sent(without).system).not.toMatch(/one page/);
+  it("names language levels in the resume's language: the chosen one, or the posting's", async () => {
+    const levels = async (language: string | null, postingLanguage: string) => {
+      const { data } = await tailorResume(model(answer), { profile, extracted: { ...extracted, language: postingLanguage }, match: null, note: "", posting }, { ...options, language });
+      return data.find((unit) => unit.id === "languages")?.text;
+    };
+    expect(await levels(null, "German")).toBe("Dutch: Muttersprache · English: Fließend (C2) · German: Mittelstufe (B1)");
+    expect(await levels("French", "German")).toBe("Dutch: Langue maternelle · English: Courant (C2) · German: Intermédiaire (B1)");
+  });
+
+  it("asks for a resume that fits the page limit, when there is one (E10-10)", async () => {
+    const system = async (maxPages: number | null) => {
+      const provider = model({ summary: "Designer.", roles: [], projects: [], skills: [], education: [] });
+      await tailorResume(provider, { profile, extracted, match: null, note: "", posting }, { ...options, maxPages });
+      return sent(provider).system;
+    };
+    expect(await system(1)).toMatch(/has to fit on one page/);
+    expect(await system(2)).toMatch(/has to fit on two pages/);
+    expect(await system(null)).not.toMatch(/has to fit/);
   });
 
   it("words creativity for every provider, and relaxes the rules when strict mode is off", async () => {
@@ -323,7 +354,7 @@ describe("regenerateUnit", () => {
     const unit = resume.find((entry) => entry.id === "experience:e1")!;
     const provider = model({ text: "- Rebuilt the carrier portal\n• Grew the design system\n" });
     const { data, promptVersion } = await regenerateUnit(provider, { kind: "RESUME", unit, document: resume, profile, extracted, tone: "WARM", note: "", posting }, options);
-    expect(promptVersion).toBe("regenerate-unit@4");
+    expect(promptVersion).toBe("regenerate-unit@5");
     expect(data).toMatchObject({ id: "experience:e1", text: "Rebuilt the carrier portal\nGrew the design system" });
     expect(prompt(provider)).toContain(`Write a new version of "${unit.label}" (experience:e1)`);
     expect(sent(provider).system).not.toContain(COVER_LETTER_APPROACH);
@@ -374,7 +405,7 @@ describe("refineChat", () => {
       declined: false,
     };
     const { data, promptVersion } = await refineChat(model(answer), input, options);
-    expect(promptVersion).toBe("refine-chat@4");
+    expect(promptVersion).toBe("refine-chat@5");
     expect(data).toEqual({
       reply: "I made the letter more formal.",
       tone: "FORMAL",
@@ -446,6 +477,7 @@ describe("the fact guard in the writing tasks (E6-6)", () => {
   const answer = {
     summary: "Led a team of 12 at Google; nine years of design at Northwind Logistics.",
     roles: [{ id: "e1", bullets: ["Led the redesign of the carrier portal used daily by 4,000+ dispatchers"] }],
+    projects: [],
     skills: ["Figma"],
     education: [],
   };

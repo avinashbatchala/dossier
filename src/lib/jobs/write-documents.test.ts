@@ -19,7 +19,7 @@ describe("writeDocumentsJob (E7-6)", () => {
     provider.current = new MockProvider({
       reply: (call) =>
         call.json?.name === "tailored_resume"
-          ? { summary: "Designer at Google.", roles: [], skills: ["Figma"], education: [] }
+          ? { summary: "Designer at Google.", roles: [], projects: [], skills: ["Figma"], education: [] }
           : { recipient: "Ledgerly · Hiring team", greeting: "Dear Ledgerly team,", paragraphs: [{ label: "Opening", text: "I'd love to join Ledgerly." }], signOff: "Warm regards," },
     });
     const steps: string[] = [];
@@ -29,10 +29,10 @@ describe("writeDocumentsJob (E7-6)", () => {
     };
     const result = await writeDocumentsJob.run(
       { readJobId: "read-job", posting: "Ledgerly is hiring.", extracted, match: { items: [] }, tone: "WARM", note: "" },
-      { step: async (name) => void steps.push(name), signal: new AbortController().signal },
+      { id: "test-job", step: async (name) => void steps.push(name), signal: new AbortController().signal },
     );
     expect(steps).toEqual(WRITE_DOCUMENTS_STEPS.slice(0, 2));
-    expect(result.resumeWith).toBe("tailor-resume@3");
+    expect(result.resumeWith).toBe("tailor-resume@4");
     expect(result.letterWith).toBe("write-cover-letter@4");
     // Strict mode: the fact guard marks what the profile doesn't back.
     expect(result.resume[0]).toMatchObject({ id: "summary", unverified: ["Google"] });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bulletLines, cleanUnitText, isRoleUnit, unitName } from "./unit-text";
+import { bulletLines, cleanUnitText, isBulletUnit, unitName } from "./unit-text";
 
 describe("unit text", () => {
   it("keeps bullets one per line, without bullet characters or empty lines", () => {
@@ -14,8 +14,10 @@ describe("unit text", () => {
   });
 
   it("cleans a role's text as bullets and trims anything else", () => {
-    expect(isRoleUnit("experience:e1")).toBe(true);
-    expect(isRoleUnit("summary")).toBe(false);
+    expect(isBulletUnit("experience:e1")).toBe(true);
+    expect(isBulletUnit("project:p1")).toBe(true);
+    expect(isBulletUnit("summary")).toBe(false);
+    expect(cleanUnitText("project:p1", "• Built it\n\n• Shipped it")).toBe("Built it\nShipped it");
     expect(cleanUnitText("experience:e1", " - One \n - Two ")).toBe("One\nTwo");
     expect(cleanUnitText("paragraph:1", "  First line.\n\nSecond.  ")).toBe("First line.\n\nSecond.");
   });

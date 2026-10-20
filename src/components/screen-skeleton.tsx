@@ -12,11 +12,17 @@ function Block({ className }: { className?: string }) {
 }
 
 const bodies: Record<Variant, ReactNode> = {
+  // The calendar shows beside the cards where there's room (see the dashboard's Columns).
   dashboard: (
-    <div className="grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] gap-5 px-10 pb-16">
-      <Block className="col-span-full h-56 rounded-panel" />
-      <Block className="h-72 rounded-panel" />
-      <Block className="h-72 rounded-panel" />
+    <div className="@container px-10 pb-16">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[1240px]:grid-cols-[minmax(0,1200px)_400px]">
+        <div className="grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] gap-5">
+          <Block className="col-span-full h-56 rounded-panel" />
+          <Block className="h-72 rounded-panel" />
+          <Block className="h-72 rounded-panel" />
+        </div>
+        <Block className="hidden h-[440px] rounded-panel @min-[1240px]:block" />
+      </div>
     </div>
   ),
   list: (

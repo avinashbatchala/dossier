@@ -56,7 +56,7 @@ test("reads a resume, shows what it found and merges it into the profile", async
 
   await page.getByRole("button", { name: "Merge into my profile" }).click();
   await expect(page).toHaveURL("/profile");
-  await expect(page.getByText(/^Added to your profile: 1 role, 0 degrees, 2 skills, 1 language, 0 references\./)).toBeVisible();
+  await expect(page.getByText(/^Added to your profile: 1 role, 0 projects, 0 degrees, 2 skills, 1 language, 0 references\./)).toBeVisible();
   // What the resume says wins; the demo profile's other roles stay.
   await expect(page.getByLabel("Full name")).toHaveValue("John Doe");
   await page.goto("/profile?section=experience");

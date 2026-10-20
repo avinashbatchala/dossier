@@ -2,9 +2,12 @@
 
 import { z } from "zod";
 
-import { action } from "@/lib/action";
+import { action, ActionError } from "@/lib/action";
+import { isAiConfigured } from "@/lib/ai/config";
 import { fullText } from "@/lib/job-search/find";
 import { foundPostingSchema, JOB_SOURCES, searchQuerySchema } from "@/lib/job-search/search";
+import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
+import { scoreJobKey, scorePostingJob } from "@/lib/jobs/score-posting";
 import { removeSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { dismissPosting, savePosting, storePosting, unmarkPosting } from "@/lib/postings";
 
@@ -60,4 +63,12 @@ export const startApplicationFrom = action(z.object({ posting: foundPostingSchem
 export const restorePosting = action(postingRef.extend({ saved: z.boolean() }), async ({ saved, ...ref }) => {
   await unmarkPosting(ref, "dismissed", { saved });
   return null;
+});
+
+/** "Score" (#208): how well a posting fits the profile, in the background; a scoring under way is followed, not started again. */
+export const startScoringPosting = action(z.object({ posting: foundPostingSchema }), async ({ posting }) => {
+  if (!(await isAiConfigured())) throw new ActionError("Choose an AI provider in Settings → AI provider first.");
+  const key = scoreJobKey(posting);
+  const [unfinished] = await findUnfinishedJobs(key);
+  return { jobId: unfinished?.id ?? (await startJob(scorePostingJob, { posting }, { key })) };
 });

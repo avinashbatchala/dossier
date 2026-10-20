@@ -83,6 +83,12 @@ function detectTag(text: string): string | undefined {
   return undefined;
 }
 
+/** A language by its name, from the list or one of the right-to-left ones it knows ("Farsi"). */
+export function knownLanguage(language: string | null | undefined): LanguageInfo | undefined {
+  const name = language?.trim().toLowerCase();
+  return name ? [...DOCUMENT_LANGUAGES, ...OTHER_RIGHT_TO_LEFT].find((entry) => entry.name.toLowerCase() === name) : undefined;
+}
+
 /**
  * The `lang` and `dir` for a document written in `language` (a name from
  * the list, or one added with "Other language…"). Without a language, or
@@ -93,10 +99,7 @@ export function documentLanguage(
   language: string | null | undefined,
   sample: string,
 ): { lang?: string; dir: TextDirection } {
-  const name = language?.trim().toLowerCase();
-  const known = name
-    ? [...DOCUMENT_LANGUAGES, ...OTHER_RIGHT_TO_LEFT].find((entry) => entry.name.toLowerCase() === name)
-    : undefined;
+  const known = knownLanguage(language);
   if (known) return { lang: known.tag, dir: known.dir ?? "ltr" };
   return { lang: detectTag(sample), dir: detectDirection(sample) };
 }

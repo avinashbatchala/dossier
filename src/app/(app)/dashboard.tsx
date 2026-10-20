@@ -12,13 +12,13 @@ import { STATUSES } from "@/lib/status";
 import { ActivityChart } from "./activity-chart";
 import { FunnelChart } from "./funnel-chart";
 import { Greeting } from "./greeting";
-import { PeriodFilter } from "./period-filter";
+import { PeriodFilter, PeriodScoped } from "./period-filter";
 import { QuietDays } from "./quiet-days";
 
 const card = "flex flex-col rounded-panel border border-line-card bg-card";
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
-/** The dashboard (DSH-1 to DSH-6): the funnel, where things stand and what's worth a look. */
+/** The dashboard (DSH-1 to DSH-6): the funnel, where things stand, what's worth a look, and the calendar. */
 export function Dashboard({
   figures,
   firstName,
@@ -26,6 +26,7 @@ export function Dashboard({
   range = "all",
   quietDays = DEFAULT_QUIET_DAYS,
   empty,
+  calendar,
 }: {
   figures: DashboardFigures;
   firstName: string;
@@ -36,6 +37,8 @@ export function Dashboard({
   quietDays?: number;
   /** No applications at all yet. */
   empty: boolean;
+  /** The calendar (E15-6), which the time filter doesn't scope. */
+  calendar?: ReactNode;
 }) {
   const { sent, heardBack } = figures;
   // The summary follows the time filter, so it says which period it covers.
@@ -59,18 +62,37 @@ export function Dashboard({
       />
 
       {empty ? (
-        <Welcome />
+        <Columns calendar={calendar}>
+          <Welcome />
+        </Columns>
       ) : (
         <PeriodFilter period={range}>
-          <div className="grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] items-start gap-5 px-10 pb-[72px]">
-            <Funnel figures={figures} />
-            <ActivityChart weeks={figures.weeks} />
-            <WhereThingsStand byStatus={figures.byStatus} />
-            <WorthALook items={figures.attention} quietDays={quietDays} />
-          </div>
+          <Columns calendar={calendar}>
+            <PeriodScoped className="grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] items-start gap-5">
+              <Funnel figures={figures} />
+              <ActivityChart weeks={figures.weeks} />
+              <WhereThingsStand byStatus={figures.byStatus} />
+              <WorthALook items={figures.attention} quietDays={quietDays} />
+            </PeriodScoped>
+          </Columns>
         </PeriodFilter>
       )}
     </>
+  );
+}
+
+/**
+ * The cards, with the calendar beside them where there's room for both.
+ * Where there isn't, it comes after them, as wide as one card.
+ */
+function Columns({ calendar, children }: { calendar?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="@container px-10 pb-[72px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[1240px]:grid-cols-[minmax(0,1200px)_400px]">
+        {children}
+        {calendar && <div className="min-w-0 @min-[780px]:max-w-[calc(50%-10px)] @min-[1240px]:max-w-none">{calendar}</div>}
+      </div>
+    </div>
   );
 }
 
@@ -177,23 +199,21 @@ function WorthALook({ items, quietDays }: { items: DashboardFigures["attention"]
 /** Before the first application: where to begin. */
 function Welcome() {
   return (
-    <div className="px-10 pb-[72px]">
-      <Panel>
-        <h2 className="font-serif text-section">Welcome to Dossier</h2>
-        <p className="text-sm text-muted">
-          Start with your profile: your roles, skills and education are what every tailored resume and cover letter is built from.
-          Then paste a job posting, and your funnel and next steps will show up here.
-        </p>
-        <div className="flex flex-wrap items-center gap-4 pt-1">
-          <Link href="/profile" className={buttonClassName("secondary")}>
-            Fill in your profile
-          </Link>
-          <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
-            + New application
-          </Link>
-        </div>
-      </Panel>
-    </div>
+    <Panel>
+      <h2 className="font-serif text-section">Welcome to Dossier</h2>
+      <p className="text-sm text-muted">
+        Start with your profile: your roles, skills and education are what every tailored resume and cover letter is built from.
+        Then paste a job posting, and your funnel and next steps will show up here.
+      </p>
+      <div className="flex flex-wrap items-center gap-4 pt-1">
+        <Link href="/profile" className={buttonClassName("secondary")}>
+          Fill in your profile
+        </Link>
+        <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
+          + New application
+        </Link>
+      </div>
+    </Panel>
   );
 }
 

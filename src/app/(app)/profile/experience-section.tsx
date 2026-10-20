@@ -1,14 +1,12 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import { toast } from "@/components/toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ToggleChip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutosave } from "@/hooks/use-autosave";
-import { formatDateRange, sameName, type EntryOrder, type ExperienceItem, type ProfileData, type SkillItem } from "@/lib/profile";
+import { formatDateRange, type EntryOrder, type ExperienceItem, type ProfileData } from "@/lib/profile";
 
 import {
   attachNewSkill,
@@ -24,6 +22,7 @@ import { EntryList } from "./entry-list";
 import { MonthYearField } from "./month-year-field";
 import { useTrackSave } from "@/components/save-tracker";
 import type { UpdateProfile } from "./skills-section";
+import { SkillsUsed } from "./skills-used";
 
 /** The fields of an open role, autosaved as you type. */
 function ExperienceForm({
@@ -97,102 +96,6 @@ function ExperienceForm({
   );
 }
 
-/**
- * "Skills you used here" (PRO-6): every profile skill as a toggle chip, and
- * an input that adds a new skill to the profile and attaches it in one step.
- */
-function SkillsUsed({ entry, skills, update }: { entry: ExperienceItem; skills: SkillItem[]; update: UpdateProfile }) {
-  const track = useTrackSave();
-  const labelId = useId();
-  const [draft, setDraft] = useState("");
-  const attached = skills.filter((skill) => entry.skillIds.includes(skill.id)).length;
-
-  const setLinks = (skillIds: string[]) =>
-    update((current) => ({
-      ...current,
-      experience: current.experience.map((item) => (item.id === entry.id ? { ...item, skillIds } : item)),
-    }));
-
-  async function toggle(skillId: string) {
-    const on = !entry.skillIds.includes(skillId);
-    const before = entry.skillIds;
-    setLinks(on ? [...before, skillId] : before.filter((linked) => linked !== skillId));
-    const result = await track(setExperienceSkill({ experienceId: entry.id, skillId, attached: on }));
-    if (!result.ok) {
-      setLinks(before);
-      toast(result.error);
-    }
-  }
-
-  async function addNew() {
-    const name = draft.trim();
-    if (!name) return;
-    setDraft("");
-    const existing = skills.find((skill) => sameName(skill.name, name));
-    if (existing) {
-      if (!entry.skillIds.includes(existing.id)) await toggle(existing.id);
-      return;
-    }
-    const result = await track(attachNewSkill({ experienceId: entry.id, name }));
-    if (!result.ok) {
-      setDraft(name);
-      return toast(result.error);
-    }
-    const { skill } = result.data;
-    update((current) => ({
-      ...current,
-      skills: current.skills.some((item) => item.id === skill.id) ? current.skills : [...current.skills, skill],
-      experience: current.experience.map((item) =>
-        item.id === entry.id && !item.skillIds.includes(skill.id) ? { ...item, skillIds: [...item.skillIds, skill.id] } : item,
-      ),
-    }));
-  }
-
-  return (
-    <div role="group" aria-labelledby={labelId} className="flex flex-col gap-2.5 pt-1">
-      <div className="flex items-baseline justify-between gap-3">
-        <span id={labelId} className="text-label text-muted">
-          Skills you used here
-        </span>
-        <span className="text-xs text-muted">
-          {skills.length > 0
-            ? `${attached} of ${skills.length} attached`
-            : "Add skills in Skills & languages, or type one below"}
-        </span>
-      </div>
-      {skills.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {skills.map((skill) => (
-            <ToggleChip
-              key={skill.id}
-              check
-              selected={entry.skillIds.includes(skill.id)}
-              onClick={() => void toggle(skill.id)}
-            >
-              {skill.name}
-            </ToggleChip>
-          ))}
-        </div>
-      )}
-      <Input
-        aria-label="Add a new skill to this role"
-        placeholder="New skill? Type it and press Enter to add it to your profile too"
-        inputClassName="py-[9px] text-control"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          void addNew();
-        }}
-      />
-      <p className="text-label text-muted">
-        The AI uses these links to show where you actually applied a skill when it tailors a resume.
-      </p>
-    </div>
-  );
-}
-
 const roleTitle = (entry: ExperienceItem) => entry.role.trim() || "New role";
 
 /** Work experience (PRO-5): one card open at a time, autosaved, with Undo on Remove. */
@@ -222,7 +125,20 @@ export function ExperienceSection({ profile, update, order }: { profile: Profile
       renderForm={(entry, { onChange, autoFocus }) => (
         <>
           <ExperienceForm entry={entry} onChange={onChange} autoFocus={autoFocus} />
-          <SkillsUsed entry={entry} skills={profile.skills} update={update} />
+          <SkillsUsed
+            entry={entry}
+            noun="role"
+            skills={profile.skills}
+            update={update}
+            setLinks={(change) =>
+              update((current) => ({
+                ...current,
+                experience: current.experience.map((item) => (item.id === entry.id ? { ...item, skillIds: change(item.skillIds) } : item)),
+              }))
+            }
+            attach={(skillId, attached) => setExperienceSkill({ experienceId: entry.id, skillId, attached })}
+            attachNew={(name) => attachNewSkill({ experienceId: entry.id, name })}
+          />
         </>
       )}
     />

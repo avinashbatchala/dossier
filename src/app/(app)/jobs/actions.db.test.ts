@@ -17,6 +17,7 @@ import {
   savePostingForLater,
   showMorePostings,
   startApplicationFrom,
+  startScoringPosting,
   unsavePosting,
 } from "./actions";
 
@@ -31,6 +32,12 @@ vi.mock("@/lib/auth/session", () => ({
   getSession: async () => ({ persistent: false, issuedAt: new Date(), expiresAt: new Date(Date.now() + 60_000) }),
 }));
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
+const ai = vi.hoisted(() => ({ ready: true }));
+vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready }));
+vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/jobs/runner")>()),
+  startJob: vi.fn(async () => "score-job"),
+}));
 const prisma = () => db.client!;
 
 const posting: FoundPosting = {
@@ -50,6 +57,7 @@ const posting: FoundPosting = {
 const query = { ...EMPTY_QUERY, keywords: "researcher", country: "de" };
 
 beforeEach(async () => {
+  ai.ready = true;
   await resetDatabase(prisma());
   clearJobSearchCache();
   await saveSettings({ jobSource: "JSEARCH", jsearchKeyEnc: encryptSecret(JOB_SOURCE_KEY, "ak_test") });
@@ -111,5 +119,20 @@ describe("Find jobs actions", () => {
       description: "The start…",
       complete: false,
     });
+  });
+});
+
+describe("Score (#208)", () => {
+  it("scores a posting in the background, and follows a scoring already under way", async () => {
+    const { startJob } = await import("@/lib/jobs/runner");
+    expect(await startScoringPosting({ posting })).toEqual({ ok: true, data: { jobId: "score-job" } });
+    expect(startJob).toHaveBeenLastCalledWith(expect.objectContaining({ type: "posting-score" }), { posting }, { key: "posting-score:JSEARCH:job-1" });
+    const running = await prisma().job.create({ data: { type: "posting-score", key: "posting-score:JSEARCH:job-1", status: "RUNNING", input: { posting } } });
+    expect(await startScoringPosting({ posting })).toEqual({ ok: true, data: { jobId: running.id } });
+  });
+
+  it("says when there's no AI provider to score with", async () => {
+    ai.ready = false;
+    expect(await startScoringPosting({ posting })).toEqual({ ok: false, error: "Choose an AI provider in Settings → AI provider first." });
   });
 });

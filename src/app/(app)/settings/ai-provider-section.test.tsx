@@ -25,13 +25,15 @@ beforeEach(() => {
 });
 
 describe("AiProviderSection", () => {
-  it("shows the three providers as a radio group, and the fields for the chosen one (SET-1)", async () => {
+  it("shows the providers as a radio group, and the fields for the chosen one (SET-1)", async () => {
     render(<AiProviderSection initial={local} />);
     expect(screen.getByRole("heading", { name: "AI provider" })).toBeInTheDocument();
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
       "Local model",
+      "LM Studio",
       "OpenAI-compatible",
       "Anthropic",
+      "Mistral",
     ]);
     expect(screen.getByRole("radio", { name: "Local model" })).toBeChecked();
     expect(screen.getByLabelText("Server address")).toHaveValue("http://ollama:11434");
@@ -51,6 +53,28 @@ describe("AiProviderSection", () => {
     await waitFor(() =>
       expect(saveAiProvider).toHaveBeenCalledWith({ provider: "ANTHROPIC", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5" }),
     );
+  });
+
+  it("fills in Mistral's address and model, and names Mistral in the note (#206)", async () => {
+    render(<AiProviderSection initial={local} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Mistral" }));
+    expect(screen.getByLabelText("Server address")).toHaveValue("https://api.mistral.ai/v1");
+    expect(screen.getByRole("note")).toHaveTextContent(/^Mistral receives what each task needs: .* depend on your account with Mistral\.$/);
+    expect(screen.getByLabelText("API key")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(saveAiProvider).toHaveBeenCalledWith({ provider: "MISTRAL", baseUrl: "https://api.mistral.ai/v1", model: "mistral-medium-latest" }),
+    );
+  });
+
+  it("fills in LM Studio on the Docker host, with an optional token and no note about data leaving (#210)", async () => {
+    render(<AiProviderSection initial={local} />);
+    await userEvent.click(screen.getByRole("radio", { name: "LM Studio" }));
+    expect(screen.getByLabelText("Server address")).toHaveValue("http://host.docker.internal:1234");
+    expect(screen.getByText(/Serve on Local Network/)).toBeInTheDocument();
+    expect(screen.getByLabelText("API token")).toBeInTheDocument();
+    expect(screen.getByText("Only needed if you've turned on authentication in LM Studio's server settings.")).toBeInTheDocument();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    await waitFor(() => expect(saveAiProvider).toHaveBeenCalledWith({ provider: "LMSTUDIO", baseUrl: "http://host.docker.internal:1234", model: "" }));
   });
 
   it("saves a key when you leave the field, then forgets it in the browser (E6-2)", async () => {

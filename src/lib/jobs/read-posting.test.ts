@@ -34,7 +34,7 @@ describe("readPostingJob (E7-2)", () => {
       reply: (call) => (call.json?.name === "extracted_posting" ? extracted : { matches: [{ requirement: 0, skill: "Figma", language: null }] }),
     });
     const steps: string[] = [];
-    const result = await readPostingJob.run({ posting: "Ledgerly is hiring…" }, { step: async (name) => void steps.push(name), signal: new AbortController().signal });
+    const result = await readPostingJob.run({ posting: "Ledgerly is hiring…" }, { id: "test-job", step: async (name) => void steps.push(name), signal: new AbortController().signal });
     expect(steps).toEqual([...READ_POSTING_STEPS]);
     expect(result).toMatchObject({
       extracted: { company: "Ledgerly", title: "Senior Product Designer · Ledgerly" },

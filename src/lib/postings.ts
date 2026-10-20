@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Posting } from "@/generated/prisma/client";
 import { linkKey, postingKey, type FoundPosting, type JobSource, type PostingState, type ShownPosting } from "@/lib/job-search/search";
+import { stringsOf } from "@/lib/agent/candidates";
 import { prisma } from "@/lib/prisma";
 
 // Postings kept from Find jobs (E14-5): saved, dismissed, or started an
@@ -121,13 +122,17 @@ export async function countPostings(): Promise<{ saved: number; dismissed: numbe
  */
 export async function postingStates(found: readonly (PostingRef & { url: string })[]): Promise<Map<string, PostingState>> {
   if (found.length === 0) return new Map();
-  const [stored, applications] = await Promise.all([
+  const refs = found.map(({ source, externalId }) => ({ source, externalId }));
+  const [stored, applications, scores] = await Promise.all([
     prisma.posting.findMany({
       where: { OR: found.map(({ source, externalId }) => ({ source, externalId })) },
       select: { id: true, source: true, externalId: true, savedAt: true, dismissedAt: true, applicationId: true },
     }),
-    prisma.application.findMany({ where: { postingUrl: { not: "" } }, select: { id: true, postingUrl: true }, orderBy: { createdAt: "asc" } }),
+    // An agent draft waiting for review isn't applied for yet (#195).
+    prisma.application.findMany({ where: { postingUrl: { not: "" }, awaitingReview: false }, select: { id: true, postingUrl: true }, orderBy: { createdAt: "asc" } }),
+    prisma.postingScore.findMany({ where: { OR: refs } }),
   ]);
+  const scoreOf = new Map(scores.map((row) => [postingKey(row), { score: row.score, reasons: stringsOf(row.reasons), redFlags: stringsOf(row.redFlags) }]));
   const byKey = new Map(stored.map((posting) => [postingKey(posting), posting]));
   const byLink = new Map<string, string>();
   for (const application of applications) {
@@ -145,6 +150,7 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
           saved: Boolean(row?.savedAt),
           dismissed: Boolean(row?.dismissedAt),
           applicationId: row?.applicationId ?? ((link && byLink.get(link)) || null),
+          score: scoreOf.get(postingKey(posting)) ?? null,
         },
       ];
     }),

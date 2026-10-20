@@ -26,6 +26,7 @@ const profile: ProfileData = {
   skills: [],
   languages: [],
   experience: [],
+  projects: [],
   education: [
     { id: "d1", degree: "MSc Design for Interaction", school: "TU Delft", notes: "", startYear: 2013, startMonth: null, endYear: 2015, endMonth: null, current: false },
   ],

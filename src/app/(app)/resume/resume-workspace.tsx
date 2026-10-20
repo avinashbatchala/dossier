@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PaperSize } from "@/generated/prisma/enums";
 import type { ProfileData } from "@/lib/profile";
 import { saveFile } from "@/lib/save-file";
+import { pagesInWords } from "@/lib/settings";
 import { parseThemeFile, themeFile, themeFileName } from "@/lib/theme-file";
 import { PAPER_SIZES, type ThemeData } from "@/lib/themes";
 
@@ -29,8 +30,10 @@ export type ResumeWorkspaceProps = {
   baseThemeId: string;
   paper: PaperSize;
   includeReferences: boolean;
-  /** Settings → "Keep resumes to one page" (SET-9). */
-  onePage: boolean;
+  /** Settings → "Resume length" (SET-9): the most pages a tailored resume may have, or null for no limit. */
+  maxPages: number | null;
+  /** Settings → "Base resume language", for its headings and dates; null for English. */
+  language: string | null;
 };
 
 type Panel = "themes" | "customize";
@@ -41,7 +44,7 @@ type Panel = "themes" | "customize";
  * shows it right away and saves it in the background; while you customise
  * one, the preview shows the draft.
  */
-export function ResumeWorkspace({ profile, themes: initialThemes, usage, baseThemeId, paper, includeReferences, onePage }: ResumeWorkspaceProps) {
+export function ResumeWorkspace({ profile, themes: initialThemes, usage, baseThemeId, paper, includeReferences, maxPages, language }: ResumeWorkspaceProps) {
   const [themes, setThemes] = useState(initialThemes);
   const [baseId, setBaseId] = useState(baseThemeId);
   const [panel, setPanel] = useState<Panel>("themes");
@@ -56,7 +59,11 @@ export function ResumeWorkspace({ profile, themes: initialThemes, usage, baseThe
   const base = themes.find((entry) => entry.id === baseId) ?? themes[0];
   const theme: ThemeData = draft ? { ...draft, id: draft.id ?? "draft", builtIn: false } : base;
   const empty =
-    !profile.basics.name.trim() && profile.experience.length === 0 && profile.education.length === 0 && profile.skills.length === 0;
+    !profile.basics.name.trim() &&
+    profile.experience.length === 0 &&
+    profile.projects.length === 0 &&
+    profile.education.length === 0 &&
+    profile.skills.length === 0;
 
   // E11-3: opening or leaving the builder replaces the panel's controls, so
   // focus follows: to the theme's name, or back to the theme in use.
@@ -175,16 +182,19 @@ export function ResumeWorkspace({ profile, themes: initialThemes, usage, baseThe
                 </Link>
               </p>
             ) : (
-              onePage &&
-              pages > 1 && (
+              maxPages !== null &&
+              pages > maxPages && (
                 <p role="note" className="rounded-card bg-warning-surface px-4 py-2.5 text-meta text-warning">
-                  Your base resume runs over one page. Tailored resumes are trimmed to fit, oldest roles first.
+                  Your base resume runs over {pagesInWords(maxPages)}. Tailored resumes are trimmed to fit, oldest roles first.{" "}
+                  <Link href="/settings?section=documents" className="font-medium text-warning underline underline-offset-2">
+                    Change the resume length
+                  </Link>
                 </p>
               )
             )
           }
         >
-          <ResumeDocument theme={theme} profile={profile} paper={paper} includeReferences={includeReferences} />
+          <ResumeDocument theme={theme} profile={profile} paper={paper} includeReferences={includeReferences} language={language} />
         </DocumentPreview>
         <aside
           ref={panelArea}

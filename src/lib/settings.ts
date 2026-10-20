@@ -42,6 +42,23 @@ export const isJobRetention = (hours: number) => JOB_RETENTION_OPTIONS.some((opt
 export const jobRetentionLabel = (hours: number) =>
   JOB_RETENTION_OPTIONS.find((option) => option.hours === hours)?.label ?? `${hours} hours`;
 
+const pageLimit = z.enum(["1", "2", "none"]);
+export type PageLimit = z.infer<typeof pageLimit>;
+
+/**
+ * "Resume length" (SET-9): how many pages a tailored resume may run to. One
+ * that runs over is trimmed when its application is created (E10-10).
+ */
+export const PAGE_LIMITS: readonly { value: PageLimit; label: string; pages: number | null }[] = [
+  { value: "1", label: "One page", pages: 1 },
+  { value: "2", label: "Up to two pages", pages: 2 },
+  { value: "none", label: "No limit", pages: null },
+];
+/** The most pages a resume may have, or null for no limit. */
+export const maxPages = (limit: PageLimit): number | null => PAGE_LIMITS.find((option) => option.value === limit)?.pages ?? null;
+/** "one page", "two pages" */
+export const pagesInWords = (pages: number) => (pages === 1 ? "one page" : pages === 2 ? "two pages" : `${pages} pages`);
+
 // ─── Stored settings ─────────────────────────────────────────────────────────
 // Settings are stored in the Setting table, one text row per key: enums by
 // name, flags as "true"/"false", lists as JSON. A missing key, or a value that
@@ -51,17 +68,35 @@ export const DEFAULT_BASE_THEME = "editorial";
 
 const flag = (fallback: boolean) => z.stringbool().catch(fallback);
 
+/** A value stored as JSON. */
+const json = <T extends z.ZodType>(schema: T) =>
+  z
+    .string()
+    .transform((value): unknown => {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
+    })
+    .pipe(schema);
+
 /** A list stored as a JSON array of strings. */
-const stringList = z
-  .string()
-  .transform((value): unknown => {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return null;
-    }
-  })
-  .pipe(z.array(z.string()));
+const stringList = json(z.array(z.string()));
+
+/**
+ * One run of the job agent (E16), kept here rather than as its Job, which
+ * the task-data sweep deletes: the daily limit counts these.
+ */
+export const agentRunSchema = z.object({
+  at: z.iso.datetime(),
+  manual: z.boolean(),
+  /** What the run ended with, for the Agent screen; null while it runs. */
+  message: z.string().nullable(),
+});
+export type AgentRun = z.infer<typeof agentRunSchema>;
+/** How many runs are kept: more than a day's worth, for the limit and the screen. */
+export const AGENT_RUNS_KEPT = 10;
 
 export const settingsSchema = z.object({
   // AI provider (SET-1). Null means "not set in the app": fall back to the
@@ -81,11 +116,13 @@ export const settingsSchema = z.object({
   defaultTone: z.enum(Tone).catch(Tone.WARM),
   /** Language for generated documents; null means "the posting's language" (SET-7). */
   docLanguage: z.string().nullable().catch(null),
+  /** The base resume's language, for its headings and dates; null means English, with the direction read from the profile. */
+  resumeLanguage: z.string().nullable().catch(null),
   /** Languages added with "Other language…", kept in the list. */
   customLanguages: stringList.catch([]),
   fileNamePattern: z.string().catch("{name} – {company} – {doc}"),
   includeRefs: flag(false),
-  onePage: flag(true),
+  pageLimit: pageLimit.catch("1"),
   nightlyBackup: flag(true),
   /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */
   jobRetentionHours: z.coerce.number().refine(isJobRetention).catch(DEFAULT_JOB_RETENTION_HOURS),
@@ -99,8 +136,9 @@ export const settingsSchema = z.object({
   dashboardPeriod: z.enum(["30d", "90d", "all"]).catch("all"),
   /** Days without news before "Worth a look" suggests a follow-up (E9-9). */
   quietDays: z.coerce.number().int().min(1).max(60).catch(7),
-  /** Experience and education: newest first by date, or the order set by hand (E4-9). */
+  /** Experience, projects and education: newest first by date, or the order set by hand (E4-9). */
   experienceOrder: z.enum(["date", "manual"]).catch("date"),
+  projectOrder: z.enum(["date", "manual"]).catch("date"),
   educationOrder: z.enum(["date", "manual"]).catch("date"),
   /** Why the last nightly backup failed; null once one works again (E10-7). */
   backupProblem: z.string().nullable().catch(null),
@@ -113,34 +151,22 @@ export const settingsSchema = z.object({
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
   adzunaAppId: z.string().nullable().catch(null),
   adzunaKeyEnc: z.string().nullable().catch(null),
-  // Job agent (E16): one search, run on a schedule. Off until it's chosen.
-  // The source is the one in Settings → Job search, so its key and country
-  // rules are shared with Find jobs.
+  // Job agent (E16): one search, run once a day. Off until it's turned on.
+  // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
-  /** The search the agent runs; keywords must not be empty to run. */
-  agentQuery: z
-    .string()
-    .transform((value): unknown => {
-      try {
-        return JSON.parse(value);
-      } catch {
-        return null;
-      }
-    })
-    .pipe(searchQuerySchema)
-    .catch(EMPTY_QUERY),
-  /** The hour (server time) the daily run starts. */
+  /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
+  agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),
+  /** The hour of the day it runs, in the user's time zone. */
   agentHour: z.coerce.number().int().min(0).max(23).catch(7),
-  /** Postings below this score are kept out of the queue. */
+  /** Postings scored below this stay out of the queue. */
   agentMinScore: z.coerce.number().int().min(0).max(100).catch(70),
-  /** The most postings one run scores, to keep AI and source use bounded. */
+  /** The most postings a run scores, and the most drafts it prepares on its own. */
   agentMaxScores: z.coerce.number().int().min(1).max(30).catch(15),
-  /** The most drafts one run prepares automatically. */
   agentMaxDrafts: z.coerce.number().int().min(0).max(10).catch(3),
-  /** Whether a run writes drafts for the best postings, or only scores them. */
-  agentAutoDraft: flag(true),
-  /** The last run, for the daily guard and the screen. */
-  agentLastRunAt: z.string().datetime().nullable().catch(null),
+  /** Whether a run prepares drafts for its best postings, or only scores them (off by default, #197). */
+  agentAutoDraft: flag(false),
+  /** The latest runs, newest first. They belong to the install: exports leave them out (INSTALL_SETTINGS). */
+  agentRuns: json(z.array(agentRunSchema)).catch([]),
   /** "Check for updates daily" in Settings → About (update-check.ts). */
   updateCheck: flag(true),
   // The newest release the update check has seen, the UTC day it last
@@ -169,17 +195,7 @@ export const settingsSchema = z.object({
   /** The calendar to read and write; "primary" is the account's own. */
   calendarId: z.string().catch("primary"),
   /** Working days, 1 = Monday … 7 = Sunday, as JSON. */
-  workDays: z
-    .string()
-    .transform((value): unknown => {
-      try {
-        return JSON.parse(value);
-      } catch {
-        return null;
-      }
-    })
-    .pipe(z.array(z.number().int().min(1).max(7)))
-    .catch([1, 2, 3, 4, 5]),
+  workDays: json(z.array(z.number().int().min(1).max(7))).catch([1, 2, 3, 4, 5]),
   /** Working hours as "HH:MM". */
   workStart: z.string().regex(/^\d{2}:\d{2}$/).catch("09:00"),
   workEnd: z.string().regex(/^\d{2}:\d{2}$/).catch("17:00"),
@@ -193,6 +209,12 @@ export const settingsSchema = z.object({
   // not its data, so exports leave them out (INSTALL_SETTINGS).
   usagePingId: z.string().nullable().catch(null),
   usagePingDay: z.string().nullable().catch(null),
+  // Whether the operator agreed to the usage ping (#172), when, and which
+  // version of the question they answered (USAGE_PING_TEXT_VERSION), so the
+  // consent can be shown. Null: not answered yet, and nothing is sent.
+  usagePingChoice: z.enum(["on", "off"]).nullable().catch(null),
+  usagePingChoiceAt: z.string().nullable().catch(null),
+  usagePingChoiceText: z.coerce.number().int().nullable().catch(null),
   // The browser's time zone as it last told the server, for work done
   // without a request, such as the inbox check (time-zone.ts). It belongs
   // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).
@@ -202,7 +224,10 @@ export type SettingsData = z.output<typeof settingsSchema>;
 
 /** The settings from Setting rows; keys it doesn't know are ignored. */
 export function settingsFromRows(rows: readonly { key: string; value: string }[]): SettingsData {
-  return settingsSchema.parse(Object.fromEntries(rows.map((row) => [row.key, row.value])));
+  const values: Record<string, string> = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+  // Up to 1.7, the limit was "Keep resumes to one page" (onePage), and off meant no limit. Databases and export files may still have it.
+  if (values.pageLimit === undefined && values.onePage === "false") values.pageLimit = "none";
+  return settingsSchema.parse(values);
 }
 
 /** The text stored for a setting's value, or null for "not set", whose row is removed. */

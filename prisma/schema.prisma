@@ -36,6 +36,7 @@ model Skill {
   name        String            @unique @db.Citext
   sort        Int               @default(0)
   experiences ExperienceSkill[]
+  projects    ProjectSkill[]
   createdAt   DateTime          @default(now())
 }
 
@@ -86,6 +87,36 @@ model ExperienceSkill {
   skill        Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([experienceId, skillId])
+  @@index([skillId])
+}
+
+/// A side, open-source, course or thesis project (PRO-13). Dates work as in Experience.
+model Project {
+  id         String         @id @default(cuid())
+  name       String         @default("")
+  /// Where it can be seen, e.g. its repository or site.
+  link       String         @default("")
+  startYear  Int?
+  startMonth Int?
+  endYear    Int?
+  endMonth   Int?
+  current    Boolean        @default(false)
+  /// One point per line.
+  bullets    String         @default("")
+  sort       Int            @default(0)
+  skills     ProjectSkill[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+}
+
+/// A skill used in a project, as ExperienceSkill is for a role.
+model ProjectSkill {
+  projectId String
+  skillId   String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill     Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, skillId])
   @@index([skillId])
 }
 
@@ -222,6 +253,10 @@ enum AiProvider {
   /// Any server that speaks the OpenAI chat completions API.
   OPENAI
   ANTHROPIC
+  /// Mistral's own API (#206).
+  MISTRAL
+  /// LM Studio on the user's own hardware (#210).
+  LMSTUDIO
 }
 
 enum Creativity {
@@ -282,7 +317,7 @@ enum ApplicationOrigin {
 
 /// Where a job agent candidate stands (E16).
 enum AgentCandidateStatus {
-  /// Scored and waiting for a draft to be prepared.
+  /// Scored, and waiting for a draft or a dismissal.
   SCORED
   /// A draft is being written.
   DRAFTING
@@ -290,7 +325,7 @@ enum AgentCandidateStatus {
   DRAFTED
   /// The draft was approved and is a normal application.
   APPROVED
-  /// The user passed on it.
+  /// The user passed on it; it never comes back.
   DISMISSED
 }
 
@@ -307,10 +342,10 @@ model Application {
   id                  String            @id @default(cuid())
   /// Whether the user made it, or the job agent prepared it (E16).
   origin              ApplicationOrigin @default(MANUAL)
-  /// The agent's score for the posting, when the agent made this draft.
+  /// The agent's score for the posting, when the agent prepared it.
   agentScore          Int?
-  /// The agent run that prepared it, for provenance.
-  agentJobId          String?
+  /// An agent draft not approved yet: only the Agent screen shows it (#195).
+  awaitingReview      Boolean           @default(false)
   title               String            @default("")
   company             String            @default("")
   role                String            @default("")
@@ -530,6 +565,70 @@ model Posting {
   @@index([dismissedAt])
 }
 
+// ─── Job agent (E16) ─────────────────────────────────────────────────────────
+
+/// A posting the job agent found and scored, and the draft it prepared from
+/// it. Kept after it's dismissed, trimmed to what dedupe needs, so the same
+/// posting never comes back.
+model AgentCandidate {
+  id            String               @id @default(cuid())
+  source        PostingSource
+  /// The source's own id for it.
+  externalId    String
+  title         String               @default("")
+  company       String               @default("")
+  place         String               @default("")
+  remote        Boolean?
+  salary        String               @default("")
+  postedAt      DateTime?
+  /// Where to read it or apply; always http(s).
+  url           String               @default("")
+  via           String               @default("")
+  /// Plain text, as the source gave it.
+  description   String               @default("")
+  complete      Boolean              @default(false)
+  /// 0–100: how well the posting fits the profile (score-posting).
+  score         Int                  @default(0)
+  /// Why it fits, as a JSON list of strings.
+  reasons       Json?
+  /// What gives pause, as a JSON list of strings.
+  redFlags      Json?
+  status        AgentCandidateStatus @default(SCORED)
+  /// Why preparing a draft failed, if it did.
+  error         String?
+  /// The tailored draft made from it.
+  applicationId String?              @unique
+  application   Application?         @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  /// A hash of the link without tracking parameters, else of company, title
+  /// and place: the same job from another source or a later run matches.
+  dedupeKey     String               @unique
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([source, externalId])
+  @@index([status, score])
+  @@index([createdAt])
+}
+
+/// How well a posting fits the profile (#208): from Score in Find jobs, or
+/// the job agent. Kept by the source's id, for search results that aren't
+/// stored as postings, so the score shows again in later searches.
+model PostingScore {
+  source     PostingSource
+  externalId String
+  /// 0–100 (score-posting).
+  score      Int
+  /// JSON lists of strings.
+  reasons    Json
+  redFlags   Json
+  /// The prompt version that scored it, e.g. "score-posting@1".
+  scoredWith String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@id([source, externalId])
+}
+
 /// A search on Find jobs, kept with what it found until the user removes it
 /// (E14-10), so going back to it costs no searches from the source's plan.
 model PostingSearch {
@@ -546,52 +645,6 @@ model PostingSearch {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  @@index([createdAt])
-}
-
-// ─── Job agent (E16) ─────────────────────────────────────────────────────────
-
-/// A posting the job agent found and scored, and the draft it prepared from
-/// it. Kept after the draft is dismissed so the same posting never comes back.
-model AgentCandidate {
-  id            String               @id @default(cuid())
-  /// The agent run that found it, e.g. a Job id.
-  jobId         String?
-  source        PostingSource
-  /// The source's own id for it.
-  externalId    String
-  title         String               @default("")
-  company       String               @default("")
-  place         String               @default("")
-  remote        Boolean?
-  salary        String               @default("")
-  postedAt      DateTime?
-  /// Where to read it or apply; always http(s).
-  url           String               @default("")
-  via           String               @default("")
-  /// Plain text, as the source gave it.
-  description   String               @default("")
-  complete      Boolean              @default(false)
-  /// 0–100: how well the posting fits the profile.
-  score         Int                  @default(0)
-  /// Why it fits (stringList).
-  reasons       Json?
-  /// What gives pause (stringList).
-  redFlags      Json?
-  status        AgentCandidateStatus @default(SCORED)
-  /// Why preparing a draft failed, if it did.
-  error         String?
-  /// The tailored draft made from it.
-  applicationId String?              @unique
-  application   Application?         @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  /// A stable key for dedupe: the link reduced to what identifies the page,
-  /// else company, title and place. Unique across runs and sources.
-  dedupeKey     String               @unique
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-
-  @@unique([source, externalId])
-  @@index([status, score])
   @@index([createdAt])
 }
 

@@ -29,12 +29,15 @@ describe("parseEnv", () => {
       ...valid,
       DOSSIER_DATA_DIR: "/data",
       DOSSIER_BACKUP_RETENTION_DAYS: 14,
-      DOSSIER_TELEMETRY: "on",
+      DOSSIER_TELEMETRY: undefined,
     });
   });
 
   it("reads whether the usage ping is on", () => {
-    expect(parseEnv({ ...valid, DOSSIER_TELEMETRY: "" }).DOSSIER_TELEMETRY).toBe("on");
+    // Unset or empty: not decided, so Dossier asks (#172).
+    expect(parseEnv({ ...valid, DOSSIER_TELEMETRY: "" }).DOSSIER_TELEMETRY).toBeUndefined();
+    expect(parseEnv(valid).DOSSIER_TELEMETRY).toBeUndefined();
+    expect(parseEnv({ ...valid, DOSSIER_TELEMETRY: "ON" }).DOSSIER_TELEMETRY).toBe("on");
     expect(parseEnv({ ...valid, DOSSIER_TELEMETRY: " Off " }).DOSSIER_TELEMETRY).toBe("off");
     expect(problems({ ...valid, DOSSIER_TELEMETRY: "false" })).toEqual(['DOSSIER_TELEMETRY must be on or off (got "false").']);
   });
@@ -122,7 +125,7 @@ describe("parseEnv", () => {
       }),
     ).toEqual([
       'DOSSIER_BACKUP_RETENTION_DAYS must be a whole number of days (got "two weeks").',
-      'DOSSIER_AI_PROVIDER must be one of local, openai, anthropic (got "gemini").',
+      'DOSSIER_AI_PROVIDER must be one of local, openai, anthropic, mistral, lmstudio (got "gemini").',
       "DOSSIER_AI_URL must be an http:// or https:// URL.",
     ]);
     expect(problems({ ...valid, DOSSIER_BACKUP_RETENTION_DAYS: "0" })).toEqual([

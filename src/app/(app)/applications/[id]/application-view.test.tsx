@@ -728,10 +728,10 @@ describe("one-page trimming on the Resume tab (E10-10)", () => {
     ];
     render(<ApplicationView {...props} resume={{ units: demoResumeUnits(), theme: theme("editorial"), trimmed }} />);
     const note = screen.getByRole("note");
-    expect(note).toHaveTextContent("Left out to fit one page:Studio Brik rolePut back1 bullet from the Fieldnote rolePut back");
+    expect(note).toHaveTextContent("Left out to fit the page limit:Studio Brik rolePut back1 bullet from the Fieldnote rolePut back");
     await user.click(within(note).getByRole("button", { name: "Put back 1 bullet from the Fieldnote role" }));
     expect(putBackTrimmed).toHaveBeenCalledWith({ id: "app-1", index: 1 });
-    expect(toast).toHaveBeenLastCalledWith("Put back. The resume may run over one page now.");
+    expect(toast).toHaveBeenLastCalledWith("Put back. The resume may run over its page limit now.");
   });
 
   it("says nothing when nothing was left out", () => {

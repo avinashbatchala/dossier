@@ -6,7 +6,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { Unit } from "@/lib/application-data";
 import { cn } from "@/lib/cn";
-import { isRoleUnit } from "@/lib/unit-text";
+import { isBulletUnit } from "@/lib/unit-text";
 
 import styles from "./unit-frame.module.css";
 
@@ -135,7 +135,7 @@ function UnitEditor({
     <div className={cn(styles.editor, "mt-1 flex flex-col gap-2 font-sans")} dir="auto">
       <textarea
         aria-label={`Edit ${unit.label}`}
-        aria-describedby={isRoleUnit(unit.id) ? `${unit.id}-hint` : undefined}
+        aria-describedby={isBulletUnit(unit.id) ? `${unit.id}-hint` : undefined}
         // Opened on request, so the text box takes focus.
         autoFocus
         value={value}
@@ -154,7 +154,7 @@ function UnitEditor({
         className="max-h-[60vh] w-full resize-y rounded-control border border-primary bg-input px-3 py-2.5 text-[13.5px] leading-[1.55] text-ink [field-sizing:content] focus-visible:outline-offset-0 disabled:opacity-60"
       />
       <div className="flex items-center justify-end gap-1.5">
-        {isRoleUnit(unit.id) && (
+        {isBulletUnit(unit.id) && (
           <span id={`${unit.id}-hint`} className="mr-auto text-xs text-muted">
             One bullet per line
           </span>

@@ -8,7 +8,7 @@ import { GoogleError } from "./errors";
 import type { Interval } from "./slots";
 
 // The parts of the Calendar API Dossier uses (E15-5): free/busy for times to
-// offer, and events for interviews and the Calendar screen.
+// offer, and events for interviews and the dashboard's calendar.
 
 const api = (path: string) => googleUrl("www", `/calendar/v3${path}`);
 const eventPath = (calendarId: string, eventId?: string) =>
@@ -29,7 +29,7 @@ export async function busyTimes(calendarId: string, from: Date, to: Date, signal
 }
 
 export type InterviewEvent = {
-  /** The application it's for, kept on the event so the Calendar screen can link it. */
+  /** The application it's for, kept on the event so the dashboard's calendar can link it. */
   applicationId: string;
   summary: string;
   description: string;

@@ -23,7 +23,7 @@ export default async function InboxPage() {
     isAiConfigured(),
     userTimeZone(),
     prisma.application.findMany({
-      where: { archivedAt: null },
+      where: { archivedAt: null, awaitingReview: false },
       orderBy: { updatedAt: "desc" },
       select: { id: true, company: true, role: true, title: true },
     }),

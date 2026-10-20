@@ -21,7 +21,7 @@ vi.mock("@/lib/profile-data", async () => {
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
 const prisma = () => db.client!;
-const context = { step: async () => {}, signal: new AbortController().signal };
+const context = { id: "test-job", step: async () => {}, signal: new AbortController().signal };
 const where = { applicationId_kind: { applicationId: "app-1", kind: "EMAIL" as const } };
 const letter = [
   { id: "sender", label: "Sender", text: "Jane Doe\njane@example.com · +31 6 1234 5678" },

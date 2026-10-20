@@ -32,6 +32,10 @@ const imported: ImportedProfile = {
     { role: "Design Lead", company: "Acme Payments", location: "", bullets: "Led the payout redesign", skills: ["User research"], startYear: 2021, startMonth: 3, endYear: null, endMonth: null, current: true, unverified: [] },
     { role: "Product designer", company: "fieldnote", location: "Amsterdam", bullets: "", skills: ["figma"], ...noDates, unverified: [] },
   ],
+  projects: [
+    { name: "payout simulator", link: "github.com/john/payout-sim", bullets: "", skills: ["User research"], ...noDates, unverified: [] },
+    { name: "Design tokens CLI", link: "", bullets: "Built a CLI", skills: ["figma"], startYear: 2024, startMonth: null, endYear: null, endMonth: null, current: true, unverified: [] },
+  ],
   education: [{ degree: "MSc Interaction Design", school: "TU Delft", notes: "", startYear: 2015, startMonth: null, endYear: 2017, endMonth: null, current: false, unverified: [] }],
   references: [{ name: "Jane Doe", relation: "Manager", company: "", email: "jane.doe@example.com", phone: "", unverified: [] }],
 };
@@ -46,6 +50,7 @@ async function existingProfile() {
     data: { role: "Product Designer", company: "Fieldnote", bullets: "My own bullets", startYear: 2018, sort: 0, skills: { create: [{ skillId: figma.id }] } },
   });
   await prisma().reference.create({ data: { name: "jane doe", relation: "", company: "Fieldnote", sort: 0 } });
+  await prisma().project.create({ data: { name: "Payout simulator", bullets: "My own project bullets", startYear: 2023, sort: 0 } });
 }
 
 describe("applyImportedProfile (E4-10)", () => {
@@ -73,6 +78,14 @@ describe("applyImportedProfile (E4-10)", () => {
     expect(roles[1]).toMatchObject({ bullets: "Led the payout redesign", startYear: 2021, startMonth: 3, current: true });
     expect(roles[1].skills.map((link) => link.skill.name)).toEqual(["User research"]);
 
+    // Projects (PRO-13) match by name, like roles by role and company.
+    const projects = await prisma().project.findMany({ orderBy: { sort: "asc" }, include: { skills: { include: { skill: true } } } });
+    expect(projects.map((project) => project.name)).toEqual(["payout simulator", "Design tokens CLI"]);
+    expect(projects[0]).toMatchObject({ link: "github.com/john/payout-sim", bullets: "My own project bullets", startYear: 2023 });
+    expect(projects[0].skills.map((link) => link.skill.name)).toEqual(["User research"]);
+    expect(projects[1]).toMatchObject({ bullets: "Built a CLI", current: true });
+    expect(projects[1].skills.map((link) => link.skill.name)).toEqual(["Figma"]);
+
     expect(await prisma().education.count()).toBe(1);
     const references = await prisma().reference.findMany();
     expect(references).toHaveLength(1);
@@ -90,6 +103,7 @@ describe("applyImportedProfile (E4-10)", () => {
   it("replaces: only what the file holds, in date order", async () => {
     await existingProfile();
     await prisma().setting.create({ data: { key: "experienceOrder", value: "manual" } });
+    await prisma().setting.create({ data: { key: "projectOrder", value: "manual" } });
     await prisma().profileField.create({ data: { key: "showAge", value: "false" } });
     await applyImportedProfile(prisma(), imported, "replace");
 
@@ -98,5 +112,7 @@ describe("applyImportedProfile (E4-10)", () => {
     expect((await prisma().skill.findMany()).map((skill) => skill.name).sort()).toEqual(["User research", "figma"]);
     expect((await prisma().experience.findMany()).map((role) => role.company).sort()).toEqual(["Acme Payments", "fieldnote"]);
     expect((await prisma().setting.findUnique({ where: { key: "experienceOrder" } }))?.value).toBe("date");
+    expect((await prisma().project.findMany()).map((project) => project.name).sort()).toEqual(["Design tokens CLI", "payout simulator"]);
+    expect((await prisma().setting.findUnique({ where: { key: "projectOrder" } }))?.value).toBe("date");
   });
 });

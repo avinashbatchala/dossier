@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { DateFormat } from "@/generated/prisma/enums";
-import { EMPTY_QUERY } from "@/lib/job-search/search";
 
-import { DATE_FORMATS, formatDocumentDate, settingsFromRows, settingValue, type SettingsData } from "./settings";
+import { DATE_FORMATS, formatDocumentDate, maxPages, pagesInWords, settingsFromRows, settingValue, type SettingsData } from "./settings";
 
 const date = new Date(Date.UTC(2026, 8, 7));
 
@@ -40,10 +39,11 @@ describe("stored settings", () => {
       dateFormat: "DAY_MONTH_YEAR",
       defaultTone: "WARM",
       docLanguage: null,
+      resumeLanguage: null,
       customLanguages: [],
       fileNamePattern: "{name} – {company} – {doc}",
       includeRefs: false,
-      onePage: true,
+      pageLimit: "1",
       nightlyBackup: true,
       jobRetentionHours: 24,
       baseThemeId: "editorial",
@@ -53,6 +53,7 @@ describe("stored settings", () => {
       dashboardPeriod: "all",
       quietDays: 7,
       experienceOrder: "date",
+      projectOrder: "date",
       educationOrder: "date",
       backupProblem: null,
       jobSource: null,
@@ -61,13 +62,13 @@ describe("stored settings", () => {
       adzunaAppId: null,
       adzunaKeyEnc: null,
       agentEnabled: false,
-      agentQuery: EMPTY_QUERY,
+      agentQuery: { keywords: "", place: "", country: "", radiusKm: 25, remoteOnly: false, postedWithin: "any" },
       agentHour: 7,
       agentMinScore: 70,
       agentMaxScores: 15,
       agentMaxDrafts: 3,
-      agentAutoDraft: true,
-      agentLastRunAt: null,
+      agentAutoDraft: false,
+      agentRuns: [],
       updateCheck: true,
       latestVersion: null,
       latestVersionUrl: null,
@@ -89,6 +90,9 @@ describe("stored settings", () => {
       bufferMinutes: 15,
       usagePingId: null,
       usagePingDay: null,
+      usagePingChoice: null,
+      usagePingChoiceAt: null,
+      usagePingChoiceText: null,
       browserTimeZone: null,
     });
   });
@@ -102,13 +106,11 @@ describe("stored settings", () => {
       docLanguage: "Dutch",
       quietDays: 14,
       jobRetentionHours: 168,
-      agentQuery: { ...EMPTY_QUERY, keywords: "designer", country: "nl" },
     } satisfies Partial<SettingsData>;
     const rows = Object.entries(saved).map(([key, value]) => ({ key, value: settingValue(value)! }));
     expect(rows).toContainEqual({ key: "strict", value: "false" });
     expect(rows).toContainEqual({ key: "customLanguages", value: '["Farsi","Hebrew"]' });
     expect(rows).toContainEqual({ key: "quietDays", value: "14" });
-    expect(rows).toContainEqual({ key: "agentQuery", value: JSON.stringify(saved.agentQuery) });
     expect(settingsFromRows(rows)).toMatchObject(saved);
     expect(settingValue(null)).toBeNull();
   });
@@ -125,5 +127,40 @@ describe("stored settings", () => {
     ]);
     expect(settings).toMatchObject({ provider: null, paper: "A4", strict: true, customLanguages: [], quietDays: 7, jobRetentionHours: 24 });
     expect(settings).not.toHaveProperty("theme");
+  });
+
+  it("reads the old one-page switch as a page limit (SET-9)", () => {
+    expect(settingsFromRows([{ key: "onePage", value: "false" }]).pageLimit).toBe("none");
+    expect(settingsFromRows([{ key: "onePage", value: "true" }]).pageLimit).toBe("1");
+    // A limit chosen since wins over the old switch.
+    expect(settingsFromRows([{ key: "onePage", value: "false" }, { key: "pageLimit", value: "2" }]).pageLimit).toBe("2");
+    expect(settingsFromRows([{ key: "pageLimit", value: "3" }]).pageLimit).toBe("1");
+  });
+});
+
+describe("the job agent's settings (E16)", () => {
+  it("reads its search and runs as JSON, and values out of range as the defaults", () => {
+    const query = { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 50, remoteOnly: true, postedWithin: "week" } as const;
+    const runs = [{ at: "2026-10-20T07:00:00.000Z", manual: false, message: "2 new postings scored." }];
+    const rows = Object.entries({ agentQuery: query, agentRuns: runs, agentEnabled: true, agentHour: 9 }).map(([key, value]) => ({ key, value: settingValue(value)! }));
+    expect(rows).toContainEqual({ key: "agentQuery", value: JSON.stringify(query) });
+    expect(settingsFromRows(rows)).toMatchObject({ agentQuery: query, agentRuns: runs, agentEnabled: true, agentHour: 9 });
+
+    const odd = settingsFromRows([
+      { key: "agentQuery", value: "{not json" },
+      { key: "agentRuns", value: '[{"at":"yesterday"}]' },
+      { key: "agentHour", value: "24" },
+      { key: "agentMinScore", value: "101" },
+      { key: "agentMaxScores", value: "0" },
+      { key: "agentMaxDrafts", value: "11" },
+    ]);
+    expect(odd).toMatchObject({ agentQuery: { keywords: "", country: "" }, agentRuns: [], agentHour: 7, agentMinScore: 70, agentMaxScores: 15, agentMaxDrafts: 3 });
+  });
+});
+
+describe("page limits (SET-9)", () => {
+  it("counts the pages a resume may have", () => {
+    expect([maxPages("1"), maxPages("2"), maxPages("none")]).toEqual([1, 2, null]);
+    expect([pagesInWords(1), pagesInWords(2)]).toEqual(["one page", "two pages"]);
   });
 });

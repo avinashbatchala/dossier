@@ -3,7 +3,9 @@ import { z } from "zod";
 
 import { AiError } from "./errors";
 import { AnthropicProvider, ANTHROPIC_FALLBACK_MODELS } from "./providers/anthropic";
+import { LMSTUDIO_UNREACHABLE, LmStudioProvider } from "./providers/lmstudio";
 import { LocalProvider } from "./providers/local";
+import { MISTRAL_FALLBACK_MODELS, MistralProvider } from "./providers/mistral";
 import { MockProvider } from "./providers/mock";
 import { OllamaProvider } from "./providers/ollama";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
@@ -27,6 +29,8 @@ async function failure(promise: Promise<unknown>): Promise<AiError> {
 const ollamaChat = (content: string) => json({ model: "qwen2.5:3b", message: { role: "assistant", content }, done: true });
 const openaiChat = (content: string) =>
   json({ id: "c1", object: "chat.completion", created: 0, model: "gpt", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }] });
+const mistralChat = (content: unknown, finish_reason = "stop") =>
+  json({ id: "c1", object: "chat.completion", created: 0, model: "mistral-medium-latest", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason }] });
 const anthropicMessage = (text: string, stop_reason = "end_turn") =>
   json({ id: "m1", type: "message", role: "assistant", model: "claude-sonnet-5", content: [{ type: "text", text }], stop_reason, usage: { input_tokens: 1, output_tokens: 1 } });
 const anthropicModel = (id: string, effort: boolean) => {
@@ -221,6 +225,207 @@ describe("AnthropicProvider", () => {
   });
 });
 
+describe("MistralProvider", () => {
+  // Each test its own address: what a model refuses is remembered per address and model.
+  const mistral = (baseUrl: string, key: string | null = "mk-test") => new MistralProvider(baseUrl, key, "mistral-medium-latest", 60_000);
+
+  it("chats through /chat/completions with the key, a temperature and a strict JSON schema", async () => {
+    const requests = stubFetch(() => mistralChat('{"name":"Jane","years":9}'));
+    const result = await mistral("https://api.mistral.ai/v1").complete({ ...ask, creativity: "FAITHFUL", schema: Person, schemaName: "person" });
+    expect(result).toEqual({ name: "Jane", years: 9 });
+    expect(requests[0].url.href).toBe("https://api.mistral.ai/v1/chat/completions");
+    expect(requests[0].headers.get("authorization")).toBe("Bearer mk-test");
+    expect(requests[0].body).toMatchObject({
+      model: "mistral-medium-latest",
+      temperature: 0.2,
+      max_tokens: 4096,
+      response_format: { type: "json_schema", json_schema: { name: "person", strict: true } },
+    });
+    expect(requests[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("reads an answer that comes in chunks, without the thinking", async () => {
+    stubFetch(() =>
+      mistralChat([
+        { type: "thinking", thinking: [{ type: "text", text: "A name and a number of years." }] },
+        { type: "text", text: '{"name":"Jane",' },
+        { type: "text", text: '"years":9}' },
+      ]),
+    );
+    expect(await mistral("https://chunks.mistral.test/v1").complete({ ...ask, schema: Person })).toEqual({ name: "Jane", years: 9 });
+  });
+
+  it("asks reading tasks not to think, and stops asking a model that refuses", async () => {
+    const requests = stubFetch(() => mistralChat("Hello!"));
+    await mistral("https://effort.mistral.test/v1").complete({ ...ask, effort: "low" });
+    expect(requests[0].body).toMatchObject({ reasoning_effort: "none" });
+
+    const refused = stubFetch(({ body }) =>
+      "reasoning_effort" in (body as object)
+        ? json({ object: "error", message: "reasoning_effort is not supported by this model", type: "invalid_request_error" }, { status: 422 })
+        : mistralChat("Hello!"),
+    );
+    const provider = mistral("https://no-effort.mistral.test/v1");
+    expect(await provider.complete({ ...ask, effort: "low" })).toBe("Hello!");
+    expect(await provider.complete({ ...ask, effort: "low" })).toBe("Hello!");
+    expect(refused.map((request) => "reasoning_effort" in (request.body as object))).toEqual([true, false, false]);
+  });
+
+  it("counts running out of context as cut off", async () => {
+    stubFetch(() => mistralChat('{"name":"Ja', "model_length"));
+    expect(await failure(mistral("https://cut.mistral.test/v1").complete({ ...ask, schema: Person }))).toMatchObject({ kind: "cut-off" });
+  });
+
+  it("needs a key to answer, but still offers models without one", async () => {
+    const requests = stubFetch(() => mistralChat("Hello!"));
+    const provider = mistral("https://api.mistral.ai/v1", null);
+    expect(await failure(provider.complete(ask))).toMatchObject({ kind: "config", message: expect.stringContaining("Mistral API key") });
+    expect(await provider.listModels()).toEqual(MISTRAL_FALLBACK_MODELS);
+    expect(requests).toHaveLength(0);
+  });
+
+  it("says when Mistral allows the key no requests, or the plan lacks the model", async () => {
+    stubFetch(() =>
+      json(
+        { object: "error", message: "Rate limit exceeded", type: "rate_limited", code: "1300" },
+        { status: 429, headers: { "x-ratelimit-limit-req-minute": "0", "x-ratelimit-remaining-req-minute": "0" } },
+      ),
+    );
+    expect(await failure(mistral("https://api.mistral.ai/v1").complete(ask))).toMatchObject({
+      kind: "config",
+      message: expect.stringContaining("0 requests a minute"),
+    });
+
+    stubFetch(() => json({ object: "error", message: "Rate limit exceeded", type: "rate_limited" }, { status: 429, headers: { "x-ratelimit-limit-req-minute": "2" } }));
+    expect(await failure(mistral("https://api.mistral.ai/v1").complete(ask))).toMatchObject({ kind: "rate-limited" });
+
+    stubFetch(() => json({ object: "error", message: "This model is not available in your subscription tier", type: "invalid_request_error" }, { status: 403 }));
+    expect(await failure(mistral("https://api.mistral.ai/v1").complete(ask))).toMatchObject({
+      kind: "model",
+      message: "Your Mistral plan doesn't include “mistral-medium-latest”. Pick another model in Settings → AI provider.",
+    });
+  });
+
+  it("lists one name per chat model, without embedding, OCR or retired ones", async () => {
+    const card = (id: string, aliases: string[] = [], extra: object = {}) => ({ id, object: "model", capabilities: { completion_chat: true }, aliases, ...extra });
+    const medium = ["mistral-medium-latest", "mistral-medium-2604", "mistral-vibe-cli-latest", "magistral-medium-latest"];
+    const others = (id: string, group: string[]) => group.filter((name) => name !== id);
+    stubFetch(() =>
+      json({
+        object: "list",
+        data: [
+          card("codestral-2508", ["codestral-latest", "mistral-code-latest"]),
+          card("codestral-latest", ["codestral-2508", "mistral-code-latest"]),
+          ...medium.map((id) => card(id, others(id, medium))),
+          card("labs-leanstral-1-5-1", ["labs-leanstral-1-5"]),
+          card("mistral-embed", ["mistral-embed-2312"], { capabilities: { completion_chat: false } }),
+          card("mistral-ocr-latest", [], { capabilities: { completion_chat: false } }),
+          card("open-mistral-7b", [], { archived: true }),
+          card("mistral-large-2407", [], { deprecation: "2025-03-30T12:00:00Z" }),
+          card("mistral-small-2603", ["mistral-small-latest"], { deprecation: "2099-01-01T00:00:00Z" }),
+        ],
+      }),
+    );
+    expect(await mistral("https://api.mistral.ai/v1").listModels()).toEqual([
+      "codestral-latest",
+      "labs-leanstral-1-5",
+      "mistral-medium-latest",
+      "mistral-small-latest",
+    ]);
+  });
+});
+
+describe("LmStudioProvider", () => {
+  type Instance = { id: string; config: { context_length: number } };
+  const llm = (key: string, max: number, loaded: Instance[] = []) => ({ type: "llm", key, max_context_length: max, loaded_instances: loaded });
+  const embedding = { type: "embedding", key: "text-embedding-nomic-embed-text-v1.5", max_context_length: 2048, loaded_instances: [] };
+
+  /** A fake LM Studio 0.4 that loads models when asked. */
+  function lmStudio(models: ReturnType<typeof llm>[]) {
+    return stubFetch(({ url, body }) => {
+      if (url.pathname === "/api/v1/models") return json({ models: [...models, embedding] });
+      if (url.pathname === "/api/v1/models/load") {
+        const { model, context_length } = body as { model: string; context_length: number };
+        models.find((entry) => entry.key === model)!.loaded_instances.push({ id: model, config: { context_length } });
+        return json({ type: "llm", instance_id: model, status: "loaded", load_time_seconds: 1 });
+      }
+      return openaiChat('{"name":"Jane","years":9}');
+    });
+  }
+  const make = (model: string, key: string | null = null) => new LmStudioProvider("http://lmstudio:1234/v1/", key, model, 60_000);
+
+  it("loads a model that isn't loaded with 16,384 tokens of context, once for calls at the same time", async () => {
+    const requests = lmStudio([llm("google/gemma-4-e4b", 131_072)]);
+    const provider = make("google/gemma-4-e4b");
+    await Promise.all([provider.complete({ ...ask, schema: Person }), provider.complete({ ...ask, schema: Person })]);
+    const loads = requests.filter((request) => request.url.pathname === "/api/v1/models/load");
+    expect(loads.map((request) => request.body)).toEqual([{ model: "google/gemma-4-e4b", context_length: 16_384 }]);
+    expect(requests.filter((request) => request.url.pathname === "/v1/chat/completions")).toHaveLength(2);
+  });
+
+  it("loads a model with its whole context when that's less", async () => {
+    const requests = lmStudio([llm("small/model", 8_192)]);
+    await make("small/model").complete(ask);
+    expect(requests.find((request) => request.url.pathname === "/api/v1/models/load")?.body).toEqual({ model: "small/model", context_length: 8_192 });
+  });
+
+  it("uses a model loaded with enough context as it is, and says how to fix one with too little", async () => {
+    const requests = lmStudio([
+      llm("roomy/model", 131_072, [{ id: "roomy/model", config: { context_length: 24_064 } }]),
+      llm("tight/model", 131_072, [{ id: "tight/model", config: { context_length: 4_096 } }]),
+    ]);
+    await make("roomy/model").complete(ask);
+    const error = await failure(make("tight/model").complete(ask));
+    expect(error).toMatchObject({ kind: "config", message: expect.stringContaining("loaded with 4,096 tokens of context, and Dossier needs 16,384") });
+    expect(requests.some((request) => request.url.pathname === "/api/v1/models/load")).toBe(false);
+    expect(requests.filter((request) => request.url.pathname === "/v1/chat/completions")).toHaveLength(1);
+  });
+
+  it("refuses a model it doesn't have, which LM Studio would answer with another one", async () => {
+    const requests = lmStudio([llm("google/gemma-4-e4b", 131_072)]);
+    expect(await failure(make("no-such-model").complete(ask))).toMatchObject({ kind: "model", message: expect.stringContaining("“no-such-model”") });
+    expect(await failure(make(embedding.key).complete(ask))).toMatchObject({ kind: "model" });
+    expect(requests.some((request) => request.url.pathname === "/v1/chat/completions")).toBe(false);
+  });
+
+  it("turns thinking off for reading tasks, and leaves room for it otherwise", async () => {
+    const requests = lmStudio([llm("thinker", 131_072, [{ id: "thinker", config: { context_length: 32_768 } }])]);
+    await make("thinker").complete({ ...ask, effort: "low" });
+    await make("thinker").complete(ask);
+    const chats = requests.filter((request) => request.url.pathname === "/v1/chat/completions").map((request) => request.body);
+    expect(chats[0]).toMatchObject({ reasoning_effort: "none", max_tokens: 4096 });
+    expect(chats[1]).toMatchObject({ max_tokens: 8192 });
+    expect(chats[1]).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("lists chat models only, and sends the token to both APIs", async () => {
+    const requests = lmStudio([llm("nvidia/nemotron-3-nano-4b", 1_048_576), llm("google/gemma-4-e4b", 131_072)]);
+    const provider = make("google/gemma-4-e4b", "lm-token");
+    expect(await provider.listModels()).toEqual(["google/gemma-4-e4b", "nvidia/nemotron-3-nano-4b"]);
+    await provider.complete(ask);
+    expect(requests.map((request) => request.headers.get("authorization"))).toEqual(Array(requests.length).fill("Bearer lm-token"));
+  });
+
+  it("works with LM Studio before 0.4, which has only the OpenAI API", async () => {
+    const requests = stubFetch(({ url }) =>
+      url.pathname === "/api/v1/models"
+        ? json({ error: "Unexpected endpoint or method. (GET /api/v1/models)" })
+        : url.pathname === "/v1/models"
+          ? json({ object: "list", data: [{ id: "old-model", object: "model" }] })
+          : openaiChat("Hello!"),
+    );
+    expect(await make("old-model").listModels()).toEqual(["old-model"]);
+    expect(await make("old-model").complete(ask)).toBe("Hello!");
+    expect(requests.some((request) => request.url.pathname === "/api/v1/models/load")).toBe(false);
+  });
+
+  it("says how to reach LM Studio when nothing listens", async () => {
+    stubFetch(refused);
+    expect(await failure(make("google/gemma-4-e4b").complete(ask))).toMatchObject({ kind: "unreachable", message: LMSTUDIO_UNREACHABLE });
+    expect(await failure(make("google/gemma-4-e4b").listModels())).toMatchObject({ kind: "unreachable", message: LMSTUDIO_UNREACHABLE });
+  });
+});
+
 describe("LocalProvider", () => {
   it("uses Ollama's own API when the server is Ollama", async () => {
     const requests = stubFetch(({ url }) => (url.pathname === "/api/version" ? json({ version: "0.34.4" }) : ollamaChat("Hi")));
@@ -231,6 +436,14 @@ describe("LocalProvider", () => {
   it("uses the OpenAI-compatible endpoint for llama.cpp and the like", async () => {
     const requests = stubFetch(({ url }) => (url.pathname === "/api/version" ? new Response("Not Found", { status: 404 }) : openaiChat("Hi")));
     expect(await new LocalProvider("http://llamacpp:8080", "local", 60_000).complete(ask)).toBe("Hi");
+    expect(requests.map((request) => request.url.pathname)).toEqual(["/api/version", "/v1/chat/completions"]);
+  });
+
+  it("isn't fooled by LM Studio, which answers /api/version with a 200 and an error", async () => {
+    const requests = stubFetch(({ url }) =>
+      url.pathname === "/api/version" ? json({ error: "Unexpected endpoint or method. (GET /api/version)" }) : openaiChat("Hi"),
+    );
+    expect(await new LocalProvider("http://lmstudio:1234", "google/gemma-4-e4b", 60_000).complete(ask)).toBe("Hi");
     expect(requests.map((request) => request.url.pathname)).toEqual(["/api/version", "/v1/chat/completions"]);
   });
 

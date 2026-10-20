@@ -35,8 +35,9 @@ const NOISE_LABELS = ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS
 export const questionsSchema = z.array(z.string());
 
 async function matchables(): Promise<MatchableApplication[]> {
+  // Agent drafts waiting for review were never sent: no reply can be about them (#195).
   const applications = await prisma.application.findMany({
-    where: { archivedAt: null },
+    where: { archivedAt: null, awaitingReview: false },
     select: {
       id: true,
       company: true,

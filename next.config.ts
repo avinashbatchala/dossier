@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     serverFunctions: false,
   },
   poweredByHeader: false,
+  // The calendar moved onto the dashboard (E15-6). The query goes along, so
+  // an old link's ?date= opens that day there.
+  async redirects() {
+    return [{ source: "/calendar", destination: "/", permanent: false }];
+  },
   // On every response (E11-5); the Content-Security-Policy comes from the
   // proxy, since it needs a nonce per request. HSTS is left to the reverse
   // proxy that serves HTTPS.

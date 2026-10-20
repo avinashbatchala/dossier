@@ -16,7 +16,7 @@ export default async function ApplicationsPage({ searchParams }: PageProps<"/app
 
   const [all, archived] = await Promise.all([
     loadApplicationRows({ archived: params.archived, sort: params.sort }),
-    prisma.application.count({ where: { archivedAt: { not: null } } }),
+    prisma.application.count({ where: { archivedAt: { not: null }, awaitingReview: false } }),
   ]);
   const q = params.q.toLocaleLowerCase();
   const found = q ? all.filter((row) => `${row.company} ${row.role}`.toLocaleLowerCase().includes(q)) : all;

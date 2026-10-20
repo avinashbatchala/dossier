@@ -24,6 +24,10 @@ export const importedProfileSchema = z.object({
   experience: z.array(
     z.object({ role: z.string(), company: z.string(), location: z.string(), bullets: z.string(), skills: z.array(z.string()), ...span, unverified }),
   ),
+  /** Absent in readings made before projects (PRO-13). */
+  projects: z
+    .array(z.object({ name: z.string(), link: z.string(), bullets: z.string(), skills: z.array(z.string()), ...span, unverified }))
+    .default([]),
   education: z.array(z.object({ degree: z.string(), school: z.string(), notes: z.string(), ...span, unverified })),
   references: z.array(
     z.object({ name: z.string(), relation: z.string(), company: z.string(), email: z.string(), phone: z.string(), unverified }),
@@ -37,11 +41,12 @@ export type ImportMode = "merge" | "replace";
 /** The steps of reading a resume, as the progress shows them. */
 export const IMPORT_PROFILE_STEPS = ["Reading your resume", "Sorting it into your profile"] as const;
 
-/** "3 roles, 12 skills, 2 languages": what a preview holds, for the page and the toast. */
+/** "3 roles, 1 project, 12 skills…": what a preview holds, for the page and the toast. */
 export function importCounts(profile: ImportedProfile): string {
   const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
   return [
     plural(profile.experience.length, "role", "roles"),
+    plural(profile.projects.length, "project", "projects"),
     plural(profile.education.length, "degree", "degrees"),
     plural(profile.skills.length, "skill", "skills"),
     plural(profile.languages.length, "language", "languages"),

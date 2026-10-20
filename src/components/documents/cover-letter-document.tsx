@@ -2,8 +2,9 @@ import { Fragment } from "react";
 
 import { ThemeLayout, type DateFormat, type PaperSize, type Tone } from "@/generated/prisma/enums";
 import { SIGN_OFF_UNIT, type Unit } from "@/lib/application-data";
+import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
-import { englishFrame, isFrameUnit, withFrame, type FrameUnitId } from "@/lib/letter-frame";
+import { defaultFrame, isFrameUnit, withFrame, type FrameUnitId } from "@/lib/letter-frame";
 import type { Basics } from "@/lib/profile";
 import { resolveTheme, type ThemeData } from "@/lib/themes";
 import { TONES } from "@/lib/tones";
@@ -60,7 +61,7 @@ export function CoverLetterDocument({
   renderUnit = plainUnit,
 }: CoverLetterDocumentProps) {
   const resolved = resolveTheme(theme, ThemeLayout.SINGLE);
-  const parts = withFrame(units, englishFrame({ basics, company, location, date, dateFormat }));
+  const parts = withFrame(units, defaultFrame({ basics, company, location, date, dateFormat, labels: documentLabels(language) }));
   const text = (id: FrameUnitId) => parts.find((unit) => unit.id === id)?.text.trim() ?? "";
   const paragraphs = parts.filter((unit) => !isFrameUnit(unit.id) && unit.id !== SIGN_OFF_UNIT);
   const closing = signOff ?? parts.find((unit) => unit.id === SIGN_OFF_UNIT)?.text.trim() ?? TONES[tone].signOff;

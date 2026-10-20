@@ -38,6 +38,25 @@ describe("resolveAiConfig", () => {
     });
   });
 
+  it("knows Mistral's address and a default model", () => {
+    expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "mistral", DOSSIER_AI_KEY: "mk-env" })).toMatchObject({
+      provider: "MISTRAL",
+      baseUrl: "https://api.mistral.ai/v1",
+      model: "mistral-medium-latest",
+      apiKey: "mk-env",
+      timeoutMs: 120_000,
+    });
+  });
+
+  it("finds LM Studio on the Docker host, as patient as a local model", () => {
+    expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "lmstudio" })).toMatchObject({
+      provider: "LMSTUDIO",
+      baseUrl: "http://host.docker.internal:1234",
+      model: null,
+      timeoutMs: 300_000,
+    });
+  });
+
   it("prefers what's saved in Settings, with its own key", () => {
     const saved = { provider: "OPENAI" as const, baseUrl: "https://llm.example/v1", model: "gpt-x", apiKeyEnc: encryptApiKey("sk-saved") };
     const config = resolveAiConfig(saved, { DOSSIER_AI_PROVIDER: "local", DOSSIER_AI_URL: "http://ollama:11434", DOSSIER_AI_KEY: "sk-env" });
@@ -64,5 +83,7 @@ describe("createProvider", () => {
     expect(createProvider({ ...base, provider: "LOCAL" }).kind).toBe("LOCAL");
     expect(createProvider({ ...base, provider: "OPENAI" }).kind).toBe("OPENAI");
     expect(createProvider({ ...base, provider: "ANTHROPIC" }).kind).toBe("ANTHROPIC");
+    expect(createProvider({ ...base, provider: "MISTRAL" }).kind).toBe("MISTRAL");
+    expect(createProvider({ ...base, provider: "LMSTUDIO" }).kind).toBe("LMSTUDIO");
   });
 });

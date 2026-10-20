@@ -139,7 +139,7 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
         aria-label="Provider"
         value={provider}
         onValueChange={(value) => chooseProvider(value as AiProvider)}
-        className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
       >
         {PROVIDER_OPTIONS.map((entry) => (
           <RadioGroup.Item
@@ -166,10 +166,10 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
         ))}
       </RadioGroup.Root>
 
-      {provider !== "LOCAL" && (
+      {!option.local && (
         <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-          {provider === "ANTHROPIC"
-            ? `Anthropic receives what each task needs: ${SENT_TO_HOSTED} How long it's kept and where it's processed depend on your account with Anthropic.`
+          {option.vendor
+            ? `${option.vendor} receives what each task needs: ${SENT_TO_HOSTED} How long it's kept and where it's processed depend on your account with ${option.vendor}.`
             : `This server receives what each task needs: ${SENT_TO_HOSTED} If it isn't on your own network, all this leaves your server, and how long it's kept is up to whoever runs it.`}
         </p>
       )}
@@ -194,9 +194,7 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
           hint={
             urlLeft && baseUrl.trim() && !looksLikeUrl(baseUrl)
               ? "Start the address with http:// or https://."
-              : provider === "LOCAL"
-                ? "Dossier in Docker? There, localhost is Dossier's own container: use http://host.docker.internal:11434 for Ollama on this computer, or http://ollama:11434 for the Compose service."
-                : undefined
+              : option.urlHint
           }
         />
 
@@ -240,10 +238,11 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
           )}
         </div>
 
-        {option.needsKey ? (
+        {option.apiKey ? (
           <div className="flex flex-col gap-2.5">
             <Input
-              label="API key"
+              label={option.apiKey.label}
+              hint={keyState === "unreadable" ? undefined : option.apiKey.hint}
               type="password"
               autoComplete="off"
               value={keyInput}
@@ -300,8 +299,11 @@ function ConnectionStatus({ connection }: { connection: Connection }) {
           ? ["bg-status-offer", "text-muted", "Sending a short test prompt…"]
           : ["bg-faint", "text-muted", "Not tested since your last change"];
   return (
-    <p role="status" className={cn("flex items-center gap-2 text-control", text)}>
-      <span aria-hidden className={cn("size-2 flex-none rounded-full", dot)} />
+    <p role="status" className={cn("flex items-start gap-2 text-control", text)}>
+      {/* One line high, so the dot stays by the first line when the message wraps. */}
+      <span aria-hidden className="flex h-lh flex-none items-center">
+        <span className={cn("size-2 rounded-full", dot)} />
+      </span>
       {message}
     </p>
   );

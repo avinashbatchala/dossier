@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
+  AgentCandidateStatus,
   ApplicationOrigin,
   ApplicationStatus,
   ChatRole,
@@ -28,25 +29,31 @@ import { appVersion } from "@/lib/version";
 
 // Everything a user keeps in Dossier as one JSON file (E10-4, SET-10): the
 // profile, custom themes, settings and applications with their history,
-// documents, chat and notes, and the postings kept from Find jobs (E14-9).
+// documents, chat and notes, the postings kept from Find jobs (E14-9) and
+// the job agent's candidates (E16), so its dedupe survives a restore.
 // IDs are kept, so an import restores every link. Jobs, sign-in throttling,
 // built-in themes, the Google account and the mail fetched from Gmail stay
 // behind: they belong to the server or the mailbox, not the user's data.
 
 export const EXPORT_FORMAT = "dossier-export";
-/** Bump when the file's shape changes; imports refuse versions they don't know. 2 added Find jobs' postings and keys (E14-9). */
-export const EXPORT_SCHEMA_VERSION = 2;
+/** Bump when the file's shape changes; imports refuse versions they don't know. 2 added Find jobs' postings and keys (E14-9), 3 projects (PRO-13) and the job agent (E16). */
+export const EXPORT_SCHEMA_VERSION = 3;
 /** The versions imports can read. */
-export const EXPORT_SCHEMA_VERSIONS: readonly number[] = [1, 2];
+export const EXPORT_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3];
 
 /** The setting that holds the encrypted API key, which only this server can read. */
 const API_KEY_SETTING = "apiKeyEnc";
 /** The settings that hold encrypted keys, which only this server can read: never exported as they are. */
 export const SECRET_SETTINGS: readonly string[] = [API_KEY_SETTING, "jsearchKeyEnc", "adzunaKeyEnc"];
-/** The settings that belong to this install rather than its data (the usage ping's, the update check's, the Google client and the browser's time zone): never exported, and kept by an import. */
+/** The settings that belong to this install rather than its data (the usage ping's and its consent, the update check's, the Google client and the browser's time zone): never exported, and kept by an import. */
 export const INSTALL_SETTINGS: readonly string[] = [
   "usagePingId",
   "usagePingDay",
+  "usagePingChoice",
+  "usagePingChoiceAt",
+  "usagePingChoiceText",
+  // The job agent's runs count against this server's job source key (E16).
+  "agentRuns",
   "latestVersion",
   "latestVersionUrl",
   "updateCheckDay",
@@ -79,6 +86,18 @@ const experience = z.object({
   bullets: text,
   sort: int,
   /** The skills used in the role. */
+  skillIds: z.array(text),
+  createdAt: date,
+  updatedAt: date,
+});
+const project = z.object({
+  id: text,
+  name: text,
+  link: text,
+  ...span,
+  bullets: text,
+  sort: int,
+  /** The skills used in the project. */
   skillIds: z.array(text),
   createdAt: date,
   updatedAt: date,
@@ -128,7 +147,7 @@ const document = z.object({
   units: z.unknown(),
   themeId: text.nullable(),
   writtenWith: text.nullable(),
-  /** Parts left out to fit one page (E10-10); absent in older files. */
+  /** Parts left out to fit the page limit (E10-10); absent in older files. */
   trimmed: z.unknown().nullable().optional(),
   /** Earlier versions (E8-10); absent in older files. */
   versions: z
@@ -150,10 +169,6 @@ const chatMessage = z.object({
 const note = z.object({ id: text, body: text, createdAt: date, updatedAt: date });
 const application = z.object({
   id: text,
-  /** How it was made (E16); absent in older files. */
-  origin: z.enum(ApplicationOrigin).optional(),
-  /** The agent's score, when it prepared the draft. */
-  agentScore: int.nullable().optional(),
   title: text,
   company: text,
   role: text,
@@ -176,6 +191,10 @@ const application = z.object({
   userNote: text,
   language: text,
   followThemeLayout: z.boolean(),
+  /** The job agent's (E16); absent in older files, which hold only the user's own. */
+  origin: z.enum(ApplicationOrigin).optional(),
+  agentScore: int.nullable().optional(),
+  awaitingReview: z.boolean().optional(),
   archivedAt: optionalDate,
   createdAt: date,
   updatedAt: date,
@@ -183,6 +202,32 @@ const application = z.object({
   documents: z.array(document),
   messages: z.array(chatMessage),
   notes: z.array(note),
+});
+
+/** A posting the job agent found (E16). */
+const agentCandidate = z.object({
+  id: text,
+  source: z.enum(PostingSource),
+  externalId: text,
+  title: text,
+  company: text,
+  place: text,
+  remote: z.boolean().nullable(),
+  salary: text,
+  postedAt: optionalDate,
+  url: text,
+  via: text,
+  description: text,
+  complete: z.boolean(),
+  score: int,
+  reasons: z.unknown().nullable(),
+  redFlags: z.unknown().nullable(),
+  status: z.enum(AgentCandidateStatus),
+  error: text.nullable(),
+  applicationId: text.nullable(),
+  dedupeKey: text,
+  createdAt: date,
+  updatedAt: date,
 });
 
 /** A posting kept from Find jobs (E14-5). */
@@ -222,7 +267,7 @@ const postingSearch = z.object({
 /** An export file as read back (E10-6). */
 export const exportSchema = z.object({
   format: z.literal(EXPORT_FORMAT),
-  schemaVersion: z.literal([1, 2]),
+  schemaVersion: z.literal([1, 2, 3]),
   appVersion: text,
   exportedAt: date,
   profile: z.object({
@@ -230,6 +275,8 @@ export const exportSchema = z.object({
     skills: z.array(skill),
     languages: z.array(language),
     experience: z.array(experience),
+    /** Absent in files before version 3. */
+    projects: z.array(project).default([]),
     education: z.array(education),
     references: z.array(reference),
   }),
@@ -244,6 +291,8 @@ export const exportSchema = z.object({
   postings: z.array(posting).default([]),
   /** Past searches with what they found (E14-10); absent in version 1 files. */
   searches: z.array(postingSearch).default([]),
+  /** The job agent's candidates (E16); absent in older files. */
+  agentCandidates: z.array(agentCandidate).default([]),
 });
 export type DossierExport = z.infer<typeof exportSchema>;
 
@@ -265,11 +314,12 @@ export async function buildExport(
   { includeApiKey = false, now = new Date() }: { includeApiKey?: boolean; now?: Date } = {},
 ): Promise<DossierExport> {
   return db.$transaction(async (tx) => {
-    const [fields, skills, languages, experience, education, references, themes, settings, applications, postings, searches] = await Promise.all([
+    const [fields, skills, languages, experience, projects, education, references, themes, settings, applications, postings, searches, agentCandidates] = await Promise.all([
       tx.profileField.findMany({ select: { key: true, value: true }, orderBy: { key: "asc" } }),
       tx.skill.findMany({ select: { id: true, name: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
       tx.language.findMany({ select: { id: true, name: true, level: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
       tx.experience.findMany({ include: { skills: { select: { skillId: true } } }, orderBy: { createdAt: "asc" } }),
+      tx.project.findMany({ include: { skills: { select: { skillId: true } } }, orderBy: { createdAt: "asc" } }),
       tx.education.findMany({ orderBy: { createdAt: "asc" } }),
       tx.reference.findMany({ orderBy: { createdAt: "asc" } }),
       tx.theme.findMany({ where: { builtIn: false }, omit: { builtIn: true }, orderBy: { createdAt: "asc" } }),
@@ -291,6 +341,7 @@ export async function buildExport(
       }),
       tx.posting.findMany({ orderBy: { createdAt: "asc" } }),
       tx.postingSearch.findMany({ orderBy: { createdAt: "asc" } }),
+      tx.agentCandidate.findMany({ orderBy: { createdAt: "asc" } }),
     ]);
 
     // Keys only when asked for, decrypted; one that's unreadable here too (DOSSIER_SECRET changed) has nothing to export.
@@ -320,6 +371,7 @@ export async function buildExport(
         skills,
         languages,
         experience: experience.map(({ skills: links, ...entry }) => ({ ...entry, skillIds: links.map((link) => link.skillId) })),
+        projects: projects.map(({ skills: links, ...entry }) => ({ ...entry, skillIds: links.map((link) => link.skillId) })),
         education,
         references,
       },
@@ -330,6 +382,7 @@ export async function buildExport(
       applications,
       postings,
       searches,
+      agentCandidates,
     };
   });
 }

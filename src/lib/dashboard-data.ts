@@ -9,7 +9,9 @@ import { prisma } from "@/lib/prisma";
  * for "Worth a look" (E9-9).
  */
 export async function loadDashboard(options: DashboardOptions = {}, now = new Date()): Promise<DashboardFigures> {
+  // Agent drafts count once they're approved (#195).
   const applications = await prisma.application.findMany({
+    where: { awaitingReview: false },
     select: {
       id: true,
       title: true,

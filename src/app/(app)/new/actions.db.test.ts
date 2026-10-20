@@ -24,9 +24,9 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
 }));
 // Trimming renders PDFs; here it says what it would cut.
 const trim = vi.hoisted(() => ({ result: { trimmed: [] as unknown[], fits: true } }));
-vi.mock("@/lib/one-page", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/one-page")>()),
-  fitResumeToOnePage: vi.fn(async () => trim.result),
+vi.mock("@/lib/page-limit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/page-limit")>()),
+  fitResumeToPages: vi.fn(async () => trim.result),
 }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
@@ -170,8 +170,9 @@ describe("createApplication", () => {
     expect(text("sender")).toMatch(/^Jane Doe\n.*jane\.doe@example\.com/);
     expect(text("signature")).toBe("Jane Doe");
     expect(text("date")).toBe(new Intl.DateTimeFormat("de", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(calendarDay()));
-    // This job's letter came without a recipient or greeting, so the English ones stand in.
-    expect(text("greeting")).toBe("Dear Ledgerly B.V. team,");
+    // This job's letter came without a recipient or greeting, so German ones stand in.
+    expect(text("recipient")).toMatch(/^Ledgerly B\.V\. · Personalabteilung/);
+    expect(text("greeting")).toBe("Sehr geehrte Damen und Herren,");
     expect(await prisma().documentVersion.findFirstOrThrow({ where: { documentId: letter.id } })).toMatchObject({ units });
   });
 
@@ -198,8 +199,8 @@ describe("createApplication", () => {
     expect(await prisma().application.count()).toBe(0);
   });
 
-  it("trims the resume to one page and says what was cut (E10-10)", async () => {
-    const { fitResumeToOnePage } = await import("@/lib/one-page");
+  it("trims the resume to its page limit and says what was cut (E10-10)", async () => {
+    const { fitResumeToPages } = await import("@/lib/page-limit");
     await finishedJobs();
     trim.result = {
       trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],
@@ -207,9 +208,35 @@ describe("createApplication", () => {
     };
     const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
     const id = result.ok ? result.data : "";
-    expect(fitResumeToOnePage).toHaveBeenCalledWith(id, expect.objectContaining({ experience: expect.any(Array) }));
+    expect(fitResumeToPages).toHaveBeenCalledWith(id, expect.objectContaining({ experience: expect.any(Array) }), 1);
     const [message] = await prisma().chatMessage.findMany({ where: { applicationId: id } });
     expect(message.text).toMatch(/\n- Left out Studio Brik \(2015–2018\) to fit one page\n\nNothing invented/);
     trim.result = { trimmed: [], fits: true };
+  });
+
+  it("trims to two pages when that's the limit (SET-9)", async () => {
+    const { fitResumeToPages } = await import("@/lib/page-limit");
+    vi.mocked(fitResumeToPages).mockClear();
+    await prisma().setting.create({ data: { key: "pageLimit", value: "2" } });
+    await finishedJobs();
+    trim.result = {
+      trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],
+      fits: true,
+    };
+    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
+    const id = result.ok ? result.data : "";
+    expect(fitResumeToPages).toHaveBeenCalledWith(id, expect.anything(), 2);
+    const [message] = await prisma().chatMessage.findMany({ where: { applicationId: id } });
+    expect(message.text).toMatch(/- Left out Studio Brik \(2015–2018\) to fit two pages/);
+    trim.result = { trimmed: [], fits: true };
+  });
+
+  it("leaves the resume as written without a page limit (SET-9)", async () => {
+    const { fitResumeToPages } = await import("@/lib/page-limit");
+    vi.mocked(fitResumeToPages).mockClear();
+    await prisma().setting.create({ data: { key: "pageLimit", value: "none" } });
+    await finishedJobs();
+    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "" })).toMatchObject({ ok: true });
+    expect(fitResumeToPages).not.toHaveBeenCalled();
   });
 });

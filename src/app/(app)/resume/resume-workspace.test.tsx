@@ -32,7 +32,8 @@ const props: ResumeWorkspaceProps = {
   baseThemeId: "modern",
   paper: "A4",
   includeReferences: false,
-  onePage: true,
+  maxPages: 1,
+  language: null,
 };
 
 /** The theme name above the preview, next to "A4 · 1 page". */
@@ -55,11 +56,15 @@ describe("ResumeWorkspace", () => {
   });
 
   it("points to the profile while it's empty, and only then (E11-4)", () => {
-    const empty = { ...props.profile, basics: { ...props.profile.basics, name: "" }, skills: [], experience: [], education: [] };
+    const empty = { ...props.profile, basics: { ...props.profile.basics, name: "" }, skills: [], experience: [], projects: [], education: [] };
     const { unmount } = render(<ResumeWorkspace {...props} profile={empty} />);
     expect(screen.getByRole("note")).toHaveTextContent("Your resume fills in from your profile.");
     expect(within(screen.getByRole("note")).getByRole("link", { name: "Go to your profile" })).toHaveAttribute("href", "/profile");
     unmount();
+    // A project alone is a start (PRO-13).
+    const { unmount: unmountProjects } = render(<ResumeWorkspace {...props} profile={{ ...empty, projects: props.profile.projects }} />);
+    expect(screen.queryByText(/fills in from your profile/)).not.toBeInTheDocument();
+    unmountProjects();
     render(<ResumeWorkspace {...props} />);
     expect(screen.queryByText(/fills in from your profile/)).not.toBeInTheDocument();
   });

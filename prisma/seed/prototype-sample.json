@@ -57,6 +57,21 @@
         "bullets": "Delivered web projects for cultural institutions and municipalities"
       }
     ],
+    "projects": [
+      {
+        "id": "p1",
+        "name": "Tidewater design tokens",
+        "link": "github.com/janedoe/tidewater",
+        "start": "Jan 2023",
+        "end": "Present",
+        "skills": [
+          "Design systems",
+          "Figma",
+          "HTML & CSS"
+        ],
+        "bullets": "Built an open-source Figma plugin that turns design tokens into CSS variables\nMaintain it with two contributors; used by design teams at several logistics startups"
+      }
+    ],
     "education": [
       {
         "id": "d1",

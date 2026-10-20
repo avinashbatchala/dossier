@@ -31,6 +31,7 @@ type Db = Pick<
   | "skill"
   | "language"
   | "experience"
+  | "project"
   | "education"
   | "reference"
   | "application"
@@ -63,6 +64,7 @@ export async function hasUserData(db: Db): Promise<boolean> {
     db.skill.count(),
     db.language.count(),
     db.experience.count(),
+    db.project.count(),
     db.education.count(),
     db.reference.count(),
     db.application.count(),
@@ -95,12 +97,13 @@ export async function seedDemo(
         await tx.skill.deleteMany();
         await tx.language.deleteMany();
         await tx.experience.deleteMany();
+        await tx.project.deleteMany();
         await tx.education.deleteMany();
         await tx.reference.deleteMany();
       }
 
       // ── Profile ──
-      const { experience, education, skills, languages, references } = sample.profile;
+      const { experience, projects, education, skills, languages, references } = sample.profile;
       await tx.profileField.deleteMany();
       await tx.profileField.createMany({
         data: Object.entries(fieldsFromBasics(demoProfile().basics)).flatMap(([key, value]) =>
@@ -131,6 +134,20 @@ export async function seedDemo(
           },
         });
         experienceIds.set(entry.id, created.id);
+      }
+      const projectIds = new Map<string, string>();
+      for (const [sort, entry] of projects.entries()) {
+        const created = await tx.project.create({
+          data: {
+            name: entry.name,
+            link: entry.link,
+            bullets: entry.bullets,
+            sort,
+            ...dateSpan(entry.start, entry.end),
+            skills: { create: entry.skills.map((name) => ({ skillId: skillIds.get(name)! })) },
+          },
+        });
+        projectIds.set(entry.id, created.id);
       }
       const educationIds = new Map<string, string>();
       for (const [sort, { id, degree, school, notes, start, end }] of education.entries()) {
@@ -253,6 +270,7 @@ export async function seedDemo(
       const resumeUnits = demoResumeUnits(
         (id) => experienceIds.get(id)!,
         (id) => educationIds.get(id)!,
+        (id) => projectIds.get(id)!,
       );
       const letterUnits = demoLetterUnits();
       const extract = ledgerly.extract;

@@ -52,8 +52,9 @@ export function appEnv(): Record<string, string> {
     DOSSIER_GOOGLE_TEST_BASE_URL: `http://localhost:${FAKE_GOOGLE_PORT}`,
     // A production server, so it would ask GitHub for the latest release daily.
     DOSSIER_UPDATES_TEST_BASE_URL: `http://localhost:${FAKE_JOBS_PORT}/github`,
-    // A production server, so it would send the usage ping.
-    DOSSIER_TELEMETRY: "off",
+    // A production server asks whether to send the usage ping (#172); resetData
+    // answers no, and a yes sends it to the fake job sources, never the project.
+    DOSSIER_USAGE_PING_TEST_URL: `http://localhost:${FAKE_JOBS_PORT}/ping`,
     PORT: String(APP_PORT),
   };
 }
@@ -66,7 +67,26 @@ export async function sql<Row extends object = Record<string, unknown>>(text: st
   return (await pool.query<Row>(text, values)).rows;
 }
 
-/** Empties every table, then loads the built-in themes and the demo data. */
+/** USAGE_PING_TEXT_VERSION in src/lib/usage-ping.ts, which a spec can't import (it's server-only). */
+const USAGE_PING_TEXT_VERSION = "1";
+
+/** Answers the usage ping question (#172) as if in the dialog; null leaves it unanswered, so the dialog shows. */
+export async function answerUsagePing(choice: "on" | "off" | null): Promise<void> {
+  await sql(`DELETE FROM "Setting" WHERE key IN ('usagePingChoice', 'usagePingChoiceAt', 'usagePingChoiceText')`);
+  if (!choice) return;
+  await sql(
+    `INSERT INTO "Setting" (key, value, "updatedAt") VALUES ('usagePingChoice', $1, now()), ('usagePingChoiceAt', $2, now()), ('usagePingChoiceText', $3, now())`,
+    [choice, new Date().toISOString(), USAGE_PING_TEXT_VERSION],
+  );
+}
+
+/** The usage pings the fake receiver got so far. */
+export async function fakePings(): Promise<{ id: string; version: string }[]> {
+  const response = await fetch(`http://localhost:${FAKE_JOBS_PORT}/pings`);
+  return ((await response.json()) as { pings: { id: string; version: string }[] }).pings;
+}
+
+/** Empties every table, then loads the built-in themes and the demo data, with the usage ping question answered no. */
 export async function resetData(): Promise<void> {
   const tables = await sql<{ tablename: string }>(
     "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'",
@@ -76,6 +96,7 @@ export async function resetData(): Promise<void> {
     env: { ...process.env, DATABASE_URL: e2eDatabaseUrl() },
     stdio: "pipe",
   });
+  await answerUsagePing("off");
 }
 
 /** How many searches the fake JSearch has answered so far (E14-10). */

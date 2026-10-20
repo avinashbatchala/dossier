@@ -30,6 +30,7 @@ const profile = (): ProfileData => ({
     { id: "e1", role: "A", company: "", location: "", bullets: "", skillIds: ["s1", "s2"], ...span },
     { id: "e2", role: "B", company: "", location: "", bullets: "", skillIds: ["s1"], ...span },
   ],
+  projects: [],
   education: [],
   references: [],
 });

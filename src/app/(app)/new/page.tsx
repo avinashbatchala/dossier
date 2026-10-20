@@ -15,7 +15,7 @@ export default async function NewApplicationPage({ searchParams }: PageProps<"/n
   const { fresh, posting } = await searchParams;
   const [aiReady, applications, settings, fromFindJobs] = await Promise.all([
     isAiConfigured(),
-    prisma.application.count(),
+    prisma.application.count({ where: { awaitingReview: false } }),
     loadSettings(),
     // "Start application" on Find jobs (E14-8).
     typeof posting === "string" ? prisma.posting.findUnique({ where: { id: posting } }) : null,

@@ -172,9 +172,15 @@ export const updateSettings = action(
     defaultTone: z.enum(Tone).optional(),
     /** A language name, or null for the posting's language. */
     docLanguage: z.string().trim().min(1).max(60).nullable().optional(),
+    /** One of the built-in languages, or null for English. */
+    resumeLanguage: z
+      .string()
+      .refine((name) => DOCUMENT_LANGUAGES.some((language) => language.name === name), "Pick a language from the list.")
+      .nullable()
+      .optional(),
     fileNamePattern: z.string().max(200).optional(),
     includeRefs: z.boolean().optional(),
-    onePage: z.boolean().optional(),
+    pageLimit: z.enum(["1", "2", "none"]).optional(),
     nightlyBackup: z.boolean().optional(),
     jobRetentionHours: z.number().refine(isJobRetention).optional(),
     updateCheck: z.boolean().optional(),
@@ -226,11 +232,15 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     // Find jobs' postings and past searches (E14-9, E14-10).
     await tx.posting.deleteMany();
     await tx.postingSearch.deleteMany();
+    // What the job agent found (E16).
+    await tx.agentCandidate.deleteMany();
+    await tx.postingScore.deleteMany();
     // Mail fetched from Gmail (E15-3).
     await tx.emailMessage.deleteMany();
     // Applications take their history, documents, chat and notes along.
     await tx.application.deleteMany();
     await tx.experience.deleteMany();
+    await tx.project.deleteMany();
     await tx.skill.deleteMany();
     await tx.language.deleteMany();
     await tx.education.deleteMany();

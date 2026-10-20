@@ -30,6 +30,7 @@ const SCREENS = [
   "/profile",
   "/profile?section=skills",
   "/profile?section=experience",
+  "/profile?section=projects",
   "/profile?section=education",
   "/profile?section=references",
   "/profile/import",
@@ -40,8 +41,8 @@ const SCREENS = [
   "/jobs?view=dismissed",
   "/agent",
   "/inbox",
-  "/calendar",
-  "/calendar?view=month",
+  // The dashboard's calendar on another month.
+  "/?date=2026-11-01",
   "/settings?section=ai",
   "/settings?section=jobs",
   "/settings?section=agent",

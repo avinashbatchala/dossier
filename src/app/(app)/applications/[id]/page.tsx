@@ -87,6 +87,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
         language,
         followThemeLayout,
         archived: application.archivedAt !== null,
+        awaitingReview: application.awaitingReview,
         nextInterviewAt,
       }}
       timeZone={timeZone}

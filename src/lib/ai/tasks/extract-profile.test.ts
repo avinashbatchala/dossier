@@ -16,6 +16,10 @@ Design Lead, Acme Payments | Mar 2021 to present
 - Set up the design system in Figma
 Product Designer, Fieldnote | 2017 – 2021
 
+Projects
+Payout simulator, github.com/johndoe/payout-sim | 2023
+- Built a simulator for payout edge cases
+
 Education
 MSc Interaction Design, TU Delft, 2015 – 2017
 
@@ -60,6 +64,20 @@ const answer = {
     { role: "Product Designer", company: "Fieldnote", location: null, startYear: 2017, startMonth: 0, endYear: 2021, endMonth: null, current: false, bullets: [], skills: [] },
     { role: "", company: "", location: null, startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, bullets: [], skills: [] },
   ],
+  projects: [
+    {
+      name: "Payout simulator",
+      link: "github.com/johndoe/payout-sim",
+      startYear: 2023,
+      startMonth: null,
+      endYear: null,
+      endMonth: null,
+      current: false,
+      bullets: ["- Built a simulator for payout edge cases"],
+      skills: ["figma"],
+    },
+    { name: " ", link: null, startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, bullets: [], skills: [] },
+  ],
   education: [{ degree: "MSc Interaction Design", school: "TU Delft", startYear: 2015, startMonth: null, endYear: 2017, endMonth: null, current: false, notes: null }],
   references: [{ name: "Jane Doe", relation: "Former manager", company: "Fieldnote", email: null, phone: null }],
 };
@@ -80,7 +98,7 @@ describe("extractProfile (E4-10)", () => {
   it("checks the answer: dates in range, levels, one of each skill, and names looked up in the resume", async () => {
     const provider = new MockProvider({ reply: () => answer });
     const { data, promptVersion } = await extractProfile(provider, { resume: RESUME, today: new Date("2026-09-29") }, options);
-    expect(promptVersion).toBe("extract-profile@1");
+    expect(promptVersion).toBe("extract-profile@2");
     expect(data.basics).toEqual({
       name: "John Doe",
       headline: "Senior Product Designer",
@@ -125,6 +143,21 @@ describe("extractProfile (E4-10)", () => {
         startYear: 2017,
         startMonth: null,
         endYear: 2021,
+        endMonth: null,
+        current: false,
+        unverified: [],
+      },
+    ]);
+    // Projects (PRO-13) are read like roles; one without a name is dropped.
+    expect(data.projects).toEqual([
+      {
+        name: "Payout simulator",
+        link: "github.com/johndoe/payout-sim",
+        bullets: "Built a simulator for payout edge cases",
+        skills: ["Figma"],
+        startYear: 2023,
+        startMonth: null,
+        endYear: null,
         endMonth: null,
         current: false,
         unverified: [],

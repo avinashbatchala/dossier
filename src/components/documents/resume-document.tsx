@@ -1,7 +1,8 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import type { PaperSize, ThemeLayout } from "@/generated/prisma/enums";
 import { cn } from "@/lib/cn";
+import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
 import type { ProfileData } from "@/lib/profile";
 import { resumeContent, type ResumeContent, type ResumeOptions } from "@/lib/resume-content";
@@ -16,7 +17,7 @@ type ResumeDocumentProps = ResumeOptions & {
   paper: PaperSize;
   /** Overrides the theme's layout, e.g. a tailored resume in a single column. */
   layout?: ThemeLayout;
-  /** The language it's written in (SET-7); without one, it's read from the text. */
+  /** The language it's written in (SET-7), for its headings too; without one, it's read from the text and the headings are English. */
   language?: string | null;
   /** Draws each tailored part; the preview's adds editing (E8-3). */
   renderUnit?: UnitRenderer;
@@ -24,7 +25,13 @@ type ResumeDocumentProps = ResumeOptions & {
 
 /** Enough of a resume's own words to tell its script and direction. */
 const sampleText = (content: ResumeContent) =>
-  [content.name, content.headline, content.summary, ...content.experience.flatMap((role) => [role.role, ...role.bullets])].join(" ");
+  [
+    content.name,
+    content.headline,
+    content.summary,
+    ...content.experience.flatMap((role) => [role.role, ...role.bullets]),
+    ...content.projects.flatMap((project) => [project.name, ...project.bullets]),
+  ].join(" ");
 
 /**
  * A resume (RES-1, RES-6, APP-4), the same markup for the preview and the
@@ -36,12 +43,13 @@ const sampleText = (content: ResumeContent) =>
  */
 export function ResumeDocument({ theme, profile, paper, layout, language, renderUnit = plainUnit, ...options }: ResumeDocumentProps) {
   const resolved = resolveTheme(theme, layout);
-  const content = resumeContent(profile, options);
+  const labels = documentLabels(language);
+  const content = resumeContent(profile, options, labels);
   const { lang, dir } = documentLanguage(language, sampleText(content));
 
   const sidebar = [
     resolved.split && content.contacts.length > 0 && (
-      <DocumentSection key="contact" title="Contact">
+      <DocumentSection key="contact" title={labels.contact}>
         <ul className={styles.contactList}>
           {content.contacts.map((item, index) => (
             <li key={index}>
@@ -52,12 +60,12 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
       </DocumentSection>
     ),
     content.skills && (
-      <DocumentSection key="skills" title="Skills">
+      <DocumentSection key="skills" title={labels.skills}>
         {renderUnit({ id: "skills", children: <p>{content.skills}</p> })}
       </DocumentSection>
     ),
     content.languages && (
-      <DocumentSection key="languages" title="Languages">
+      <DocumentSection key="languages" title={labels.languages}>
         {renderUnit({ id: "languages", children: <p>{content.languages}</p> })}
       </DocumentSection>
     ),
@@ -65,12 +73,12 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
 
   const main = [
     content.summary && (
-      <DocumentSection key="summary" title="Profile">
+      <DocumentSection key="summary" title={labels.profile}>
         {renderUnit({ id: "summary", children: <p className={styles.summary}>{content.summary}</p> })}
       </DocumentSection>
     ),
     content.experience.length > 0 && (
-      <DocumentSection key="experience" title="Experience">
+      <DocumentSection key="experience" title={labels.experience}>
         {content.experience.map((role) => (
           <Fragment key={role.id}>
             {renderUnit({
@@ -88,7 +96,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
                   )}
                   {role.skills.length > 0 && (
                     <p className={styles.entrySkills}>
-                      <span className={styles.accent}>Skills · </span>
+                      <span className={styles.accent}>{`${labels.skills} · `}</span>
                       {role.skills.join(", ")}
                     </p>
                   )}
@@ -99,8 +107,45 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </DocumentSection>
     ),
+    content.projects.length > 0 && (
+      <DocumentSection key="projects" title={labels.projects}>
+        {content.projects.map((project) => (
+          <Fragment key={project.id}>
+            {renderUnit({
+              id: `project:${project.id}`,
+              className: styles.entry,
+              head: (
+                <EntryHead
+                  title={project.name}
+                  at={project.link && <Contact>{project.link}</Contact>}
+                  dates={project.dates}
+                  timeline={resolved.timeline}
+                />
+              ),
+              children: (
+                <>
+                  {project.bullets.length > 0 && (
+                    <ul className={styles.bullets}>
+                      {project.bullets.map((bullet, index) => (
+                        <li key={index}>{bullet}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {project.skills.length > 0 && (
+                    <p className={styles.entrySkills}>
+                      <span className={styles.accent}>{`${labels.skills} · `}</span>
+                      {project.skills.join(", ")}
+                    </p>
+                  )}
+                </>
+              ),
+            })}
+          </Fragment>
+        ))}
+      </DocumentSection>
+    ),
     content.education.length > 0 && (
-      <DocumentSection key="education" title="Education">
+      <DocumentSection key="education" title={labels.education}>
         {content.education.map((entry) => (
           <Fragment key={entry.id}>
             {renderUnit({
@@ -114,7 +159,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
       </DocumentSection>
     ),
     content.references.length > 0 && (
-      <DocumentSection key="references" title="References">
+      <DocumentSection key="references" title={labels.references}>
         <div className={styles.references}>
           {content.references.map((reference) => (
             <div key={reference.id}>
@@ -169,14 +214,19 @@ const breakAfterDash = (dates: string) =>
  * the line, or before it in a timeline column (the dates come first then, so
  * they float into the column next to the title).
  */
-function EntryHead({ title, at, dates, timeline }: { title: string; at: string; dates: string; timeline: boolean }) {
+function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNode; dates: string; timeline: boolean }) {
   const datesSpan = dates && <span className={styles.dates}>{timeline ? breakAfterDash(dates) : dates}</span>;
   return (
     <div className={styles.entryHead}>
       {timeline && datesSpan}
       <p>
         <span className={styles.entryTitle}>{title}</span>
-        {at && (title ? `, ${at}` : at)}
+        {at && (
+          <>
+            {title && ", "}
+            {at}
+          </>
+        )}
       </p>
       {!timeline && datesSpan}
     </div>

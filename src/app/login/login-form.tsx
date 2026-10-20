@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition, type FormEvent } from "react";
+import { useActionState, useRef, useState, useTransition, type FormEvent } from "react";
 
 import { toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -9,17 +9,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 
-import { signIn } from "./actions";
+import { signIn, signInWithForm } from "./actions";
 import { loginMessages } from "./messages";
 
-/** The password-only sign-in form (PRD AUTH-1, AUTH-4). */
+/**
+ * The password-only sign-in form (PRD AUTH-1, AUTH-4). With scripts, `submit`
+ * signs in and the form's own submit never happens. Before they've run, the
+ * browser posts the form to `signInWithForm` instead (#187).
+ */
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [posted, formAction] = useActionState(signInWithForm, null);
+  const [error, setError] = useState<string | null>(posted?.error ?? null);
   const [pending, startTransition] = useTransition();
 
   function fail(message: string) {
@@ -42,10 +47,12 @@ export function LoginForm({ next }: { next?: string }) {
 
   return (
     <form
+      action={formAction}
       onSubmit={submit}
       noValidate
       className="flex flex-col gap-5"
     >
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="flex flex-col gap-1.5">
         <h1 className="font-serif text-[28px] leading-[1.15] tracking-[-0.01em]">Welcome back</h1>
         <p className="text-sm text-muted">Sign in to pick up where you left off.</p>
@@ -89,6 +96,7 @@ export function LoginForm({ next }: { next?: string }) {
 
       <Checkbox
         label="Keep me signed in for 30 days"
+        name="remember"
         checked={remember}
         onChange={(event) => setRemember(event.target.checked)}
       />

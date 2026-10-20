@@ -5,14 +5,13 @@ CREATE TYPE "ApplicationOrigin" AS ENUM ('MANUAL', 'AGENT');
 CREATE TYPE "AgentCandidateStatus" AS ENUM ('SCORED', 'DRAFTING', 'DRAFTED', 'APPROVED', 'DISMISSED');
 
 -- AlterTable
-ALTER TABLE "Application" ADD COLUMN     "agentJobId" TEXT,
-ADD COLUMN     "agentScore" INTEGER,
+ALTER TABLE "Application" ADD COLUMN     "agentScore" INTEGER,
+ADD COLUMN     "awaitingReview" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "origin" "ApplicationOrigin" NOT NULL DEFAULT 'MANUAL';
 
 -- CreateTable
 CREATE TABLE "AgentCandidate" (
     "id" TEXT NOT NULL,
-    "jobId" TEXT,
     "source" "PostingSource" NOT NULL,
     "externalId" TEXT NOT NULL,
     "title" TEXT NOT NULL DEFAULT '',

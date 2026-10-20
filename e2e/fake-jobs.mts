@@ -38,11 +38,23 @@ function send(response: ServerResponse, status: number, body: unknown) {
 
 /** How many JSearch searches were asked for, so a spec can tell a kept search came from the database. */
 let searches = 0;
+/** The usage pings the app sent here (DOSSIER_USAGE_PING_TEST_URL), so a spec can tell whether one went (#172). */
+const pings: unknown[] = [];
 
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${port}`);
   if (url.pathname === "/health") return send(response, 200, { ok: true });
   if (url.pathname === "/searches") return send(response, 200, { searches });
+  if (url.pathname === "/pings") return send(response, 200, { pings });
+  if (url.pathname === "/ping" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      pings.push(JSON.parse(body));
+      response.writeHead(204).end();
+    });
+    return;
+  }
   // The update check (DOSSIER_UPDATES_TEST_BASE_URL): no release is out, so
   // what a test stores as the latest release stays as it is.
   if (url.pathname === "/github/repos/AienTech/dossier/releases/latest") return send(response, 404, { message: "Not Found" });

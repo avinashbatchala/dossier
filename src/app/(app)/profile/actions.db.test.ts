@@ -7,14 +7,20 @@ import {
   addLanguage,
   applyProfileImport,
   addSkill,
+  attachNewProjectSkill,
   attachNewSkill,
   createEducation,
   createExperience,
+  createProject,
   createReference,
   discardProfileImport,
   removeEducation,
   removeExperience,
+  removeProject,
   restoreExperience,
+  restoreProject,
+  saveProject,
+  setProjectSkill,
   saveExperience,
   saveReference,
   removeLanguage,
@@ -157,6 +163,39 @@ describe("profile actions", () => {
     expect(await prisma().experienceSkill.count()).toBe(1);
   });
 
+  it("creates, saves, removes and restores a project with its skill links (PRO-13)", async () => {
+    const python = await prisma().skill.create({ data: { name: "Python" } });
+    const pandas = await prisma().skill.create({ data: { name: "pandas" } });
+    const created = await createProject({});
+    if (!created.ok) throw new Error(created.error);
+    expect(created.data).toMatchObject({ name: "", link: "", bullets: "", current: false, skillIds: [] });
+
+    const entry = { ...created.data, name: "Churn predictor", link: "github.com/jane/churn", bullets: "Trained a model\nShipped a dashboard", startYear: 2025, startMonth: 2, current: true };
+    expect(await saveProject(entry)).toEqual({ ok: true, data: null });
+    await setProjectSkill({ projectId: entry.id, skillId: python.id, attached: true });
+    await setProjectSkill({ projectId: entry.id, skillId: python.id, attached: true }); // twice is fine
+    const added = await attachNewProjectSkill({ projectId: entry.id, name: "PANDAS" });
+    expect(added).toMatchObject({ ok: true, data: { added: false, skill: { id: pandas.id } } });
+    expect(await prisma().projectSkill.count()).toBe(2);
+    expect((await loadProfile()).projects).toEqual([{ ...entry, skillIds: expect.arrayContaining([python.id, pandas.id]) }]);
+    await setProjectSkill({ projectId: entry.id, skillId: pandas.id, attached: false });
+    expect(await prisma().projectSkill.count()).toBe(1);
+
+    await removeProject({ id: entry.id });
+    expect(await prisma().project.count()).toBe(0);
+    // A save that arrives after the removal does nothing.
+    await expect(saveProject(entry)).resolves.toEqual({ ok: true, data: null });
+    expect(await prisma().project.count()).toBe(0);
+
+    // Undo: the project comes back with links to the skills that still exist.
+    await prisma().skill.delete({ where: { id: pandas.id } });
+    const restored = await restoreProject({ ...entry, skillIds: [python.id, pandas.id] });
+    expect(restored).toMatchObject({ ok: true, data: { id: entry.id, name: "Churn predictor", skillIds: [python.id] } });
+    // Removing a skill detaches it from projects too.
+    await removeSkill({ id: python.id });
+    expect(await prisma().projectSkill.count()).toBe(0);
+  });
+
   it("creates, saves, removes and restores education and references", async () => {
     const school = await createEducation({});
     const person = await createReference({});
@@ -221,6 +260,20 @@ describe("ordering experience and education (E4-9)", () => {
     expect(await roles()).toEqual(["Newer", "Older"]);
   });
 
+  it("orders projects the same way, with their own setting (PRO-13)", async () => {
+    const a = await createProject({});
+    const b = await createProject({});
+    if (!a.ok || !b.ok) throw new Error("not created");
+    await saveProject({ ...a.data, name: "Older", startYear: 2019 });
+    await saveProject({ ...b.data, name: "Newer", startYear: 2024 });
+    expect((await loadProfile()).projects.map((entry) => entry.name)).toEqual(["Newer", "Older"]);
+    await reorderEntries({ section: "project", ids: [a.data.id, b.data.id] });
+    expect((await loadProfile()).projects.map((entry) => entry.name)).toEqual(["Older", "Newer"]);
+    expect((await prisma().setting.findUnique({ where: { key: "projectOrder" } }))?.value).toBe("manual");
+    expect(await prisma().setting.findUnique({ where: { key: "experienceOrder" } })).toBeNull();
+    expect(await sortEntriesByDate({ section: "project" })).toEqual({ ok: true, data: [b.data.id, a.data.id] });
+  });
+
   it("orders education the same way", async () => {
     const a = await createEducation({});
     const b = await createEducation({});
@@ -257,7 +310,7 @@ describe("applying a profile read from a resume (E4-10)", () => {
     expect(await applyProfileImport({ jobId: job.id, mode: "merge" })).toEqual({
       ok: true,
       data: null,
-      toast: "Added to your profile: 0 roles, 0 degrees, 1 skill, 0 languages, 0 references.",
+      toast: "Added to your profile: 0 roles, 0 projects, 0 degrees, 1 skill, 0 languages, 0 references.",
     });
     expect((await loadProfile()).basics.name).toBe("John Doe");
     // The reading goes once it's used, with the resume's text.

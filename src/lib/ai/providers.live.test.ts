@@ -2,15 +2,28 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { AnthropicProvider } from "./providers/anthropic";
+import { LmStudioProvider } from "./providers/lmstudio";
 import { LocalProvider } from "./providers/local";
+import { MistralProvider } from "./providers/mistral";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import type { AIProvider } from "./provider";
+import { liveLmStudio, liveMistral } from "./test-live";
 
 // Checks against real models, skipped unless asked for:
 //
 //   docker compose up -d ollama   # with qwen2.5:3b pulled (see compose.yml)
 //   AI_LIVE=ollama docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
 //   AI_LIVE=anthropic ANTHROPIC_TEST_KEY=… docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
+//   AI_LIVE=mistral docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
+//
+// Mistral's key is DOSSIER_AI_KEY when that's set, or else the one saved in
+// Settings → AI provider with Mistral chosen.
+//
+//   AI_LIVE=lmstudio docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
+//
+// LM Studio's model is DOSSIER_AI_MODEL (at DOSSIER_AI_URL, by default on the
+// Docker host), or else the one saved in Settings with LM Studio chosen.
+// A model that isn't loaded gets loaded, and stays loaded until ejected.
 //
 // AI_LIVE takes a comma-separated list. OLLAMA_URL and OLLAMA_MODEL override
 // the defaults below.
@@ -72,5 +85,55 @@ describe.runIf(live.has("anthropic") && Boolean(process.env.ANTHROPIC_TEST_KEY))
 
   it("refuses a wrong key in plain words", async () => {
     await expect(new AnthropicProvider("https://api.anthropic.com", "sk-ant-wrong", model, 60_000).test()).rejects.toMatchObject({ kind: "auth" });
+  });
+});
+
+const mistral = live.has("mistral") ? await liveMistral() : null;
+
+describe.runIf(mistral)("live: Mistral", () => {
+  const { key, model } = mistral ?? { key: "", model: "" };
+  const make = (apiKey = key) => new MistralProvider("https://api.mistral.ai/v1", apiKey, model, 120_000);
+  checks("chat completions", () => make(), model);
+
+  it("answers a reading task in plain JSON", async () => {
+    const result = await make().complete({
+      system: "Extract the job details from the posting.",
+      messages: [{ role: "user", content: posting }],
+      schema: Posting,
+      schemaName: "posting",
+      effort: "low",
+    });
+    expect(result).toMatchObject({ company: "Ledgerly", city: "Amsterdam" });
+  });
+
+  it("refuses a wrong key in plain words", async () => {
+    await expect(make("wrong-key").test()).rejects.toMatchObject({ kind: "auth" });
+  });
+});
+
+const lmStudio = live.has("lmstudio") ? await liveLmStudio() : null;
+
+describe.runIf(lmStudio)("live: LM Studio", () => {
+  const { url, key, model } = lmStudio ?? { url: "", key: null, model: "" };
+  const make = (name = model) => new LmStudioProvider(url, key, name, 300_000);
+  checks("OpenAI-compatible endpoint", () => make(), model);
+
+  it("answers a reading task in plain JSON, with thinking off", async () => {
+    const result = await make().complete({
+      system: "Extract the job details from the posting.",
+      messages: [{ role: "user", content: posting }],
+      schema: Posting,
+      schemaName: "posting",
+      effort: "low",
+    });
+    expect(result).toMatchObject({ company: "Ledgerly", city: "Amsterdam" });
+  });
+
+  it("refuses a model it doesn't have", async () => {
+    await expect(make("no-such-model").test()).rejects.toMatchObject({ kind: "model" });
+  });
+
+  it("is found by Local model too", async () => {
+    expect(await new LocalProvider(url, model, 300_000).test()).toMatchObject({ model });
   });
 });

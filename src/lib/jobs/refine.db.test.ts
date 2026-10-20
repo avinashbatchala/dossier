@@ -24,7 +24,7 @@ vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 const prisma = () => db.client!;
 const resume = demoResumeUnits();
 const letter = [...demoLetterUnits(), { id: "sign-off", label: "Sign-off", text: "Warm regards," }];
-const context = { step: async () => {}, signal: new AbortController().signal };
+const context = { id: "test-job", step: async () => {}, signal: new AbortController().signal };
 const reply = (answer: object) => new MockProvider({ reply: () => ({ edits: [], tone: null, declined: false, ...answer }) });
 
 async function ask(request: string, extra: { target?: { document: "RESUME" | "COVER_LETTER"; unitId: string } | null } = {}) {
@@ -63,7 +63,7 @@ describe("refineJob (E8-5)", () => {
     expect(saved).toMatchObject({
       role: "AI",
       text: "Trimmed your summary.",
-      writtenWith: "refine-chat@4",
+      writtenWith: "refine-chat@5",
       previousTone: null,
       edits: [{ document: "RESUME", unitId: "summary", text: "Designer of calm tools.", previousText: resume[0].text }],
     });

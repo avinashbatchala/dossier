@@ -6,11 +6,15 @@ import { rememberDashboardPeriod } from "./actions";
 import { PeriodFilter } from "./period-filter";
 
 const router = { replace: vi.fn() };
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const params = vi.hoisted(() => ({ current: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, useSearchParams: () => params.current }));
 vi.mock("./actions", () => ({ rememberDashboardPeriod: vi.fn(async () => ({ ok: true, data: null })) }));
 
 describe("the dashboard's period filter (E9-8)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    params.current = new URLSearchParams();
+  });
 
   it("shows the period in use, above what it scopes", () => {
     render(
@@ -33,5 +37,17 @@ describe("the dashboard's period filter (E9-8)", () => {
     await user.click(screen.getByRole("radio", { name: "Last 30 days" }));
     expect(rememberDashboardPeriod).toHaveBeenCalledWith({ period: "30d" });
     expect(router.replace).toHaveBeenCalledWith("/?period=30d", { scroll: false });
+  });
+
+  it("keeps the calendar's month", async () => {
+    const user = userEvent.setup();
+    params.current = new URLSearchParams("date=2026-11-01&period=all");
+    render(
+      <PeriodFilter period="all">
+        <p>The figures</p>
+      </PeriodFilter>,
+    );
+    await user.click(screen.getByRole("radio", { name: "Last 90 days" }));
+    expect(router.replace).toHaveBeenCalledWith("/?date=2026-11-01&period=90d", { scroll: false });
   });
 });

@@ -27,10 +27,10 @@ export type ApplicationRow = {
   updatedAt: number;
 };
 
-/** Every application, archived ones only when asked for, sorted for the table. */
+/** Every application, archived ones only when asked for, sorted for the table; agent drafts once approved (#195). */
 export async function loadApplicationRows({ archived, sort }: { archived: boolean; sort: Sort }, now = new Date()) {
   const applications = await prisma.application.findMany({
-    where: archived ? {} : { archivedAt: null },
+    where: { awaitingReview: false, ...(archived ? {} : { archivedAt: null }) },
     select: {
       id: true,
       title: true,

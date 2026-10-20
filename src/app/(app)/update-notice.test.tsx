@@ -30,7 +30,7 @@ describe("UpdateNotice", () => {
     const notice = screen.getByRole("region", { name: "Dossier 1.6.0 is out" });
     expect(notice).toHaveTextContent("You have 1.5.0. Update to get its fixes and features.");
     expect(screen.getByRole("link", { name: "What's new (opens in a new tab)" })).toHaveAttribute("href", release.url);
-    expect(screen.getByRole("link", { name: "How to update (opens in a new tab)" })).toHaveAttribute("href", "https://github.com/AienTech/dossier#upgrading");
+    expect(screen.getByRole("link", { name: "How to update (opens in a new tab)" })).toHaveAttribute("href", "https://github.com/AienTech/dossier/wiki/Upgrading");
   });
 
   it("goes with Not now, until the next release, and focus moves on", async () => {

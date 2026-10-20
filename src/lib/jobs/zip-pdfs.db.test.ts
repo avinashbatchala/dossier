@@ -24,7 +24,7 @@ vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
 const prisma = () => db.client!;
 const steps: string[] = [];
-const context = { step: async (name: string) => void steps.push(name), signal: new AbortController().signal };
+const context = { id: "test-job", step: async (name: string) => void steps.push(name), signal: new AbortController().signal };
 
 beforeEach(async () => {
   dataDir.path = await mkdtemp(path.join(tmpdir(), "dossier-zip-"));

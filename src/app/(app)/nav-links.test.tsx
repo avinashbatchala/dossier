@@ -32,7 +32,6 @@ describe("NavLinks", () => {
       "Agent",
       "Applications",
       "Inbox",
-      "Calendar",
       "Settings",
     ]);
   });

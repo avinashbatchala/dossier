@@ -22,12 +22,21 @@ export async function register() {
     const { startInboxSchedule } = await import("@/lib/google/sync");
     startInboxSchedule();
 
-    // The job agent's daily search (E16).
+    // The job agent's daily run, while it's on (E16-4).
     const { startAgentSchedule } = await import("@/lib/agent/schedule");
     startAgentSchedule();
 
-    // Says what the usage ping sends and how to stop it, while it's on.
-    const { USAGE_PING_NOTICE, usagePingEnabled } = await import("@/lib/usage-ping");
-    if (usagePingEnabled()) console.log(USAGE_PING_NOTICE);
+    // DOSSIER_TELEMETRY, when set, is the usage ping's answer on record (#172).
+    // Then the log says what the ping sends while it's on, or how to answer
+    // while nobody has.
+    const { recordEnvChoice, usagePingNotice } = await import("@/lib/usage-ping");
+    const { loadSettings } = await import("@/lib/settings-data");
+    try {
+      await recordEnvChoice();
+      const notice = usagePingNotice(await loadSettings());
+      if (notice) console.log(notice);
+    } catch (error) {
+      logServerError("usage ping", error);
+    }
   }
 }

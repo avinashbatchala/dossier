@@ -8,7 +8,7 @@ import { rememberQuietDays } from "./actions";
 import { Dashboard } from "./dashboard";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null, useSearchParams: () => new URLSearchParams() }));
 vi.mock("./actions", () => ({ rememberDashboardPeriod: vi.fn(), rememberQuietDays: vi.fn(async () => ({ ok: true, data: null })) }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
@@ -139,5 +139,17 @@ describe("the dashboard (E9-7)", () => {
     expect(screen.getByRole("heading", { name: "Welcome to Dossier" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Fill in your profile" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByRole("region", { name: "Your funnel" })).not.toBeInTheDocument();
+  });
+
+  it("shows the calendar after the cards, outside the time filter (E15-6)", () => {
+    const calendar = <section aria-label="Calendar" />;
+    const { rerender } = render(<Dashboard {...props} calendar={calendar} />);
+    const region = screen.getByRole("region", { name: "Calendar" });
+    expect(screen.getByRole("region", { name: "Worth a look" }).compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Not among the cards, which dim while another period loads.
+    expect(screen.getByRole("region", { name: "Your funnel" }).parentElement!.contains(region)).toBe(false);
+    // A new user has the calendar too.
+    rerender(<Dashboard {...props} empty calendar={calendar} />);
+    expect(screen.getByRole("region", { name: "Calendar" })).toBeInTheDocument();
   });
 });

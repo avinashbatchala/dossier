@@ -151,7 +151,7 @@ export const unitEditSchema = z.object({
 
 /**
  * Document.trimmed (E10-10): what was left out of a tailored resume to fit
- * one page, so it can be put back. A whole role goes back where it was;
+ * its page limit, so it can be put back. A whole role goes back where it was;
  * bullets go back at the end of their role.
  */
 export const trimmedSchema = z.array(

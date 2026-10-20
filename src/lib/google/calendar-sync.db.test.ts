@@ -149,7 +149,7 @@ describe("Google to Dossier", () => {
   });
 });
 
-describe("the Calendar screen's data (E15-6)", () => {
+describe("the dashboard calendar's data (E15-6)", () => {
   const week = ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"];
 
   it("shows Google's events with the interviews linked, and interviews that aren't in Google", async () => {
@@ -160,7 +160,7 @@ describe("the Calendar screen's data (E15-6)", () => {
     events.set("later", { id: "later", status: "confirmed", summary: "Next week", start: { dateTime: "2026-10-28T09:00:00Z" }, end: { dateTime: "2026-10-28T10:00:00Z" } });
 
     const calendar = await loadCalendar(week);
-    expect(calendar).toMatchObject({ timeZone: "Europe/Berlin", source: { status: "google" }, workStart: "09:00" });
+    expect(calendar).toMatchObject({ timeZone: "Europe/Berlin", source: { status: "google" } });
     const byId = Object.fromEntries(calendar.items.map((item) => [item.id, item]));
     expect(Object.keys(byId).sort()).toEqual(["dentist", "ev1", "interview-lg", "trip"]);
     expect(byId.ev1).toMatchObject({ kind: "interview", href: "/applications/nw", external: false, title: "Interview · Product Designer · Northwind" });

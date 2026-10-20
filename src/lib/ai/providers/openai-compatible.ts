@@ -2,6 +2,7 @@ import "server-only";
 
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
+import type { ReasoningEffort } from "openai/resources/shared";
 import { z } from "zod";
 
 import { BaseProvider, type ChatAnswer, type ChatCall } from "../provider";
@@ -11,11 +12,12 @@ import { keyGuardedFetch } from "./guarded-fetch";
 const JSON_MODES = ["schema", "object", "prompt"] as const;
 type JsonMode = (typeof JSON_MODES)[number];
 
-type Quirks = { noTemperature: boolean; maxCompletionTokens: boolean; json: JsonMode };
+type Quirks = { noTemperature: boolean; maxCompletionTokens: boolean; noEffort: boolean; json: JsonMode };
 
 // What each server and model turned out to accept, so it's only learnt once:
 // newer OpenAI models refuse `temperature` and `max_tokens`, many compatible
-// servers only know `max_tokens`, and not all of them do JSON schemas.
+// servers only know `max_tokens`, not all of them do JSON schemas, and not
+// every model takes a reasoning effort.
 const quirks = new Map<string, Quirks>();
 
 /** DeepSeek's API, whose models think before answering unless told not to. */
@@ -33,13 +35,26 @@ function hostOf(url: string): string {
   }
 }
 
+/**
+ * The answer's text. Some servers, Mistral's among them, send a model that
+ * thinks as a list of chunks: the text ones are the answer, the thinking
+ * isn't.
+ */
+export function answerText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((chunk: { type?: unknown; text?: unknown }) => (chunk?.type === "text" && typeof chunk.text === "string" ? [chunk.text] : []))
+    .join("");
+}
+
 /** Any server that speaks the OpenAI chat completions API, including llama.cpp's server. */
 export class OpenAICompatibleProvider extends BaseProvider {
-  private readonly client: OpenAI;
+  protected readonly client: OpenAI;
   private readonly deepseek: boolean;
 
   constructor(
-    readonly kind: "OPENAI" | "LOCAL",
+    readonly kind: "OPENAI" | "LOCAL" | "MISTRAL" | "LMSTUDIO",
     private readonly baseURL: string,
     apiKey: string | null,
     model: string | null,
@@ -60,23 +75,25 @@ export class OpenAICompatibleProvider extends BaseProvider {
 
   protected async chat(call: ChatCall): Promise<ChatAnswer> {
     const key = `${this.baseURL} ${call.model}`;
-    let known: Quirks = quirks.get(key) ?? { noTemperature: false, maxCompletionTokens: false, json: "schema" };
-    // A 400 naming a parameter this model doesn't take: adapt and remember,
-    // once per parameter.
+    let known: Quirks = quirks.get(key) ?? { noTemperature: false, maxCompletionTokens: false, noEffort: false, json: "schema" };
+    // A 400 or 422 naming a parameter this model doesn't take: adapt and
+    // remember, once per parameter.
     for (;;) {
       try {
         return await this.send(call, known);
       } catch (error) {
-        const message = error instanceof OpenAI.BadRequestError ? error.message : "";
+        const message = error instanceof OpenAI.BadRequestError || error instanceof OpenAI.UnprocessableEntityError ? error.message : "";
         const jsonRefused = call.json !== undefined && /response_format|json_schema|json_object|structured/i.test(message);
         const adapted: Quirks = {
           noTemperature: known.noTemperature || (call.temperature !== undefined && /temperature/i.test(message)),
           maxCompletionTokens: known.maxCompletionTokens || /max_tokens/.test(message),
+          noEffort: known.noEffort || (this.reasoningEffort(call) !== undefined && /reasoning_effort/i.test(message)),
           json: jsonRefused ? (JSON_MODES[JSON_MODES.indexOf(known.json) + 1] ?? known.json) : known.json,
         };
         if (
           adapted.noTemperature === known.noTemperature &&
           adapted.maxCompletionTokens === known.maxCompletionTokens &&
+          adapted.noEffort === known.noEffort &&
           adapted.json === known.json
         ) {
           throw error;
@@ -87,7 +104,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
     }
   }
 
-  private async send(call: ChatCall, { noTemperature, maxCompletionTokens, json }: Quirks): Promise<ChatAnswer> {
+  /** The `reasoning_effort` to send for `call`, if any; none by default, as servers differ in what they take. */
+  protected reasoningEffort(call: ChatCall): ReasoningEffort | undefined {
+    void call;
+    return undefined;
+  }
+
+  private async send(call: ChatCall, { noTemperature, maxCompletionTokens, noEffort, json }: Quirks): Promise<ChatAnswer> {
+    const effort = noEffort ? undefined : this.reasoningEffort(call);
     // Without schema support, the schema goes into the instructions instead.
     const system =
       call.json && json !== "schema"
@@ -111,12 +135,15 @@ export class OpenAICompatibleProvider extends BaseProvider {
       messages: [{ role: "system", content: system }, ...call.messages],
       ...(noTemperature || call.temperature === undefined ? {} : { temperature: call.temperature }),
       ...(maxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+      ...(effort ? { reasoning_effort: effort } : {}),
       ...responseFormat,
       ...(this.deepseek ? { thinking: { type: "disabled" as const } } : {}),
     };
     const completion = await this.client.chat.completions.create(body, { signal: call.signal });
     const choice = completion.choices[0];
-    return { text: choice?.message?.content ?? "", cutOff: choice?.finish_reason === "length" };
+    // Mistral says `model_length` when the context ran out instead.
+    const finish: string | undefined = choice?.finish_reason;
+    return { text: answerText(choice?.message?.content), cutOff: finish === "length" || finish === "model_length" };
   }
 
   protected async fetchModels(signal: AbortSignal): Promise<string[]> {

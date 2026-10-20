@@ -15,7 +15,7 @@ export function languageLevelLabel(level: LanguageLevel): string {
   return LANGUAGE_LEVELS.find((option) => option.value === level)?.label ?? level;
 }
 
-/** The dates of an experience or education entry. Months are 1–12. */
+/** The dates of an experience, project or education entry. Months are 1–12. */
 export type DateSpan = {
   startYear: number | null;
   startMonth: number | null;
@@ -32,18 +32,22 @@ type DateFormatOptions = {
   present?: string;
 };
 
-/** "Mar 2021", or "2013" without a month, or "" without a year. */
+/**
+ * "Mar 2021", or "2013" without a month, or "" without a year, in the
+ * locale's own order and digits ("2021年3月", "سپتامبر ۲۰۲۱").
+ */
 export function formatMonthYear(
   year: number | null,
   month: number | null,
   { locale = "en-US" }: DateFormatOptions = {},
 ): string {
   if (year === null) return "";
-  if (month === null) return String(year);
-  const monthName = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }).format(
-    Date.UTC(2000, month - 1, 1),
-  );
-  return `${monthName} ${year}`;
+  // The profile's dates are Gregorian, even where the locale's calendar isn't (Persian).
+  return new Intl.DateTimeFormat(`${locale}-u-ca-gregory`, {
+    year: "numeric",
+    month: month === null ? undefined : "short",
+    timeZone: "UTC",
+  }).format(Date.UTC(year, (month ?? 1) - 1, 1));
 }
 
 /** "Mar 2021 – Present", "2013 – 2015", "Sep 2015 – May 2018", or a single date. */
@@ -106,6 +110,14 @@ export type ExperienceItem = DateSpan & {
   bullets: string;
   skillIds: string[];
 };
+/** A project (PRO-13): what was built, where to see it, and the skills used, like a role. */
+export type ProjectItem = DateSpan & {
+  id: string;
+  name: string;
+  link: string;
+  bullets: string;
+  skillIds: string[];
+};
 export type EducationItem = DateSpan & { id: string; degree: string; school: string; notes: string };
 export type ReferenceItem = {
   id: string;
@@ -120,6 +132,7 @@ export type ProfileData = {
   skills: SkillItem[];
   languages: LanguageItem[];
   experience: ExperienceItem[];
+  projects: ProjectItem[];
   education: EducationItem[];
   references: ReferenceItem[];
 };
@@ -181,7 +194,7 @@ export function byStartDateDesc(
   return key(b) - key(a) || a.sort - b.sort;
 }
 
-/** How experience and education are ordered (E4-9): by date until an entry is moved by hand. */
+/** How experience, projects and education are ordered (E4-9): by date until an entry is moved by hand. */
 export type EntryOrder = "date" | "manual";
 
 /** The entries in the section's order, as a new array. */

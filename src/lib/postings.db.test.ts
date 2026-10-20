@@ -118,9 +118,9 @@ describe("postingStates", () => {
     await prisma().posting.update({ where: { source_externalId: ref }, data: { applicationId: application.id } });
 
     const states = await postingStates([found, other, third]);
-    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), saved: true, dismissed: false, applicationId: application.id });
-    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), saved: false, dismissed: true, applicationId: null });
-    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, saved: false, dismissed: false, applicationId: null });
+    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), saved: true, dismissed: false, applicationId: application.id, score: null });
+    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), saved: false, dismissed: true, applicationId: null, score: null });
+    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, saved: false, dismissed: false, applicationId: null, score: null });
   });
 
   it("counts applications made from the same link before Find jobs, ignoring tracking", async () => {
@@ -130,6 +130,13 @@ describe("postingStates", () => {
     await prisma().application.create({ data: { title: "No link" } });
     const states = await postingStates([found]);
     expect(states.get("JSEARCH:job-1")).toMatchObject({ postingId: null, applicationId: earlier.id });
+  });
+
+  it("has each result's score, scored or not (#208)", async () => {
+    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", score: 82, reasons: ["Research"], redFlags: [], scoredWith: "score-posting@1" } });
+    const states = await postingStates([found, { ...found, externalId: "job-2" }]);
+    expect(states.get("JSEARCH:job-1")?.score).toEqual({ score: 82, reasons: ["Research"], redFlags: [] });
+    expect(states.get("JSEARCH:job-2")?.score).toBeNull();
   });
 
   it("asks nothing for no results", async () => {

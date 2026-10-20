@@ -1,4 +1,4 @@
-# Dossier with Docker Compose (see "Self-hosting" in the README). Save this
+# Dossier with Docker Compose (see the installation guide, https://github.com/AienTech/dossier/wiki). Save this
 # file as compose.yml in a folder of its own, put POSTGRES_PASSWORD,
 # DOSSIER_PASSWORD (a hash of your password, from `docker run --rm -it
 # ghcr.io/aientech/dossier hash-password`) and DOSSIER_SECRET in a .env file
@@ -43,7 +43,7 @@ services:
       DOSSIER_AI_MODEL: ${DOSSIER_AI_MODEL:-}
       DOSSIER_AI_KEY: ${DOSSIER_AI_KEY:-}
       DOSSIER_AI_TIMEOUT_SECONDS: ${DOSSIER_AI_TIMEOUT_SECONDS:-}
-      # off stops the daily usage ping (see Privacy in the README).
+      # The daily usage ping: unset, Dossier asks after sign-in; on or off answers in advance (see Privacy in the wiki).
       DOSSIER_TELEMETRY: ${DOSSIER_TELEMETRY:-}
       # Defaults for Settings → Job search.
       DOSSIER_JOBS_SOURCE: ${DOSSIER_JOBS_SOURCE:-}
@@ -63,12 +63,13 @@ services:
       - data:/data
     # Room for Chromium, which prints the PDFs.
     mem_limit: 1g
-    # Lets http://host.docker.internal:11434 reach an Ollama on the host.
+    # Lets http://host.docker.internal reach Ollama (:11434) or LM Studio
+    # (:1234) on the host.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
   # A local model, with COMPOSE_PROFILES=ai in .env: `docker compose up -d`,
-  # then pull one (see the README). Dossier reaches it at http://ollama:11434.
+  # then pull one (see "Choosing an AI provider" in the wiki). Dossier reaches it at http://ollama:11434.
   ollama:
     profiles: [ai]
     image: ollama/ollama:0.34.4

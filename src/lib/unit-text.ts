@@ -3,7 +3,7 @@
 /** Bullet characters a model may add even when asked not to, and people type out of habit. */
 const BULLET = /^\s*(?:[-*•·]|\d+[.)])\s+/;
 
-/** A role's bullets are one per line, without bullet characters or empty lines. */
+/** A role's or project's bullets are one per line, without bullet characters or empty lines. */
 export function bulletLines(text: string): string {
   return text
     .split("\n")
@@ -12,23 +12,23 @@ export function bulletLines(text: string): string {
     .join("\n");
 }
 
-/** Whether a unit holds a role, whose text is a list of bullets. */
-export function isRoleUnit(unitId: string): boolean {
-  return unitId.startsWith("experience:");
+/** Whether a unit holds a role or a project, whose text is a list of bullets. */
+export function isBulletUnit(unitId: string): boolean {
+  return unitId.startsWith("experience:") || unitId.startsWith("project:");
 }
 
-/** Text for a unit as written in the editor: a role's bullets cleaned up, anything else trimmed. */
+/** Text for a unit as written in the editor: a role's or project's bullets cleaned up, anything else trimmed. */
 export function cleanUnitText(unitId: string, text: string): string {
-  return isRoleUnit(unitId) ? bulletLines(text) : text.trim();
+  return isBulletUnit(unitId) ? bulletLines(text) : text.trim();
 }
 
 /**
  * How a unit is called in a sentence, after "the": "summary", "opening
- * paragraph", or a role's or degree's own name, e.g. "Northwind Logistics role".
+ * paragraph", or a role's, project's or degree's own name, e.g. "Northwind Logistics role".
  */
 export function unitName(unit: { id: string; label: string }): string {
   const label = unit.label.trim();
-  if (unit.id.startsWith("experience:") || unit.id.startsWith("education:")) return label || "entry";
+  if (unit.id.startsWith("experience:") || unit.id.startsWith("project:") || unit.id.startsWith("education:")) return label || "entry";
   if (unit.id.startsWith("paragraph:")) {
     const name = label.toLowerCase() || "paragraph";
     return /\bparagraph$/.test(name) ? name : `${name} paragraph`;

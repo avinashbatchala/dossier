@@ -12,7 +12,8 @@ type Tx = Prisma.TransactionClient;
  * Applies an imported profile in one transaction (E4-10). Replace clears the
  * profile first. Merge lets the file win (decided 29 September 2026): its
  * basics overwrite the profile's, and an entry it shares with the profile
- * (the same role and company, degree and school, or reference name) takes
+ * (the same role and company, project name, degree and school, or reference
+ * name) takes
  * what the file says; what the file leaves out is kept. Everything else is
  * added, first in a section ordered by hand, else by date.
  */
@@ -21,14 +22,17 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
     async (tx) => {
       if (mode === "replace") {
         await tx.experience.deleteMany();
+        await tx.project.deleteMany();
         await tx.education.deleteMany();
         await tx.reference.deleteMany();
         await tx.language.deleteMany();
         await tx.skill.deleteMany();
         await tx.profileField.deleteMany({ where: { key: { in: [...BASICS_FIELDS] } } });
-        await saveSettings({ experienceOrder: "date", educationOrder: "date" }, tx);
+        await saveSettings({ experienceOrder: "date", projectOrder: "date", educationOrder: "date" }, tx);
       }
-      const order = settingsFromRows(await tx.setting.findMany({ where: { key: { in: ["experienceOrder", "educationOrder"] } } }));
+      const order = settingsFromRows(
+        await tx.setting.findMany({ where: { key: { in: ["experienceOrder", "projectOrder", "educationOrder"] } } }),
+      );
 
       for (const [key, value] of Object.entries(profile.basics)) {
         await tx.profileField.upsert({ where: { key }, create: { key, value }, update: { value } });
@@ -50,6 +54,23 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
         } else {
           await tx.experience.create({
             data: { ...fields, sort: nextExperienceSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
+          });
+        }
+      }
+
+      const nextProjectSort = await sorter(tx, "project", order.projectOrder === "manual");
+      const known = await tx.project.findMany({ include: { skills: { select: { skillId: true } } } });
+      for (const entry of profile.projects) {
+        const { skills, ...fields } = withoutFlags(entry);
+        const linked = skills.flatMap((name) => skillIds.get(name.toLowerCase()) ?? []);
+        const match = known.find((project) => sameName(project.name, entry.name));
+        if (match) {
+          await tx.project.update({ where: { id: match.id }, data: filled(fields) });
+          const links = new Set(match.skills.map((link) => link.skillId));
+          await tx.projectSkill.createMany({ data: linked.filter((id) => !links.has(id)).map((skillId) => ({ projectId: match.id, skillId })) });
+        } else {
+          await tx.project.create({
+            data: { ...fields, sort: nextProjectSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
           });
         }
       }
@@ -96,11 +117,14 @@ async function applyLanguages(tx: Tx, profile: ImportedProfile): Promise<void> {
 }
 
 /** Sort values for new entries: first in an order set by hand, else after the rest. */
-async function sorter(tx: Tx, section: "experience" | "education", manual: boolean): Promise<() => number> {
+async function sorter(tx: Tx, section: "experience" | "project" | "education", manual: boolean): Promise<() => number> {
+  const range = { _min: { sort: true }, _max: { sort: true } } as const;
   const { _min, _max } =
     section === "experience"
-      ? await tx.experience.aggregate({ _min: { sort: true }, _max: { sort: true } })
-      : await tx.education.aggregate({ _min: { sort: true }, _max: { sort: true } });
+      ? await tx.experience.aggregate(range)
+      : section === "project"
+        ? await tx.project.aggregate(range)
+        : await tx.education.aggregate(range);
   let first = (_min.sort ?? 1) - 1;
   let last = (_max.sort ?? -1) + 1;
   return manual ? () => first-- : () => last++;

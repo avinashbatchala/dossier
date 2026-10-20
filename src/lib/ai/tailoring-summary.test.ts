@@ -40,6 +40,11 @@ describe("tailoringSummary (E7-6)", () => {
     expect(summary.foot).toBe("Nothing invented: every line comes from your profile.");
   });
 
+  it("mentions projects it reworded (PRO-13)", () => {
+    const resume = demoResumeUnits().map((unit) => (unit.id === "project:p1" ? { ...unit, text: "Built a token pipeline for design teams" } : unit));
+    expect(tailoringSummary({ ...base, resume }).list).toContain("Reworded your Tidewater design tokens project for this job");
+  });
+
   it("only claims what happened", () => {
     const untouched = tailoringSummary({
       ...base,

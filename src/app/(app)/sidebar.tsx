@@ -7,6 +7,7 @@ import type { Release } from "@/lib/releases";
 import type { ColorScheme } from "@/lib/ui-preferences";
 
 import { NavLinks } from "./nav-links";
+import { RepositoryLink } from "./repository-link";
 import { SidebarFrame } from "./sidebar-frame";
 import { ThemeToggle } from "./theme-toggle";
 import { UpdateNotice } from "./update-notice";
@@ -19,7 +20,8 @@ function initials(name: string): string {
 
 /**
  * The signed-in sidebar: brand header, "+ New application", navigation, a
- * notice while a newer release is out, and the account footer.
+ * notice while a newer release is out, the theme switch and a link to the
+ * repository, and the account footer.
  */
 export function Sidebar({
   userName,
@@ -75,6 +77,7 @@ export function Sidebar({
 
       <div className="flex flex-col gap-0.5 border-t border-line p-2 group-data-collapsed/sidebar:px-1">
         <ThemeToggle serverScheme={colorScheme} />
+        <RepositoryLink />
       </div>
 
       <div className="flex items-center gap-2 border-t border-line px-4 py-3 group-data-collapsed/sidebar:flex-col group-data-collapsed/sidebar:px-1">

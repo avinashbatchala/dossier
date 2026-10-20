@@ -19,14 +19,14 @@ test("searches, keeps postings, and starts an application from one", async ({ pa
 
   await expect(page).toHaveURL(/\/jobs\?search=c/);
   const list = page.getByRole("list", { name: "Postings" });
-  await expect(list.getByRole("button")).toHaveCount(3);
+  await expect(list.getByRole("listitem")).toHaveCount(3);
   await expect(page.getByRole("heading", { level: 2, name: "Senior Product Designer, Payments" })).toBeVisible();
   await expect(page.getByText("Ledgerly · Rotterdam · EUR 75,000–90,000 a year")).toBeVisible();
   await expect(page.getByRole("region", { name: "Posting text" })).toContainText("Strong prototyping skills in Figma");
 
   // The next page, through the cursor.
   await page.getByRole("button", { name: "Show more" }).click();
-  await expect(list.getByRole("button")).toHaveCount(4);
+  await expect(list.getByRole("listitem")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Show more" })).toHaveCount(0);
 
   // The search is kept with both pages (E14-10): coming back to it asks the source nothing.
@@ -35,20 +35,20 @@ test("searches, keeps postings, and starts an application from one", async ({ pa
   const today = page.getByRole("region", { name: "Today" });
   await expect(today.getByRole("link")).toHaveText(/Senior Product Designer · Rotterdam, 25 km.*4 postings · JSearch/);
   await today.getByRole("link").click();
-  await expect(list.getByRole("button")).toHaveCount(4);
+  await expect(list.getByRole("listitem")).toHaveCount(4);
   await page.goto("/jobs");
-  await expect(list.getByRole("button")).toHaveCount(4);
+  await expect(list.getByRole("listitem")).toHaveCount(4);
   await expect(page.getByText(/4 postings from JSearch · searched today at \d\d:\d\d/)).toBeVisible();
   expect(await fakeJobSearches()).toBe(asked);
 
   // Save the first; dismiss the second, then undo it.
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(list.getByRole("button", { name: /Senior Product Designer, Payments/ })).toContainText("Saved");
-  await list.getByRole("button", { name: /Product Designer, Logistics/ }).click();
+  await expect(list.getByRole("button", { name: /^Senior Product Designer, Payments/ })).toContainText("Saved");
+  await list.getByRole("button", { name: /^Product Designer, Logistics/ }).click();
   await page.getByRole("button", { name: "Dismiss" }).click();
-  await expect(list.getByRole("button", { name: /Product Designer, Logistics/ })).toHaveCount(0);
+  await expect(list.getByRole("button", { name: /^Product Designer, Logistics/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(list.getByRole("button", { name: /Product Designer, Logistics/ })).toBeVisible();
+  await expect(list.getByRole("button", { name: /^Product Designer, Logistics/ })).toBeVisible();
 
   // The saved posting is in Saved.
   await page.getByRole("link", { name: /^Saved/ }).click();
@@ -70,7 +70,7 @@ test("searches, keeps postings, and starts an application from one", async ({ pa
   const [posting] = await sql<{ applicationId: string | null }>(`SELECT "applicationId" FROM "Posting" WHERE "externalId" = 'e2e-ledgerly'`);
   expect(posting.applicationId).toBe(applicationId);
   await page.goto("/jobs?view=saved");
-  await expect(page.getByRole("list", { name: "Postings" }).getByRole("button")).toContainText("Applied");
+  await expect(page.getByRole("list", { name: "Postings" }).getByRole("button", { name: /^Senior Product Designer, Payments/ })).toContainText("Applied");
   await expect(page.getByRole("link", { name: "Open the application" })).toHaveAttribute("href", `/applications/${applicationId}`);
 });
 
@@ -87,4 +87,27 @@ test("tests the connection in Settings → Job search", async ({ page }) => {
   await expect(page.getByLabel("API key")).toHaveAttribute("placeholder", "Using DOSSIER_JSEARCH_KEY · type one to save it here");
   await page.getByRole("button", { name: "Test connection" }).click();
   await expect(page.getByText(/^Connected · JSearch answered in/)).toBeVisible();
+});
+
+test("scores a posting against the profile, and keeps the score (#208)", async ({ page }) => {
+  // Before the test above, nothing was saved, dismissed or applied for.
+  await resetData();
+  await page.goto("/jobs");
+  await page.getByRole("search", { name: "Search postings" }).getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Senior Product Designer, Payments" })).toBeVisible();
+  await page.getByRole("button", { name: "Score", exact: true }).click();
+  await expect(page.getByText("Excellent fit · 91 of 100")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("list", { name: "Why it fits" })).toContainText("product design roles");
+  await expect(page.getByRole("list", { name: "Postings" }).getByRole("img", { name: "Score 91 of 100" })).toBeVisible();
+
+  // An unscored posting scores from its pill in the list, and the open one stays open.
+  await page.getByRole("button", { name: "Score “Product Designer, Logistics”" }).click();
+  await expect(page.getByRole("list", { name: "Postings" }).getByRole("img", { name: "Score 78 of 100" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { level: 2, name: "Senior Product Designer, Payments" })).toBeVisible();
+
+  // Kept with the posting, so it's there after a reload.
+  await page.reload();
+  await expect(page.getByText("Excellent fit · 91 of 100")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Score again" })).toBeVisible();
+  await sql(`DELETE FROM "PostingScore"`);
 });

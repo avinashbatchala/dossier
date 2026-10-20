@@ -10,7 +10,7 @@ import { loginMessages } from "./messages";
 
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
-vi.mock("./actions", () => ({ signIn: vi.fn() }));
+vi.mock("./actions", () => ({ signIn: vi.fn(), signInWithForm: vi.fn() }));
 vi.mock("@/components/toast", () => ({ toastResult: vi.fn() }));
 
 describe("LoginForm", () => {
@@ -27,6 +27,13 @@ describe("LoginForm", () => {
     expect(password).toHaveAttribute("autocomplete", "current-password");
     expect(screen.queryAllByRole("textbox")).toHaveLength(0);
     expect(screen.getByRole("checkbox", { name: "Keep me signed in for 30 days" })).not.toBeChecked();
+  });
+
+  it("names its fields, so the browser can post them before scripts run", () => {
+    const { container } = render(<LoginForm next="/profile" />);
+    expect(screen.getByLabelText("Password")).toHaveAttribute("name", "password");
+    expect(screen.getByRole("checkbox", { name: "Keep me signed in for 30 days" })).toHaveAttribute("name", "remember");
+    expect(container.querySelector('input[type="hidden"][name="next"]')).toHaveValue("/profile");
   });
 
   it("shows and hides the password", async () => {

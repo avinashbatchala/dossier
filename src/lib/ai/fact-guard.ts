@@ -67,6 +67,7 @@ export function sourcesFor(profile: ProfileData, extracted: Extracted | null, po
     ...profile.skills.map((skill) => skill.name),
     ...profile.languages.map((language) => `${language.name} ${languageLevelLabel(language.level)}`),
     ...profile.experience.flatMap((entry) => [entry.role, entry.company, entry.location, formatDateRange(entry), entry.bullets]),
+    ...profile.projects.flatMap((entry) => [entry.name, entry.link, formatDateRange(entry), entry.bullets]),
     ...profile.education.flatMap((entry) => [entry.degree, entry.school, formatDateRange(entry), entry.notes]),
     ...profile.references.flatMap((reference) => [reference.name, reference.relation, reference.company]),
     extracted ? [extracted.title, extracted.company, extracted.role, extracted.location, extracted.mode, extracted.salary].filter(Boolean).join(" ") : "",

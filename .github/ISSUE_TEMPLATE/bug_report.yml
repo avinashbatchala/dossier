@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for taking the time to report this. Before you do:
 
-        - Look in [Troubleshooting](https://github.com/AienTech/dossier/blob/main/README.md#troubleshooting): the fix may already be there.
+        - Look in [Troubleshooting](https://github.com/AienTech/dossier/wiki/Troubleshooting): the fix may already be there.
         - Search the [open and closed issues](https://github.com/AienTech/dossier/issues?q=is%3Aissue), in case someone has reported it.
         - Found a security problem? Don't report it here: [report it privately](https://github.com/AienTech/dossier/security/advisories/new) instead.
 
@@ -71,8 +71,10 @@ body:
       description: Only if the problem has to do with something the AI does, such as reading a posting or writing a draft.
       options:
         - Local model (Ollama or llama.cpp)
+        - LM Studio
         - OpenAI-compatible
         - Anthropic
+        - Mistral
 
   - type: input
     id: model

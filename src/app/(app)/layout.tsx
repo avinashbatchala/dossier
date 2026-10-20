@@ -1,18 +1,19 @@
 import { cookies } from "next/headers";
 import { after } from "next/server";
 
+import { countAgentQueue } from "@/lib/agent/view";
 import { verifySession } from "@/lib/auth/session";
-import { countAgentQueue } from "@/lib/agent/count";
 import { inboxCount } from "@/lib/google/inbox-data";
 import { loadProfileName } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
 import { COLOR_SCHEME_COOKIE, parseColorScheme, parseSidebarCollapsed, SIDEBAR_COOKIE } from "@/lib/ui-preferences";
 import { rememberBrowserTimeZone, userTimeZone } from "@/lib/time-zone";
 import { checkForUpdatesDaily, updateNotice } from "@/lib/update-check";
-import { notePageLoad } from "@/lib/usage-ping";
+import { askForUsagePing, notePageLoad, USAGE_PING_HOST } from "@/lib/usage-ping";
 import { appVersion } from "@/lib/version";
 
 import { Sidebar } from "./sidebar";
+import { UsagePingDialog } from "./usage-ping-dialog";
 
 /**
  * The signed-in shell: sidebar on the left, the screen on the right. Routes
@@ -31,13 +32,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   const [name, settings, jar] = await Promise.all([loadProfileName(), loadSettings(), cookies()]);
   const userName = name.trim() || "New user";
-  // Replies waiting for an answer or a link, on the Inbox item, and agent
-  // postings and drafts waiting for a look.
-  const [waiting, agentWaiting] = await Promise.all([inboxCount().catch(() => 0), countAgentQueue().catch(() => 0)]);
-  const counts = {
-    ...(waiting > 0 ? { "/inbox": waiting } : {}),
-    ...(agentWaiting > 0 ? { "/agent": agentWaiting } : {}),
-  };
+  // Replies waiting for an answer or a link, on the Inbox item; the job agent's finds and drafts on its own (E16-6).
+  const [waiting, agent] = await Promise.all([inboxCount().catch(() => 0), countAgentQueue().catch(() => 0)]);
 
   return (
     <div className="flex min-h-screen">
@@ -52,7 +48,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         update={updateNotice(settings)}
         currentVersion={appVersion}
         collapsed={parseSidebarCollapsed(jar.get(SIDEBAR_COOKIE)?.value)}
-        counts={Object.keys(counts).length > 0 ? counts : undefined}
+        counts={{ ...(waiting > 0 ? { "/inbox": waiting } : {}), ...(agent > 0 ? { "/agent": agent } : {}) }}
         colorScheme={parseColorScheme(jar.get(COLOR_SCHEME_COOKIE)?.value)}
       />
       {/* The screen sits in a white panel inset from the shell. Each screen
@@ -67,6 +63,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           {children}
         </main>
       </div>
+      {/* Asked once, until answered (#172); nothing is sent before a yes. */}
+      {askForUsagePing(settings) && <UsagePingDialog host={USAGE_PING_HOST} />}
     </div>
   );
 }

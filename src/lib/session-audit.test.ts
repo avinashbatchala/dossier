@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 // matcher mistake can't expose data. Server Actions go through action(),
 // route handlers through route(); these are the only exceptions.
 const SIGNED_OUT_ACTIONS = new Map([
-  ["src/app/login/actions.ts", "signIn"], // publicAction: signing in
-  ["src/lib/auth/actions.ts", "signOut"], // only clears the cookie
+  // publicAction: signing in, and the same through the form's own submit (#187)
+  ["src/app/login/actions.ts", ["signIn", "signInWithForm"]],
+  ["src/lib/auth/actions.ts", ["signOut"]], // only clears the cookie
 ]);
 const OPEN_ROUTES = new Set([
   "src/app/api/health/route.ts", // for health checks; says nothing private
@@ -32,7 +33,7 @@ describe("session checks (E11-5)", () => {
   it("defines every Server Action with action()", () => {
     const unchecked = actionFiles.flatMap((file) =>
       exportsOf(read(file))
-        .filter(([, name, wrapper]) => wrapper !== "action" && SIGNED_OUT_ACTIONS.get(file) !== name)
+        .filter(([, name, wrapper]) => wrapper !== "action" && !SIGNED_OUT_ACTIONS.get(file)?.includes(name))
         .map(([line]) => `${file}: ${line}`),
     );
     expect(unchecked).toEqual([]);

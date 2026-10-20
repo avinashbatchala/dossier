@@ -75,7 +75,14 @@ describe("dates", () => {
         locale: "de",
         present: "heute",
       }),
-    ).toBe("Mär 2021 – heute");
+    ).toBe("März 2021 – heute");
+  });
+
+  it("writes dates in the locale's own order and digits, in the Gregorian calendar", () => {
+    expect(formatDateRange(span({ startYear: 2019, startMonth: 9, endYear: 2021, endMonth: 3 }), { locale: "ja" })).toBe("2019年9月 – 2021年3月");
+    expect(formatDateRange(span({ startYear: 2013, endYear: 2015 }), { locale: "zh-Hans" })).toBe("2013年 – 2015年");
+    // Persian's own calendar would make September 2021 "Shahrivar 1400".
+    expect(formatMonthYear(2021, 9, { locale: "fa" })).toBe("سپتامبر ۲۰۲۱");
   });
 
   it("orders entries newest first, then by sort, with undated ones last", () => {

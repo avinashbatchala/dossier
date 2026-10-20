@@ -18,10 +18,11 @@ const initial: DocumentSettings = {
   dateFormat: "DAY_MONTH_YEAR",
   defaultTone: "WARM",
   docLanguage: null,
+  resumeLanguage: null,
   customLanguages: ["Farsi"],
   fileNamePattern: "{name} – {company} – {doc}",
   includeRefs: false,
-  onePage: true,
+  pageLimit: "1",
 };
 const preview = { name: "Jane Doe", company: "Ledgerly", role: "Senior Product Designer" };
 const open = () => render(<DocumentsSection initial={initial} preview={preview} />);
@@ -41,7 +42,7 @@ describe("Documents settings (E10-3)", () => {
     expect(screen.getByLabelText("Date format")).toHaveDisplayValue("27 September 2026");
     expect(screen.getByLabelText("Cover letter tone")).toHaveDisplayValue("Warm");
     expect(screen.getByRole("switch", { name: "Include references" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("switch", { name: "Keep resumes to one page" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByLabelText("Resume length")).toHaveDisplayValue("One page");
   });
 
   it("offers the posting's language, the 21 built-in ones and the user's own", () => {
@@ -63,6 +64,33 @@ describe("Documents settings (E10-3)", () => {
     expect(updateSettings).toHaveBeenLastCalledWith({ docLanguage: null });
     await user.click(screen.getByRole("switch", { name: "Include references" }));
     expect(updateSettings).toHaveBeenLastCalledWith({ includeRefs: true });
+  });
+
+  it("limits resumes to one page, two pages or no limit (SET-9)", async () => {
+    const user = userEvent.setup();
+    open();
+    const select = screen.getByLabelText("Resume length") as HTMLSelectElement;
+    expect([...select.options].map((option) => option.text)).toEqual(["One page", "Up to two pages", "No limit"]);
+    expect(select).toHaveAccessibleDescription(
+      "A tailored resume that runs longer is trimmed, oldest roles first, and I'll tell you what was cut.",
+    );
+    await user.selectOptions(select, "Up to two pages");
+    expect(updateSettings).toHaveBeenLastCalledWith({ pageLimit: "2" });
+    await user.selectOptions(select, "No limit");
+    expect(updateSettings).toHaveBeenLastCalledWith({ pageLimit: "none" });
+  });
+
+  it("picks the base resume's language from the built-in ones, English by default", async () => {
+    const user = userEvent.setup();
+    open();
+    const select = screen.getByLabelText("Base resume language") as HTMLSelectElement;
+    expect(select).toHaveDisplayValue("English");
+    expect(select.options).toHaveLength(21);
+    expect(select).toHaveAccessibleDescription("For its headings and dates. Tailored documents use their application's language.");
+    await user.selectOptions(select, "German");
+    expect(updateSettings).toHaveBeenLastCalledWith({ resumeLanguage: "German" });
+    await user.selectOptions(select, "English");
+    expect(updateSettings).toHaveBeenLastCalledWith({ resumeLanguage: null });
   });
 
   it("adds another language", async () => {

@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { connectFakeGoogle, fakeGoogle, forgetGoogle, inFakeCalendar, resetData, sql } from "./support";
 
-// The Calendar screen and interviews kept in step with Google Calendar
+// The dashboard's calendar and interviews kept in step with Google Calendar
 // (E15-6), against the fake Google (e2e/fake-google.mts).
 
 test.beforeAll(resetData);
@@ -29,18 +29,23 @@ test("shows interviews and Google's events, and keeps interviews in step both wa
   // The day of the demo's interview, in the browser's zone, which the app uses too.
   await page.goto("/");
   const day = await page.evaluate((iso) => new Date(iso).toLocaleDateString("en-CA"), northstar.nextInterviewAt.toISOString());
-  const week = `/calendar?view=week&date=${day}`;
-  const column = page.getByRole("region", { name: dayLabel(day) });
+  const onDay = `/?date=${day}`;
+  const calendar = page.getByRole("region", { name: "Calendar" });
 
-  // Without Google: the interview, linked to its application, and how to see the rest.
-  await page.goto(week);
-  await expect(page.getByRole("heading", { level: 1, name: "Calendar" })).toBeVisible();
-  await expect(column.getByRole("link", { name: /Interview · Lead Product Designer · Northstar Health/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
-  await expect(page.getByText(/Connect Google Calendar in Settings → Google/)).toBeVisible();
-  await page.getByRole("radio", { name: "Month" }).click();
-  await expect(page).toHaveURL(/view=month/);
-  await expect(column.getByRole("link", { name: /Northstar Health/ })).toBeVisible();
+  // Without Google: the interview on its day, linked to its application, and how to see the rest.
+  await page.goto(onDay);
+  await expect(calendar.getByRole("button", { name: `${dayLabel(day)}, 1 interview` })).toHaveAttribute("aria-pressed", "true");
+  await expect(calendar.getByRole("link", { name: /Interview · Lead Product Designer · Northstar Health/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
+  await expect(calendar.getByText(/Connect Google Calendar in Settings → Google/)).toBeVisible();
   await expectAccessible(page);
+  // Another month loads in place.
+  await calendar.getByRole("link", { name: "Next month" }).click();
+  await expect(page).toHaveURL(/\/\?date=\d{4}-\d{2}-01$/);
+  await expect(calendar.getByRole("link", { name: /Northstar Health/ })).toHaveCount(0);
+  // The old Calendar screen's links open the dashboard on their day.
+  await page.goto(`/calendar?view=week&date=${day}`);
+  await expect(page).toHaveURL(new RegExp(`/\\?view=week&date=${day}$`));
+  await expect(calendar.getByRole("link", { name: /Northstar Health/ })).toBeVisible();
 
   // Connected, with an event of its own in Google that day.
   await connectFakeGoogle(page);
@@ -58,17 +63,15 @@ test("shows interviews and Google's events, and keeps interviews in step both wa
   expect(new Date(added.start.dateTime!).getTime()).toBe((await interview()).nextInterviewAt!.getTime());
 
   // Both on the calendar: the interview opens its application, the dentist Google Calendar.
-  await page.goto(week);
-  await expect(column.getByRole("link", { name: /Dentist/ })).toHaveAttribute("href", dentist.htmlLink);
-  await expect(column.getByRole("link", { name: /^14:00 Interview · Lead Product Designer · Northstar Health$/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
-  await expectAccessible(page);
-  await page.goto(`/calendar?view=month&date=${day}`);
-  await expect(column.getByRole("link", { name: /Dentist/ })).toBeVisible();
+  await page.goto(onDay);
+  await expect(calendar.getByRole("button", { name: `${dayLabel(day)}, 1 interview, 1 event` })).toBeVisible();
+  await expect(calendar.getByRole("link", { name: /Dentist/ })).toHaveAttribute("href", dentist.htmlLink);
+  await expect(calendar.getByRole("link", { name: /^14:00–\d\d:\d\d Interview · Lead Product Designer · Northstar Health$/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
   await expectAccessible(page);
 
-  // Moved in Google: Dossier follows when the calendar opens.
+  // Moved in Google: Dossier follows when the dashboard opens.
   await inFakeCalendar("PATCH", added.id, { start: { dateTime: `${day}T15:00:00Z` }, end: { dateTime: `${day}T15:45:00Z` } });
-  await page.goto(week);
+  await page.goto(onDay);
   await expect.poll(async () => (await interview()).nextInterviewAt?.toISOString()).toBe(new Date(`${day}T15:00:00Z`).toISOString());
 
   // Removing the date in Dossier deletes the event.

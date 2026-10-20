@@ -9,10 +9,10 @@ import { pullInterviewEvents, workingHours } from "./availability";
 import { listEvents, type CalendarEvent } from "./calendar";
 import { GoogleError } from "./errors";
 
-// What the Calendar screen shows (E15-6): the events in the calendar chosen
-// in Settings → Google, with the interviews Dossier added linked to their
-// application, and the interviews that aren't in Google. Events are read
-// for the days on screen and never kept.
+// What the dashboard's calendar shows (E15-6): the events in the calendar
+// chosen in Settings → Google, with the interviews Dossier added linked to
+// their application, and the interviews that aren't in Google. Events are
+// read for the days on screen and never kept.
 
 export type CalendarSource =
   | { status: "google" }
@@ -24,8 +24,6 @@ export type CalendarData = {
   items: CalendarItem[];
   timeZone: string;
   source: CalendarSource;
-  /** "09:00", where the week grid opens. */
-  workStart: string;
 };
 
 const interviewTitle = (application: { company: string; role: string; title: string }) =>
@@ -91,5 +89,5 @@ export async function loadCalendar(days: readonly Day[]): Promise<CalendarData> 
       end: new Date(start.getTime() + hours.slotMinutes * 60_000),
     });
   }
-  return { items, timeZone, source, workStart: hours.start };
+  return { items, timeZone, source };
 }

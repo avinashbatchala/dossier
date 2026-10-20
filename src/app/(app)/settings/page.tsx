@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 
-import { loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
+import { isAiConfigured, loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
 import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
 import { COUNTRIES } from "@/lib/job-search/countries";
+import { loadSearch } from "@/lib/posting-searches";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
@@ -12,23 +13,23 @@ import { formatShortDate } from "@/lib/dates";
 import { env } from "@/lib/env";
 import { googleConnection } from "@/lib/google/account";
 import { loadGoogleClientConfig, redirectUri } from "@/lib/google/oauth";
-import { userTimeZone } from "@/lib/time-zone";
+import { lastKnownTimeZone, userTimeZone } from "@/lib/time-zone";
 import { appVersion } from "@/lib/version";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
 import { availableUpdate } from "@/lib/update-check";
-import { USAGE_PING_HOST, usagePingEnabled } from "@/lib/usage-ping";
+import { USAGE_PING_HOST, usagePingChoice } from "@/lib/usage-ping";
 
+import { AgentSection } from "./agent-section";
 import { AiBehaviour } from "./ai-behaviour";
 import { AiProviderSection } from "./ai-provider-section";
-import { AgentSection } from "./agent-section";
 import { DataSection } from "./data-section";
 import { DocumentsSection } from "./documents-section";
 import { GoogleSection } from "./google-section";
 import { GoogleNotice } from "./google-notice";
 import { JobSearchSection } from "./job-search-section";
-import { AboutSection, type AboutFacts } from "./about-section";
+import { AboutSection, type AboutFacts, type UsagePingView } from "./about-section";
 import { settingsSectionFromParam } from "./sections";
 import { SettingsScreen } from "./settings-screen";
 
@@ -53,7 +54,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         <AgentSection
           initial={{
             enabled: settings.agentEnabled,
-            query: settings.agentQuery,
+            // With no search of its own yet, it starts from the last one in Find jobs.
+            query: settings.agentQuery.keywords.trim() ? settings.agentQuery : ((await loadSearch())?.query ?? settings.agentQuery),
             hour: settings.agentHour,
             minScore: settings.agentMinScore,
             maxScores: settings.agentMaxScores,
@@ -61,7 +63,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             autoDraft: settings.agentAutoDraft,
           }}
           source={(await loadJobSearchConfig()).source}
+          aiReady={await isAiConfigured()}
           countries={COUNTRIES}
+          timeZone={await lastKnownTimeZone()}
         />
       ) : section === "google" ? (
         <>
@@ -108,17 +112,18 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             dateFormat: settings.dateFormat,
             defaultTone: settings.defaultTone,
             docLanguage: settings.docLanguage,
+            resumeLanguage: settings.resumeLanguage,
             customLanguages: settings.customLanguages,
             fileNamePattern: settings.fileNamePattern,
             includeRefs: settings.includeRefs,
-            onePage: settings.onePage,
+            pageLimit: settings.pageLimit,
           }}
           preview={await filePreview()}
         />
       ) : (
         <AboutSection
           facts={await aboutFacts()}
-          usagePingHost={USAGE_PING_HOST}
+          usagePing={await usagePingView()}
           updates={{ daily: settings.updateCheck, available: availableUpdate(settings) }}
         />
       )}
@@ -152,7 +157,7 @@ async function requestOrigin(): Promise<string> {
 async function filePreview() {
   const [name, latest] = await Promise.all([
     loadProfileName(),
-    prisma.application.findFirst({ orderBy: { createdAt: "desc" }, select: { company: true, role: true } }),
+    prisma.application.findFirst({ where: { awaitingReview: false }, orderBy: { createdAt: "desc" }, select: { company: true, role: true } }),
   ]);
   return {
     name: name.trim() || "Jane Doe",
@@ -188,11 +193,10 @@ function formatBytes(bytes: number): string {
 async function aboutFacts(): Promise<AboutFacts> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host")?.split(",")[0]?.trim() || requestHeaders.get("host") || "Unknown";
-  const [[database], ai, applications, settings] = await Promise.all([
+  const [[database], ai, applications] = await Promise.all([
     prisma.$queryRaw<{ size: bigint }[]>`SELECT pg_database_size(current_database()) AS size`,
     loadAiConfig(),
-    prisma.application.count(),
-    loadSettings(),
+    prisma.application.count({ where: { awaitingReview: false } }),
   ]);
   return [
     { label: "Version", value: appVersion },
@@ -201,16 +205,11 @@ async function aboutFacts(): Promise<AboutFacts> {
     { label: "Sign-in", value: "set via DOSSIER_PASSWORD" },
     { label: "AI", value: [providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
     { label: "Applications", value: String(applications) },
-    ...usagePingFacts(settings.usagePingId),
   ];
 }
 
-/** Whether the usage ping is on, and the install ID it sends. */
-function usagePingFacts(id: string | null): AboutFacts {
-  if (process.env.NODE_ENV !== "production") return [{ label: "Usage ping", value: "off in development" }];
-  if (!usagePingEnabled()) return [{ label: "Usage ping", value: "off (DOSSIER_TELEMETRY=off)" }];
-  return [
-    { label: "Usage ping", value: "on" },
-    { label: "Install ID", value: id ?? "made with the first ping" },
-  ];
+/** The usage ping's switch in About (#172): the answer in effect, who gave it, and the install ID. */
+async function usagePingView(): Promise<UsagePingView> {
+  const settings = await loadSettings();
+  return { host: USAGE_PING_HOST, ...usagePingChoice(settings), id: settings.usagePingId, production: process.env.NODE_ENV === "production" };
 }

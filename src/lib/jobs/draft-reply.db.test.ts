@@ -34,7 +34,7 @@ vi.mock("@/lib/google/availability", () => ({
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
 const prisma = () => db.client!;
-const context = { step: async () => {}, signal: new AbortController().signal };
+const context = { id: "test-job", step: async () => {}, signal: new AbortController().signal };
 
 beforeEach(async () => {
   await resetDatabase(prisma());

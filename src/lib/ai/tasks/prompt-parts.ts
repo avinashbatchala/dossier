@@ -14,8 +14,8 @@ export type TaskOptions = {
   strict: boolean;
   /** SET-7: the language to write in, e.g. "Dutch"; the posting's language decides when null. */
   language: string | null;
-  /** SET-9 "Keep resumes to one page": the resume is asked to be concise (E10-10). */
-  onePage?: boolean;
+  /** SET-9 "Resume length": the most pages a resume may have, or null for no limit (E10-10). */
+  maxPages?: number | null;
   signal?: AbortSignal;
 };
 
@@ -30,7 +30,8 @@ const MAX_POSTING_CHARACTERS = 20_000;
 /**
  * The profile as the model sees it. Only what writing needs: no email,
  * phone, address, date of birth or links (PRD §7), and references only when
- * the document will include them. Ids let answers point at roles and degrees.
+ * the document will include them. Ids let answers point at roles, projects
+ * and degrees.
  */
 export function profileForPrompt(profile: ProfileData, { includeReferences = false } = {}): string {
   const skillNames = new Map(profile.skills.map((skill) => [skill.id, skill.name]));
@@ -48,6 +49,14 @@ export function profileForPrompt(profile: ProfileData, { includeReferences = fal
         role: entry.role,
         company: entry.company,
         location: entry.location,
+        dates: formatDateRange(entry),
+        bullets: entry.bullets.split("\n").map((line) => line.trim()).filter(Boolean),
+        skillsUsed: entry.skillIds.flatMap((id) => skillNames.get(id) ?? []),
+      })),
+      // A project's link is left out like the other links: the resume shows it as it is.
+      projects: profile.projects.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
         dates: formatDateRange(entry),
         bullets: entry.bullets.split("\n").map((line) => line.trim()).filter(Boolean),
         skillsUsed: entry.skillIds.flatMap((id) => skillNames.get(id) ?? []),

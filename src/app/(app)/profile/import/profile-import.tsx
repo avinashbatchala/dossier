@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { AiProvider } from "@/generated/prisma/enums";
 import { useJob } from "@/hooks/use-job";
+import { providerOption } from "@/lib/ai/provider-options";
 import { retry } from "@/lib/jobs/actions";
 import type { ImportProfileResult } from "@/lib/jobs/import-profile";
 import { messages } from "@/lib/messages";
@@ -133,9 +134,9 @@ export function ProfileImport({
                 </Link>
               </p>
             )}
-            {aiReady && provider !== "LOCAL" && (
+            {aiReady && !providerOption(provider).local && (
               <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-                The resume&apos;s text, contact details included, is sent to {provider === "ANTHROPIC" ? "Anthropic" : "your AI server"} to sort
+                The resume&apos;s text, contact details included, is sent to {providerOption(provider).vendor ?? "your AI server"} to sort
                 it into your profile.
               </p>
             )}
@@ -194,7 +195,7 @@ export function ProfileImport({
               open={confirmReplace}
               onOpenChange={setConfirmReplace}
               title="Replace your profile?"
-              description="Your basics, skills, languages, roles, education and references are removed first; then your profile holds exactly what was read from the resume. Your applications and their documents stay as they are."
+              description="Your basics, skills, languages, roles, projects, education and references are removed first; then your profile holds exactly what was read from the resume. Your applications and their documents stay as they are."
               confirmLabel="Replace my profile"
               onConfirm={() => void apply("replace")}
             />
@@ -270,6 +271,28 @@ function Preview({ profile }: { profile: ImportedProfile }) {
               key={index}
               title={[entry.role, entry.company].filter(Boolean).join(" · ")}
               meta={[entry.location, formatDateRange(entry)].filter(Boolean).join(" · ")}
+              unverified={entry.unverified}
+            >
+              {entry.bullets && (
+                <ul className="list-disc pl-5">
+                  {entry.bullets.split("\n").map((line, lineIndex) => (
+                    <li key={lineIndex}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              {entry.skills.length > 0 && <p className="text-muted">Skills: {entry.skills.join(" · ")}</p>}
+            </Entry>
+          ))}
+        </Section>
+      )}
+
+      {profile.projects.length > 0 && (
+        <Section title="Projects">
+          {profile.projects.map((entry, index) => (
+            <Entry
+              key={index}
+              title={entry.name}
+              meta={[entry.link, formatDateRange(entry)].filter(Boolean).join(" · ")}
               unverified={entry.unverified}
             >
               {entry.bullets && (

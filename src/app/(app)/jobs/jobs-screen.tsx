@@ -7,31 +7,26 @@ import { useState, useTransition, type FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { toast } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import type { Country } from "@/lib/job-search/countries";
 import {
-  POSTED_WITHIN,
-  RADII_KM,
   searchHref,
   searchRunHref,
   viewHref,
   type JobSource,
   type JobsView,
   type PastSearchDay,
-  type RadiusKm,
   type SearchProblem as Problem,
   type SearchQuery,
   type ShownPosting,
   type StoredSearch,
 } from "@/lib/job-search/search";
-import { SOURCE_INFO, sourceCovers } from "@/lib/job-search/sources";
+import { SOURCE_INFO } from "@/lib/job-search/sources";
 
 import { runJobSearch } from "./actions";
 import { PastSearches } from "./past-searches";
 import { PostingResults } from "./posting-results";
+import { RemoteOnlyField, SearchFields, uncoveredCountry } from "./search-fields";
 
 export type JobsScreenProps = {
   /** The source chosen in Settings; null while job search is off. */
@@ -160,8 +155,7 @@ function SearchForm({
   }
 
   const set = (patch: Partial<SearchQuery>) => setForm((current) => ({ ...current, ...patch }));
-  const countryName = countries.find((country) => country.code === form.country)?.name ?? form.country.toUpperCase();
-  const uncovered = form.country && !sourceCovers(source, form.country) ? `${SOURCE_INFO[source].name} doesn't list jobs in ${countryName}.` : undefined;
+  const uncovered = uncoveredCountry(source, form, countries);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -183,50 +177,9 @@ function SearchForm({
       onSubmit={submit}
       className="mx-10 mb-7 grid grid-cols-1 items-start gap-x-4 gap-y-4 rounded-panel border border-line-card bg-card p-6 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.3fr_1fr_1fr]"
     >
-      <Input
-        label="What"
-        className="sm:col-span-2 lg:col-span-1"
-        value={form.keywords}
-        placeholder="Job title, skill or company"
-        error={errors.keywords}
-        onChange={(event) => set({ keywords: event.target.value })}
-      />
-      <Input label="Where" value={form.place} placeholder="City or region" onChange={(event) => set({ place: event.target.value })} />
-      <Select label="Country" value={form.country} error={errors.country ?? uncovered} onChange={(event) => set({ country: event.target.value })}>
-        <option value="">Choose a country</option>
-        {countries.map((country) => (
-          <option key={country.code} value={country.code}>
-            {country.name}
-          </option>
-        ))}
-      </Select>
-      <Select
-        label="Within"
-        value={String(form.radiusKm)}
-        disabled={!form.place.trim()}
-        hint={form.place.trim() ? undefined : "Add a place first"}
-        onChange={(event) => set({ radiusKm: Number(event.target.value) as RadiusKm })}
-      >
-        {RADII_KM.map((km) => (
-          <option key={km} value={km}>
-            {km} km
-          </option>
-        ))}
-      </Select>
-      <Select label="Posted" value={form.postedWithin} onChange={(event) => set({ postedWithin: event.target.value as SearchQuery["postedWithin"] })}>
-        {POSTED_WITHIN.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
+      <SearchFields value={form} onChange={set} source={source} countries={countries} errors={errors} />
       <div className="flex flex-wrap items-center justify-between gap-4 sm:col-span-2 lg:col-span-5">
-        <Checkbox
-          label="Remote only"
-          checked={form.remoteOnly}
-          onChange={(event) => set({ remoteOnly: event.target.checked })}
-          hint={source === "ADZUNA" && form.remoteOnly ? "Adzuna has no remote filter, so this adds “remote” to your search." : undefined}
-        />
+        <RemoteOnlyField value={form} onChange={set} source={source} />
         <Button type="submit" aria-disabled={pending || undefined}>
           {pending ? "Searching…" : "Search"}
         </Button>

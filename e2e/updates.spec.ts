@@ -38,7 +38,7 @@ test("says a newer release is out until Not now, and again for the next one", as
   const notice = page.getByRole("region", { name: "Dossier 99.0.0 is out" });
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("link", { name: /What's new/ })).toHaveAttribute("href", release("99.0.0").url);
-  await expect(notice.getByRole("link", { name: /How to update/ })).toHaveAttribute("href", "https://github.com/AienTech/dossier#upgrading");
+  await expect(notice.getByRole("link", { name: /How to update/ })).toHaveAttribute("href", "https://github.com/AienTech/dossier/wiki/Upgrading");
   await expectAccessibleSidebar(page);
 
   await page.goto("/settings?section=about");

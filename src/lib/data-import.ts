@@ -75,7 +75,7 @@ const json = (value: unknown) => (value === null || value === undefined ? Prisma
  * install's own settings (the usage ping's) stay as they are.
  */
 export async function importExport(db: PrismaClient, data: DossierExport): Promise<void> {
-  const { profile, themes, settings, applications, postings, searches, apiKey, jobSourceKeys } = data;
+  const { profile, themes, settings, applications, postings, searches, agentCandidates, apiKey, jobSourceKeys } = data;
   const fromFile: Record<string, string | null> = {
     apiKeyEnc: apiKey ? encryptApiKey(apiKey) : null,
     jsearchKeyEnc: jobSourceKeys?.jsearch ? encryptSecret(JOB_SOURCE_KEY, jobSourceKeys.jsearch) : null,
@@ -91,10 +91,14 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       await tx.agentCandidate.deleteMany();
       await tx.posting.deleteMany();
       await tx.postingSearch.deleteMany();
+      await tx.agentCandidate.deleteMany();
+      // Scores of postings (#208) belong to the profile being replaced; they're left out of exports, since they can be made again.
+      await tx.postingScore.deleteMany();
       // Mail from Gmail belongs to the applications being replaced; the next check fetches what's still relevant.
       await tx.emailMessage.deleteMany();
       await tx.application.deleteMany();
       await tx.experience.deleteMany();
+      await tx.project.deleteMany();
       await tx.skill.deleteMany();
       await Promise.all([
         tx.profileField.deleteMany(),
@@ -112,6 +116,11 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       await tx.experience.createMany({ data: profile.experience.map((entry) => omit(entry, "skillIds")) });
       await tx.experienceSkill.createMany({
         data: profile.experience.flatMap((entry) => entry.skillIds.map((skillId) => ({ experienceId: entry.id, skillId }))),
+        skipDuplicates: true,
+      });
+      await tx.project.createMany({ data: profile.projects.map((entry) => omit(entry, "skillIds")) });
+      await tx.projectSkill.createMany({
+        data: profile.projects.flatMap((entry) => entry.skillIds.map((skillId) => ({ projectId: entry.id, skillId }))),
         skipDuplicates: true,
       });
       await tx.education.createMany({ data: profile.education });
@@ -165,6 +174,15 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       });
       await tx.postingSearch.createMany({
         data: searches.map((search) => ({ ...search, query: (search.query ?? {}) as Prisma.InputJsonValue, postings: (search.postings ?? []) as Prisma.InputJsonValue })),
+      });
+      // The job agent's candidates (E16), so what it saw stays seen; a draft that isn't in the file leaves it unlinked.
+      await tx.agentCandidate.createMany({
+        data: agentCandidates.map((candidate) => ({
+          ...candidate,
+          reasons: json(candidate.reasons),
+          redFlags: json(candidate.redFlags),
+          applicationId: candidate.applicationId && applicationIds.has(candidate.applicationId) ? candidate.applicationId : null,
+        })),
       });
     },
     // A big export takes longer than the default five seconds.

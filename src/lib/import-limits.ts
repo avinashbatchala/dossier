@@ -4,4 +4,4 @@
  * off rather than refused.
  */
 export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
-export const IMPORT_TOO_BIG = "That file is over 10 MB, more than this server accepts. See “Troubleshooting” in the README.";
+export const IMPORT_TOO_BIG = "That file is over 10 MB, more than this server accepts. See “Troubleshooting” in the wiki.";

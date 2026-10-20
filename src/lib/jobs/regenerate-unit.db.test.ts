@@ -25,7 +25,7 @@ const prisma = () => db.client!;
 const units = demoResumeUnits();
 const summary = units[0];
 const where = { applicationId_kind: { applicationId: "app-1", kind: "RESUME" as const } };
-const context = { step: async () => {}, signal: new AbortController().signal };
+const context = { id: "test-job", step: async () => {}, signal: new AbortController().signal };
 const input = { applicationId: "app-1", document: "RESUME" as const, unitId: "summary", from: summary.text };
 
 beforeEach(async () => {

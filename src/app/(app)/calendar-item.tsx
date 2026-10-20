@@ -5,9 +5,8 @@ import type { CalendarItem } from "@/lib/calendar-view";
 import { cn } from "@/lib/cn";
 import { formatTime } from "@/lib/dates";
 
-/** An interview stands out; other events are quiet. */
-export const itemColours = (item: CalendarItem) =>
-  item.kind === "interview" ? "bg-primary text-on-primary hover:bg-primary-hover hover:text-on-primary" : "bg-selected text-ink hover:bg-hover hover:text-ink";
+/** An interview's dot is dark, another event's faint: the same marks as on the month. */
+export const itemDot = (item: CalendarItem) => (item.kind === "interview" ? "bg-primary" : "bg-faint");
 
 /** "13:00–13:45", or "All day". */
 export const itemTime = (item: CalendarItem, timeZone: string) =>
@@ -15,7 +14,7 @@ export const itemTime = (item: CalendarItem, timeZone: string) =>
 
 /** The item as a link to its application, or to Google Calendar in a new tab, or as text. */
 export function ItemLink({ item, className, children }: { item: CalendarItem; className?: string; children: ReactNode }) {
-  const classes = cn("block overflow-hidden rounded-[6px] no-underline", itemColours(item), className);
+  const classes = cn("block rounded-control text-ink no-underline", item.href && "hover:bg-hover hover:text-ink", className);
   if (!item.href) return <div className={classes}>{children}</div>;
   if (!item.external) {
     return (

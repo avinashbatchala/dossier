@@ -42,3 +42,24 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
   await expect(resume).toContainText("Acme Payments");
   await expect(resume).toContainText("Led the redesign of the payout flow");
 });
+
+test("adds a project with its skills and shows it on the base resume (PRO-13)", async ({ page }) => {
+  await page.goto("/profile?section=projects");
+  await page.getByRole("button", { name: "+ Add a project" }).click();
+  await expect(page.getByLabel("Project", { exact: true })).toBeFocused();
+  await page.getByLabel("Project", { exact: true }).fill("Churn predictor");
+  await page.getByLabel("Link", { exact: true }).fill("https://github.com/jane/churn");
+  await page.getByLabel("What you did").fill("Trained a model on two years of usage data\nShipped a dashboard the support team uses daily");
+  await page.getByRole("group", { name: "Skills you used here" }).getByRole("button", { name: "Figma" }).click();
+  await page.getByLabel("What you did").blur();
+  await expect(page.getByText("Saved just now")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: /Churn predictor.*github\.com\/jane\/churn/ })).toBeVisible();
+
+  await page.goto("/resume");
+  const resume = page.getByRole("article", { name: "Resume" });
+  await expect(resume.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(resume).toContainText("Churn predictor, github.com/jane/churn");
+  await expect(resume).toContainText("Shipped a dashboard the support team uses daily");
+});

@@ -1,5 +1,6 @@
 import { DateFormat } from "@/generated/prisma/enums";
 import { SIGN_OFF_UNIT, type Unit } from "@/lib/application-data";
+import { ENGLISH_LABELS, type DocumentLabels } from "@/lib/document-labels";
 import type { Basics } from "@/lib/profile";
 import { contactItems } from "@/lib/resume-content";
 import { formatDocumentDate } from "@/lib/settings";
@@ -7,8 +8,8 @@ import { formatDocumentDate } from "@/lib/settings";
 // The parts of a cover letter around its paragraphs and sign-off (E8-11):
 // the sender (name, then the contact line), the date, the recipient, the
 // greeting and the name under the sign-off. Each is a unit, edited like the
-// paragraphs. Letters written before E8-11 don't have them: they're shown as
-// those letters always were, in English, until one is edited.
+// paragraphs. Letters written before E8-11 don't have them: they're drawn
+// from the profile, in the letter's language, until one is edited.
 
 export const FRAME_UNITS = ["sender", "date", "recipient", "greeting", "signature"] as const;
 export type FrameUnitId = (typeof FRAME_UNITS)[number];
@@ -37,17 +38,19 @@ type FrameContext = {
   /** The letter's date, at UTC midnight. */
   date: Date;
   dateFormat: DateFormat;
+  /** The words for the letter's language; English without them. */
+  labels?: DocumentLabels;
 };
 
-/** The sender, signature, recipient and greeting as letters have always had them, in English, and the date in the date format. */
-export function englishFrame({ basics, company, location, date, dateFormat }: FrameContext): Frame {
+/** The sender, signature, recipient, greeting and date from the profile and the application, in the labels' language. */
+export function defaultFrame({ basics, company, location, date, dateFormat, labels = ENGLISH_LABELS }: FrameContext): Frame {
   const name = basics.name.trim() || "Your name";
   const to = company.trim();
   return {
-    sender: [name, contactItems(basics, date).join(SENDER_SEPARATOR)].filter(Boolean).join("\n"),
-    date: formatDocumentDate(date, dateFormat),
-    recipient: [to ? `${to} · Hiring team` : "Hiring team", location.trim()].filter(Boolean).join("\n"),
-    greeting: to ? `Dear ${to} team,` : "Dear hiring team,",
+    sender: [name, contactItems(basics, date, labels).join(SENDER_SEPARATOR)].filter(Boolean).join("\n"),
+    date: letterDate(date, dateFormat, labels.locale),
+    recipient: [to ? `${to} · ${labels.hiringTeam}` : labels.hiringTeam, location.trim()].filter(Boolean).join("\n"),
+    greeting: labels.greeting(to),
     signature: name,
   };
 }
@@ -68,11 +71,11 @@ export function letterDate(date: Date, format: DateFormat, lang: string | undefi
 
 /**
  * The frame of a new letter: the sender and signature from the profile, and
- * the date written once, in the letter's language. Its English recipient and
+ * the date written once, in the letter's language. Its recipient and
  * greeting only stand in for ones the AI didn't write (withFrame keeps those).
  */
 export function newFrame(context: FrameContext & { lang: string | undefined }): Frame {
-  return { ...englishFrame(context), date: letterDate(context.date, context.dateFormat, context.lang) };
+  return { ...defaultFrame(context), date: letterDate(context.date, context.dateFormat, context.lang) };
 }
 
 /**

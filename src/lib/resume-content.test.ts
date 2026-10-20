@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { demoProfile, demoResumeUnits } from "@/lib/demo-profile";
 import type { ProfileData } from "@/lib/profile";
 
-import { contactItems, resumeContent } from "./resume-content";
+import { contactItems, displayLink, resumeContent } from "./resume-content";
 
 const today = new Date(2026, 8, 28);
 
@@ -70,6 +70,7 @@ describe("resumeContent", () => {
       skills: [],
       languages: [],
       experience: [],
+      projects: [],
       education: [],
       references: [],
     };
@@ -79,6 +80,7 @@ describe("resumeContent", () => {
       contacts: [],
       summary: "",
       experience: [],
+      projects: [],
       education: [],
       skills: "",
       languages: "",
@@ -96,6 +98,25 @@ describe("resumeContent", () => {
     expect(content.experience[0].skills).toContain("Design systems");
     expect(content.skills).toMatch(/^Design systems · User research · Figma · /);
     expect(content.languages).toBe("Dutch: Native · English: Fluent (C2) · German: Intermediate (B1)");
+  });
+
+  it("lays out projects like roles, with their link as a resume shows it (PRO-13)", () => {
+    expect(resumeContent(profile).projects).toEqual([
+      {
+        id: "p1",
+        name: "Tidewater design tokens",
+        link: "github.com/janedoe/tidewater",
+        dates: "Jan 2023 – Present",
+        bullets: profile.projects[0].bullets.split("\n"),
+        skills: ["Design systems", "Figma", "HTML & CSS"],
+      },
+    ]);
+    expect(displayLink("https://www.example.com/work/")).toBe("example.com/work");
+    expect(displayLink(" http://github.com/jane ")).toBe("github.com/jane");
+    // A tailored resume takes a project's bullets from its unit, and leaves out one without a unit.
+    const tailored = resumeContent(profile, { units: [{ id: "project:p1", label: "Tidewater project", text: "Shipped a token pipeline" }] });
+    expect(tailored.projects.map((project) => project.bullets)).toEqual([["Shipped a token pipeline"]]);
+    expect(resumeContent(profile, { units: [] }).projects).toEqual([]);
   });
 
   it("includes only the parts a tailored resume has units for, in their order", () => {

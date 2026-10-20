@@ -66,7 +66,7 @@ export function DocumentPreview({
 }: {
   label: ReactNode;
   meta?: ReactNode | ((pages: number) => ReactNode);
-  /** A note between the label row and the page, e.g. what was left out to fit one page. */
+  /** A note between the label row and the page, e.g. what was left out to fit the page limit. */
   notice?: ReactNode | ((pages: number) => ReactNode);
   className?: string;
   /** A document component, e.g. ResumeDocument. */

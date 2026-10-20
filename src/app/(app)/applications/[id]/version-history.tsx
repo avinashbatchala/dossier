@@ -29,7 +29,7 @@ export function versionLabel({ cause, detail }: Pick<Version, "cause" | "detail"
     case "WRITTEN":
       return "Written by the AI";
     case "TRIMMED":
-      return "Trimmed to fit one page";
+      return "Trimmed to fit the page limit";
     case "REGENERATED":
       return detail ? `Rewrote “${detail}”` : "Rewrote a part";
     case "REFINED":
