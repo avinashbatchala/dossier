@@ -15,9 +15,9 @@ How this Dossier deployment is hosted on AWS, and how to operate it: SSH access,
 | OS | Ubuntu 24.04 LTS |
 | Static IP | Lightsail static IP named `dossier-ip` (actual address intentionally omitted) |
 | Hostname | `dossier.<STATIC_IP>.sslip.io` |
-| App image | `dossier:deepseek-fix` — local build from this fork at `v1.9.1-deepseek.2` (upstream `v1.9.1`, the DeepSeek thinking fix, and cover-letter signatures) |
-| Rollback image | `dossier:deepseek-fix-20261026` |
-| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.9.1-deepseek.2`) |
+| App image | `dossier:deepseek-fix` — local build from this fork at `v1.9.1-deepseek.3` (upstream `v1.9.1`, the DeepSeek thinking fix, and cover-letter signatures) |
+| Rollback image | `dossier:deepseek-fix-20261026b` |
+| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.9.1-deepseek.3`) |
 | Runtime | Docker Compose project `dossier` |
 | App directory | `/home/ubuntu/dossier` |
 | Compose file | `/home/ubuntu/dossier/compose.yml` |
@@ -265,7 +265,7 @@ Do not prune volumes unless you intend to delete data. Never run `docker compose
 
 ## Updating Dossier
 
-This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.9.1-deepseek.2` tag: upstream `v1.9.1`, the DeepSeek thinking fix, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
+This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.9.1-deepseek.3` tag: upstream `v1.9.1`, the DeepSeek thinking fix, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
 
 ### 1. Back up first
 
@@ -292,7 +292,7 @@ cd /home/ubuntu/dossier-src
 
 git status --short        # should be empty
 git fetch origin --tags
-git checkout v1.9.1-deepseek.2   # the fork tag you want
+git checkout v1.9.1-deepseek.3   # the fork tag you want
 
 sudo docker build --target production -t dossier:deepseek-fix .
 ```
@@ -319,7 +319,7 @@ The app runs `prisma migrate deploy` and the seed at startup. Watch it:
 sudo docker compose logs -f --tail=100 app
 ```
 
-The build takes several minutes on the 2 GB instance. The 4 GB swap file is there to keep it from running out of memory; it is not a substitute for a larger instance under real load. Since `v1.9.1-deepseek.2` the build stage sets `NODE_OPTIONS=--max-old-space-size=2048`, because upstream's type check needs more than the roughly 1 GB heap V8 gives itself on a 2 GB machine. Without it the build dies with `JavaScript heap out of memory`; with less swap than this, give the instance more before building.
+The build takes several minutes on the 2 GB instance. The 4 GB swap file is there to keep it from running out of memory; it is not a substitute for a larger instance under real load. Since `v1.9.1-deepseek.3` the build stage sets `NODE_OPTIONS=--max-old-space-size=2048`, because upstream's type check needs more than the roughly 1 GB heap V8 gives itself on a 2 GB machine. Without it the build dies with `JavaScript heap out of memory`; with less swap than this, give the instance more before building.
 
 ### 3. Verify
 
@@ -354,7 +354,7 @@ Release notes occasionally add environment variables, volumes, or services. Comp
 cd /home/ubuntu/dossier
 
 curl -fsSL -o compose.yml.new \
-  https://raw.githubusercontent.com/avinashbatchala/dossier/v1.9.1-deepseek.2/compose.production.yml
+  https://raw.githubusercontent.com/avinashbatchala/dossier/v1.9.1-deepseek.3/compose.production.yml
 
 diff -u compose.yml compose.yml.new
 ```
@@ -365,7 +365,9 @@ diff -u compose.yml compose.yml.new
 
 `v1.8.0-deepseek.2` adds cover-letter signatures: the `Signature` table and each application's `signatureOnLetter` flag. Its migration also applies on the first start; existing letters stay unsigned until you switch one on.
 
-`v1.9.1-deepseek.2` merges upstream `v1.8.1`, `v1.9.0` and `v1.9.1`: the Claude connector, profile photos, publications, standalone facts, Startups, the Theme menu on the Resume and Cover letter tabs, and a two-page default for resumes. Five migrations (`facts`, `publications`, `profile_photo`, `startups`, `claude_pastes`) apply on the first start; the connector stays off until it is turned on in Settings → Claude connector. `DOSSIER_JOBS_ARBEITSAGENTUR=off` is now an option if you never want the unofficial Arbeitsagentur source offered; unset or `on` keeps the earlier behaviour, and the deployment's `.env` is unchanged.
+`v1.9.1-deepseek.3` merges upstream `v1.8.1`, `v1.9.0` and `v1.9.1`: the Claude connector, profile photos, publications, standalone facts, Startups, the Theme menu on the Resume and Cover letter tabs, and a two-page default for resumes. Five migrations (`facts`, `publications`, `profile_photo`, `startups`, `claude_pastes`) apply on the first start; the connector stays off until it is turned on in Settings → Claude connector. `DOSSIER_JOBS_ARBEITSAGENTUR=off` is now an option if you never want the unofficial Arbeitsagentur source offered; unset or `on` keeps the earlier behaviour, and the deployment's `.env` is unchanged.
+
+`v1.9.1-deepseek.3` makes Find jobs and the job agent search a whole country by default: the first search no longer starts in the profile's city, and a place is optional. Typing a city or region still searches around it, within the radius chosen; leaving it empty searches everywhere in the country. This deployment's saved agent search was changed from 200 km around Berlin to all of Germany at the same time.
 
 If the diff is correct:
 
@@ -423,8 +425,9 @@ The image stays cached locally after it is pulled.
 The current image is tagged twice:
 
 - `dossier:deepseek-fix` — the image in use
-- `dossier:deepseek-fix-20261026` — the same image, kept for rollback
-- `dossier:deepseek-fix-20261020c` — the previous build (upstream v1.8.0 with signatures)
+- `dossier:deepseek-fix-20261026b` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261026` — the previous build (upstream v1.9.1, before country-wide search)
+- `dossier:deepseek-fix-20261020c` — the upstream v1.8.0 build with signatures
 - `dossier:deepseek-fix-20261020b` — the upstream v1.8.0 build
 - `dossier:deepseek-fix-20261020` — the upstream v1.7.0 build with the fork agent
 - `dossier:deepseek-fix-20261019` — the upstream v1.7.0 build
@@ -443,7 +446,7 @@ sudo docker compose stop app
 sudo docker compose exec -T db pg_restore --clean --if-exists \
   -U dossier -d dossier < "$HOME/dossier-YYYY-MM-DD.dump"
 
-# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261026 (or 20261020c for the previous release)
+# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261026b (or 20261026 for the previous release)
 sudo docker compose up -d
 ```
 
@@ -912,7 +915,7 @@ This is the condensed disaster-recovery path.
 9. Build the patched image:
 
    ```bash
-   git clone --depth 1 --branch v1.9.1-deepseek.2 \
+   git clone --depth 1 --branch v1.9.1-deepseek.3 \
      https://github.com/avinashbatchala/dossier.git /home/ubuntu/dossier-src
    cd /home/ubuntu/dossier-src
    # The DeepSeek fix is already committed on this tag.
