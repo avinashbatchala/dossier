@@ -17,7 +17,7 @@ vi.mock("@/lib/ai", () => ({ getAiProvider: async () => provider.current }));
 vi.mock("@/lib/ai/task-options", () => ({ loadTaskOptions: async () => ({ creativity: "BALANCED", strict: true, language: null }) }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
-  return { loadProfile: async () => demoProfile() };
+  return { loadProfile: async () => demoProfile(), loadFactTexts: async () => [] };
 });
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 

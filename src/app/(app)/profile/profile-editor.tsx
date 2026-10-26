@@ -7,12 +7,14 @@ import { PageHeader } from "@/components/page-header";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { buttonClassName } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { BASICS_FIELDS, filledBasics, type EntryOrder, type ProfileData } from "@/lib/profile";
+import { factTexts, filledBasics, REQUIRED_BASICS, type EntryOrder, type ProfileData } from "@/lib/profile";
 
 import { BasicsSection } from "./basics-section";
 import { EducationSection } from "./education-section";
 import { ExperienceSection } from "./experience-section";
+import { FactsSection } from "./facts-section";
 import { ProjectsSection } from "./projects-section";
+import { PublicationsSection } from "./publications-section";
 import { ReferencesSection } from "./references-section";
 import { TrackSaveContext, useSaveTracker } from "@/components/save-tracker";
 import { SkillsSection } from "./skills-section";
@@ -36,12 +38,14 @@ export function ProfileEditor({ initial, section, order }: { initial: ProfileDat
   const next = SECTIONS[index + 1];
 
   const counts: Record<SectionId, string> = {
-    basics: `${filledBasics(profile.basics)}/${BASICS_FIELDS.length}`,
+    basics: `${filledBasics(profile.basics)}/${REQUIRED_BASICS.length}`,
     skills: String(profile.skills.length + profile.languages.length),
     experience: String(profile.experience.length),
     projects: String(profile.projects.length),
     education: String(profile.education.length),
+    publications: String(profile.publications.length),
     references: String(profile.references.length),
+    facts: String(factTexts(profile.facts).length),
   };
 
   const body: Record<SectionId, ReactNode> = {
@@ -49,13 +53,17 @@ export function ProfileEditor({ initial, section, order }: { initial: ProfileDat
       <BasicsSection
         basics={profile.basics}
         onChange={(basics) => setProfile((current) => ({ ...current, basics }))}
+        photo={profile.photo}
+        onPhotoChange={(photo) => setProfile((current) => ({ ...current, photo }))}
       />
     ),
     skills: <SkillsSection profile={profile} update={setProfile} />,
     experience: <ExperienceSection profile={profile} update={setProfile} order={order.experience} />,
     projects: <ProjectsSection profile={profile} update={setProfile} order={order.projects} />,
     education: <EducationSection profile={profile} update={setProfile} order={order.education} />,
+    publications: <PublicationsSection profile={profile} update={setProfile} />,
     references: <ReferencesSection profile={profile} update={setProfile} />,
+    facts: <FactsSection profile={profile} update={setProfile} />,
   };
 
   return (
@@ -90,7 +98,10 @@ export function ProfileEditor({ initial, section, order }: { initial: ProfileDat
                   entry.id === section && "bg-selected font-medium hover:bg-selected",
                 )}
               >
-                <span>{entry.label}</span>
+                <span>
+                  {entry.label}
+                  {entry.optional && <span className="ml-2 text-xs text-muted">optional</span>}
+                </span>
                 <span className="text-xs text-muted tabular-nums">{counts[entry.id]}</span>
               </Link>
             ))}
@@ -100,7 +111,10 @@ export function ProfileEditor({ initial, section, order }: { initial: ProfileDat
         <div className="flex max-w-[760px] min-w-0 flex-[999_1_420px] flex-col gap-6">
           <div className="flex flex-col gap-1.5">
             <h2 className="font-serif text-section">{current.title}</h2>
-            <p className="text-sm text-pretty text-muted">{current.hint}</p>
+            <p className="text-sm text-pretty text-muted">
+              {current.optional && "Optional. "}
+              {current.hint}
+            </p>
           </div>
 
           {body[section]}

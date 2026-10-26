@@ -18,6 +18,8 @@ export const THEME_FIELDS = {
   headerStyle: true,
   sidebarStyle: true,
   dateStyle: true,
+  photoShape: true,
+  photoPosition: true,
 } as const;
 
 const builtInOrder = new Map(BUILT_IN_THEMES.map((theme, index) => [theme.id, index]));

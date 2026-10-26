@@ -151,12 +151,18 @@ export const unitEditSchema = z.object({
 
 /**
  * Document.trimmed (E10-10): what was left out of a tailored resume to fit
- * its page limit, so it can be put back. A whole role goes back where it was;
- * bullets go back at the end of their role.
+ * its page limit, or by hand with "Leave out" (#217), so it can be put back.
+ * A whole part goes back where it was; bullets go back at the end of their role.
  */
 export const trimmedSchema = z.array(
   z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("unit"), unit: unitSchema, index: z.number().int().min(0) }),
+    z.object({
+      kind: z.literal("unit"),
+      unit: unitSchema,
+      index: z.number().int().min(0),
+      /** Left out with "Leave out", not to fit the page limit. */
+      byHand: z.literal(true).optional(),
+    }),
     z.object({ kind: z.literal("bullets"), unitId: z.string().min(1), label: z.string(), lines: z.array(z.string()).min(1) }),
   ]),
 );

@@ -5,6 +5,8 @@ import {
   Density,
   HeaderStyle,
   HeadingStyle,
+  PhotoPosition,
+  PhotoShape,
   SidebarStyle,
   ThemeAlign,
   ThemeFont,
@@ -19,10 +21,10 @@ import { THEME_STYLE_DEFAULTS, type ThemeData } from "./themes";
 export const THEME_FILE_FORMAT = "dossier-theme";
 /**
  * Bump when the file's shape changes; imports refuse versions they don't
- * know. Version 2 added the header, sidebar and date styles; version 1 files
- * read with the defaults.
+ * know. Version 2 added the header, sidebar and date styles, 3 the photo's
+ * shape and position (#224); older files read with the defaults.
  */
-export const THEME_FILE_VERSION = 2;
+export const THEME_FILE_VERSION = 3;
 
 const font = z.enum(ThemeFont, { error: (issue) => `That theme uses a font Dossier doesn't have (${String(issue.input)}).` });
 
@@ -46,27 +48,31 @@ export const themeFieldsSchema = z.object({
   headerStyle: z.enum(HeaderStyle),
   sidebarStyle: z.enum(SidebarStyle),
   dateStyle: z.enum(DateStyle),
+  photoShape: z.enum(PhotoShape),
+  photoPosition: z.enum(PhotoPosition),
 });
 export type ThemeFields = z.output<typeof themeFieldsSchema>;
 
 export const themeFileSchema = z.object({
   format: z.literal(THEME_FILE_FORMAT),
   version: z.number(),
-  // Version 1 files have no header, sidebar or date style.
+  // Version 1 files have no header, sidebar or date style, and versions 1 and 2 no photo.
   theme: themeFieldsSchema.extend({
     headerStyle: z.enum(HeaderStyle).default(THEME_STYLE_DEFAULTS.headerStyle),
     sidebarStyle: z.enum(SidebarStyle).default(THEME_STYLE_DEFAULTS.sidebarStyle),
     dateStyle: z.enum(DateStyle).default(THEME_STYLE_DEFAULTS.dateStyle),
+    photoShape: z.enum(PhotoShape).default(THEME_STYLE_DEFAULTS.photoShape),
+    photoPosition: z.enum(PhotoPosition).default(THEME_STYLE_DEFAULTS.photoPosition),
   }),
 });
 
 /** What an exported theme file holds. */
 export function themeFile(theme: ThemeData) {
-  const { name, headFont, bodyFont, accent, layout, align, headingStyle, density, headerStyle, sidebarStyle, dateStyle } = theme;
+  const { name, headFont, bodyFont, accent, layout, align, headingStyle, density, headerStyle, sidebarStyle, dateStyle, photoShape, photoPosition } = theme;
   return {
     format: THEME_FILE_FORMAT,
     version: THEME_FILE_VERSION,
-    theme: { name, headFont, bodyFont, accent, layout, align, headingStyle, density, headerStyle, sidebarStyle, dateStyle },
+    theme: { name, headFont, bodyFont, accent, layout, align, headingStyle, density, headerStyle, sidebarStyle, dateStyle, photoShape, photoPosition },
   };
 }
 

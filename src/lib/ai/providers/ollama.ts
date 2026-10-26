@@ -3,7 +3,7 @@ import "server-only";
 import { Ollama } from "ollama";
 import { z } from "zod";
 
-import { BaseProvider, type ChatAnswer, type ChatCall } from "../provider";
+import { BaseProvider, withJsonSchema, type ChatAnswer, type ChatCall } from "../provider";
 
 /**
  * Ollama wants the whole prompt to fit its context window and silently drops
@@ -35,8 +35,13 @@ export class OllamaProvider extends BaseProvider {
   protected async chat(call: ChatCall): Promise<ChatAnswer> {
     const response = await this.client(call.signal).chat({
       model: call.model,
-      messages: [{ role: "system", content: call.system }, ...call.messages],
+      // Ollama's docs advise the schema in the prompt as well as in `format`, to ground the answer.
+      messages: [{ role: "system", content: call.json ? withJsonSchema(call.system, call.json.schema) : call.system }, ...call.messages],
       stream: false,
+      // A model's thinking counts towards `num_predict`, and on local hardware it can think
+      // through all of it, or past the time limit, before it answers. Models that can't
+      // think take `false` too (`true` they refuse).
+      think: false,
       format: call.json ? z.toJSONSchema(call.json.schema) : undefined,
       options: { temperature: call.temperature, num_predict: call.maxTokens, num_ctx: CONTEXT_TOKENS },
     });

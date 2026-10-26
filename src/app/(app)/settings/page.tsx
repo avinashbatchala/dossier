@@ -8,6 +8,7 @@ import { loadSearch } from "@/lib/posting-searches";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
+import { mcpUrl } from "@/lib/connector/oauth";
 import { exportFileName } from "@/lib/data-export";
 import { formatShortDate } from "@/lib/dates";
 import { env } from "@/lib/env";
@@ -31,6 +32,7 @@ import { GoogleSection } from "./google-section";
 import { GoogleNotice } from "./google-notice";
 import { JobSearchSection } from "./job-search-section";
 import { AboutSection, type AboutFacts, type UsagePingView } from "./about-section";
+import { ConnectorSection } from "./connector-section";
 import { settingsSectionFromParam } from "./sections";
 import { SettingsScreen } from "./settings-screen";
 
@@ -92,6 +94,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             }}
           />
         </>
+      ) : section === "claude" ? (
+        <ConnectorSection initial={{ on: settings.connectorEnabledAt !== null }} address={mcpUrl(env.DOSSIER_PUBLIC_URL ?? (await requestOrigin()))} />
       ) : section === "data" ? (
         <DataSection
           hasApiKey={[settings.apiKeyEnc, settings.jsearchKeyEnc, settings.adzunaKeyEnc].some((key) => key !== null)}

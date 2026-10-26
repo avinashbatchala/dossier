@@ -112,11 +112,24 @@ export const testAiConnection = action(z.object({}), async () => {
 
 const loadView = async () => jobSearchView(await loadJobSearchConfig());
 
-/** Picks the source to search, or Off. */
-export const saveJobSource = action(z.object({ source: z.enum([...JOB_SOURCES, "OFF"]) }), async ({ source }) => {
-  await saveSettings({ jobSource: source });
-  return loadView();
-});
+/**
+ * Picks the source to search, or Off. The Bundesagentur für Arbeit only with
+ * its note accepted, now (`accepted`) or before, and only while the server
+ * offers it (#223).
+ */
+export const saveJobSource = action(
+  z.object({ source: z.enum([...JOB_SOURCES, "OFF"]), accepted: z.literal(true).optional() }),
+  async ({ source, accepted }) => {
+    const accepting = source === "ARBEITSAGENTUR" && accepted === true;
+    if (source === "ARBEITSAGENTUR") {
+      const { arbeitsagentur } = await loadJobSearchConfig();
+      if (!arbeitsagentur.offered) throw new ActionError("The Bundesagentur für Arbeit isn't offered on this server.");
+      if (!accepting && !arbeitsagentur.acceptedAt) throw new ActionError("Tick “I understand” under the note about the Bundesagentur für Arbeit first.");
+    }
+    await saveSettings({ jobSource: source, ...(accepting ? { arbeitsagenturAcceptedAt: new Date().toISOString() } : {}) });
+    return loadView();
+  },
+);
 
 /** Saves where the JSearch key is from, or the Adzuna app ID, which isn't a secret. */
 export const saveJobSearchDetails = action(
@@ -235,9 +248,14 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     // Find jobs' postings and past searches (E14-9, E14-10).
     await tx.posting.deleteMany();
     await tx.postingSearch.deleteMany();
+    // Postings pasted for Claude chat (#221); the connector goes off with the settings.
+    await tx.claudePaste.deleteMany();
     // What the job agent found (E16).
     await tx.agentCandidate.deleteMany();
     await tx.postingScore.deleteMany();
+    // Startups, and the fingerprints of ones removed for good (#222).
+    await tx.startup.deleteMany();
+    await tx.startupBlock.deleteMany();
     // Mail fetched from Gmail (E15-3).
     await tx.emailMessage.deleteMany();
     // Applications take their history, documents, chat and notes along.
@@ -247,7 +265,9 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     await tx.skill.deleteMany();
     await tx.language.deleteMany();
     await tx.education.deleteMany();
+    await tx.publication.deleteMany();
     await tx.reference.deleteMany();
+    await tx.fact.deleteMany();
     await tx.profileField.deleteMany();
     await tx.theme.deleteMany({ where: { builtIn: false } });
     await tx.setting.deleteMany();
@@ -265,4 +285,21 @@ export const checkUpdates = action(z.object({}), async () => {
   const result = await checkForUpdate();
   revalidatePath("/", "layout");
   return result.status === "newer" ? result : { status: result.status };
+});
+
+// Settings → Claude connector (#221). Every connector token carries
+// connectorEnabledAt, so a new value signs Claude out.
+
+/** Turns the Claude connector on, or off, which closes its addresses and signs Claude out. */
+export const setConnector = action(z.object({ on: z.boolean() }), async ({ on }) => {
+  await saveSettings({ connectorEnabledAt: on ? new Date().toISOString() : null });
+  return { on };
+});
+
+/** "Disconnect Claude": the connector stays on, but Claude has to connect again. */
+export const disconnectClaude = action(z.object({}), async (_input, { toast }) => {
+  if (!(await loadSettings()).connectorEnabledAt) throw new ActionError("The Claude connector is off already.");
+  await saveSettings({ connectorEnabledAt: new Date().toISOString() });
+  toast("Claude is disconnected. Connect it again from Claude to use Dossier there.");
+  return null;
 });

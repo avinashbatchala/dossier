@@ -6,6 +6,7 @@ import {
   addMatchSkill,
   addNote,
   deleteNote,
+  leaveOutUnit,
   listVersions,
   loadVersion,
   putBackTrimmed,
@@ -14,9 +15,11 @@ import {
   restoreVersion,
   saveUnit,
   sendMessage,
+  setApplicationTheme,
   setFollowThemeLayout,
   setInterviewDate,
   setSignatureOnLetter,
+  setShowPhoto,
   startRegenerating,
   startWritingEmail,
   undoEmailRewrite,
@@ -102,6 +105,55 @@ describe("setFollowThemeLayout (E8-2)", () => {
 
   it("says so when the application is gone", async () => {
     expect(await setFollowThemeLayout({ id: "gone", follow: true })).toEqual({ ok: false, error: "That application no longer exists." });
+  });
+});
+
+describe("setApplicationTheme (#226)", () => {
+  const themeOf = async () =>
+    Object.fromEntries(
+      (await prisma().document.findMany({ where: { applicationId: "app-1" }, select: { kind: true, themeId: true } })).map((row) => [row.kind, row.themeId]),
+    );
+
+  beforeEach(async () => {
+    const font = { headFont: "GARAMOND", bodyFont: "GARAMOND", accent: "#1d1c1a" } as const;
+    await prisma().theme.createMany({ data: [{ id: "editorial", name: "Editorial", ...font }, { id: "classic", name: "Classic", ...font }] });
+    await prisma().document.updateMany({ where: { applicationId: "app-1" }, data: { themeId: "editorial" } });
+    await prisma().document.createMany({
+      data: [
+        { applicationId: "app-1", kind: "COVER_LETTER", units: [], themeId: null },
+        { applicationId: "app-1", kind: "EMAIL", units: [] },
+      ],
+    });
+  });
+
+  it("gives the resume and the cover letter the theme, whatever they had, and leaves their text alone", async () => {
+    expect(await setApplicationTheme({ id: "app-1", themeId: "classic" })).toEqual({ ok: true, data: null });
+    expect(await themeOf()).toEqual({ RESUME: "classic", COVER_LETTER: "classic", EMAIL: null });
+    expect(await units()).toEqual(resume);
+  });
+
+  it("says so when the theme or the application is gone", async () => {
+    expect(await setApplicationTheme({ id: "app-1", themeId: "deleted" })).toEqual({
+      ok: false,
+      error: "That theme doesn't exist anymore. Reload the page to see your themes.",
+    });
+    expect(await setApplicationTheme({ id: "gone", themeId: "classic" })).toEqual({ ok: false, error: "That application no longer exists." });
+    expect(await themeOf()).toEqual({ RESUME: "editorial", COVER_LETTER: null, EMAIL: null });
+  });
+});
+
+describe("setShowPhoto (#224)", () => {
+  it("saves the photo switch on the application, which follows the profile until then", async () => {
+    const showPhoto = async () => (await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } })).showPhoto;
+    expect(await showPhoto()).toBeNull();
+    expect(await setShowPhoto({ id: "app-1", show: false })).toEqual({ ok: true, data: null });
+    expect(await showPhoto()).toBe(false);
+    await setShowPhoto({ id: "app-1", show: true });
+    expect(await showPhoto()).toBe(true);
+  });
+
+  it("says so when the application is gone", async () => {
+    expect(await setShowPhoto({ id: "gone", show: true })).toEqual({ ok: false, error: "That application no longer exists." });
   });
 });
 
@@ -439,6 +491,34 @@ describe("putBackTrimmed (E10-10)", () => {
 
   it("says so when it's already back", async () => {
     expect(await putBackTrimmed({ id: "app-1", index: 5 })).toMatchObject({ ok: false, error: expect.stringMatching(/^That's already back/) });
+  });
+});
+
+describe("leaveOutUnit (#217)", () => {
+  const document = () => prisma().document.findUniqueOrThrow({ where: { applicationId_kind: { applicationId: "app-1", kind: "RESUME" } } });
+
+  it("takes a part off the resume and lists it after what the page limit left out", async () => {
+    const earlier = [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 2 }];
+    await prisma().document.updateMany({ where: { applicationId: "app-1" }, data: { trimmed: earlier } });
+
+    expect(await leaveOutUnit({ id: "app-1", unitId: "summary" })).toEqual({ ok: true, data: { index: 1 } });
+    const saved = await document();
+    expect((saved.units as typeof resume).map((unit) => unit.id)).toEqual(["experience:e1"]);
+    expect(saved.trimmed).toEqual([...earlier, { kind: "unit", unit: resume[0], index: 0, byHand: true }]);
+  });
+
+  it("is undone by Put back, with the part where it was", async () => {
+    await leaveOutUnit({ id: "app-1", unitId: "summary" });
+    expect(await putBackTrimmed({ id: "app-1", index: 0 })).toEqual({ ok: true, data: null });
+    const saved = await document();
+    expect(saved.units).toEqual(resume);
+    expect(saved.trimmed).toBeNull();
+  });
+
+  it("says so when the part is gone", async () => {
+    await leaveOutUnit({ id: "app-1", unitId: "summary" });
+    expect(await leaveOutUnit({ id: "app-1", unitId: "summary" })).toMatchObject({ ok: false, error: expect.stringMatching(/^That part of the document no longer exists/) });
+    expect((await document()).trimmed).toHaveLength(1);
   });
 });
 

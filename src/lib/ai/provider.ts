@@ -1,4 +1,4 @@
-import { prettifyError, type z } from "zod";
+import { prettifyError, toJSONSchema, type z } from "zod";
 
 import type { AiProvider as AiProviderKind, Creativity } from "@/generated/prisma/enums";
 
@@ -215,6 +215,11 @@ function matchingBracket(text: string, start: number): number {
     }
   }
   return -1;
+}
+
+/** `system` with the answer's JSON schema spelled out, for a model that can't be sent it or does better seeing it. */
+export function withJsonSchema(system: string, schema: z.ZodType): string {
+  return `${system}\n\nReply with only a JSON object, no other text, that matches this JSON schema:\n${JSON.stringify(toJSONSchema(schema))}`;
 }
 
 const MAX_PROBLEM_LENGTH = 1_000;

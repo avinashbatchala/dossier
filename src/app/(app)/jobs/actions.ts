@@ -3,13 +3,16 @@
 import { z } from "zod";
 
 import { action, ActionError } from "@/lib/action";
-import { isAiConfigured } from "@/lib/ai/config";
+import { isAiConfigured, isAiUsable } from "@/lib/ai/config";
+import { handOffFoundPosting, handsOffToClaude } from "@/lib/connector/handoff";
+import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { fullText } from "@/lib/job-search/find";
 import { foundPostingSchema, JOB_SOURCES, searchQuerySchema } from "@/lib/job-search/search";
 import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { scoreJobKey, scorePostingJob } from "@/lib/jobs/score-posting";
 import { removeSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { dismissPosting, savePosting, storePosting, unmarkPosting } from "@/lib/postings";
+import { saveSettings } from "@/lib/settings-data";
 
 // Find jobs (E14-6). Each search is kept with what it found (E14-10).
 // Postings come back from the screen as the search gave them, checked
@@ -17,6 +20,14 @@ import { dismissPosting, savePosting, storePosting, unmarkPosting } from "@/lib/
 
 const postingRef = z.object({ source: z.enum(JOB_SOURCES), externalId: z.string().min(1).max(500) });
 const searchId = z.string().min(1).max(100);
+
+/** "I understand" under the Bundesagentur für Arbeit's note (#223), for a BA choice made before it, or by DOSSIER_JOBS_SOURCE. */
+export const acceptArbeitsagenturNote = action(z.object({}), async () => {
+  const { arbeitsagentur } = await loadJobSearchConfig();
+  if (!arbeitsagentur.offered) throw new ActionError("The Bundesagentur für Arbeit isn't offered on this server.");
+  await saveSettings({ arbeitsagenturAcceptedAt: new Date().toISOString() });
+  return null;
+});
 
 /** "Search": asks the chosen source and keeps the search with what it found; gives its id, or what went wrong. */
 export const runJobSearch = action(z.object({ query: searchQuerySchema }), ({ query }) => runSearch(query));
@@ -65,8 +76,13 @@ export const restorePosting = action(postingRef.extend({ saved: z.boolean() }), 
   return null;
 });
 
-/** "Score" (#208): how well a posting fits the profile, in the background; a scoring under way is followed, not started again. */
-export const startScoringPosting = action(z.object({ posting: foundPostingSchema }), async ({ posting }) => {
+/**
+ * "Score" (#208): how well a posting fits the profile, in the background; a
+ * scoring under way is followed, not started again. With the Claude connector
+ * on and no AI model of Dossier's own, a Claude chat scores it instead (#221).
+ */
+export const startScoringPosting = action(z.object({ posting: foundPostingSchema }), async ({ posting }): Promise<{ jobId: string } | { handoff: string }> => {
+  if (await handsOffToClaude(await isAiUsable())) return { handoff: await handOffFoundPosting(posting, "score") };
   if (!(await isAiConfigured())) throw new ActionError("Choose an AI provider in Settings → AI provider first.");
   const key = scoreJobKey(posting);
   const [unfinished] = await findUnfinishedJobs(key);

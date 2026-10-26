@@ -72,7 +72,7 @@ services:
   # then pull one (see "Choosing an AI provider" in the wiki). Dossier reaches it at http://ollama:11434.
   ollama:
     profiles: [ai]
-    image: ollama/ollama:0.34.4
+    image: ollama/ollama:0.40.6
     restart: unless-stopped
     volumes:
       - ollama:/root/.ollama

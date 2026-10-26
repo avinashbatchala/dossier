@@ -33,7 +33,7 @@ vi.mock("@/lib/auth/session", () => ({
 }));
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 const ai = vi.hoisted(() => ({ ready: true }));
-vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready }));
+vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => ai.ready, isAiUsable: async () => ai.ready }));
 vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/jobs/runner")>()),
   startJob: vi.fn(async () => "score-job"),
@@ -134,5 +134,14 @@ describe("Score (#208)", () => {
   it("says when there's no AI provider to score with", async () => {
     ai.ready = false;
     expect(await startScoringPosting({ posting })).toEqual({ ok: false, error: "Choose an AI provider in Settings → AI provider first." });
+  });
+
+  it("hands it to a Claude chat instead, with the connector on (#221)", async () => {
+    ai.ready = false;
+    await saveSettings({ connectorEnabledAt: "2026-10-23T09:00:00.000Z" });
+    const result = await startScoringPosting({ posting });
+    const stored = await prisma().posting.findFirstOrThrow({ where: { externalId: "job-1" } });
+    expect(result).toMatchObject({ ok: true, data: { handoff: expect.stringMatching(/^https:\/\/claude\.ai\/new\?q=/) } });
+    expect(decodeURIComponent((result as { data: { handoff: string } }).data.handoff)).toContain(`posting_id "${stored.id}"`);
   });
 });

@@ -23,6 +23,9 @@ Payout simulator, github.com/johndoe/payout-sim | 2023
 Education
 MSc Interaction Design, TU Delft, 2015 – 2017
 
+Publications
+Doe, J.*, & Roe, R.* (2024). Calm payouts. Journal of Studies, 12(3), 45–67. doi:10.5555/12345678
+
 Skills: Figma, Design systems, User research
 Languages: Dutch (native), English (fluent), German`;
 
@@ -79,6 +82,11 @@ const answer = {
     { name: " ", link: null, startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, bullets: [], skills: [] },
   ],
   education: [{ degree: "MSc Interaction Design", school: "TU Delft", startYear: 2015, startMonth: null, endYear: 2017, endMonth: null, current: false, notes: null }],
+  publications: [
+    { citation: "Doe, J.*, & Roe, R.* (2024). Calm payouts. Journal of Studies, 12(3), 45–67.", link: "doi:10.5555/12345678" },
+    { citation: "Doe, J. (2025). An invented paper.", link: null },
+    { citation: " ", link: null },
+  ],
   references: [{ name: "Jane Doe", relation: "Former manager", company: "Fieldnote", email: null, phone: null }],
 };
 
@@ -98,7 +106,7 @@ describe("extractProfile (E4-10)", () => {
   it("checks the answer: dates in range, levels, one of each skill, and names looked up in the resume", async () => {
     const provider = new MockProvider({ reply: () => answer });
     const { data, promptVersion } = await extractProfile(provider, { resume: RESUME, today: new Date("2026-09-29") }, options);
-    expect(promptVersion).toBe("extract-profile@2");
+    expect(promptVersion).toBe("extract-profile@3");
     expect(data.basics).toEqual({
       name: "John Doe",
       headline: "Senior Product Designer",
@@ -164,6 +172,11 @@ describe("extractProfile (E4-10)", () => {
       },
     ]);
     expect(data.education[0]).toMatchObject({ degree: "MSc Interaction Design", school: "TU Delft", unverified: [] });
+    // Publications (#218) word for word, their asterisks kept as asterisks; one not in the resume is marked.
+    expect(data.publications).toEqual([
+      { citation: "Doe, J.\\*, & Roe, R.\\* (2024). Calm payouts. Journal of Studies, 12(3), 45–67.", link: "https://doi.org/10.5555/12345678", unverified: [] },
+      { citation: "Doe, J. (2025). An invented paper.", link: "", unverified: ["Doe, J. (2025). An invented paper."] },
+    ]);
     // Not in the resume: marked for checking.
     expect(data.references).toEqual([{ name: "Jane Doe", relation: "Former manager", company: "Fieldnote", email: "", phone: "", unverified: ["Jane Doe"] }]);
   });

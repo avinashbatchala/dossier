@@ -107,7 +107,7 @@ export type PostingState = {
 export type ShownPosting = FoundPosting & { state: PostingState };
 
 /** What went wrong with a search, in words for the screen (E14-6). */
-export type SearchProblem = { ok: false; problem: "off" | "no-country" | "no-key" | "key" | "quota" | "country" | "unavailable" | "changed"; message: string };
+export type SearchProblem = { ok: false; problem: "off" | "not-accepted" | "no-country" | "no-key" | "key" | "quota" | "country" | "unavailable" | "changed"; message: string };
 
 /** What a search gives the screen: postings, or what went wrong. */
 export type SearchOutcome = { ok: true; postings: ShownPosting[]; next: string | null } | SearchProblem;

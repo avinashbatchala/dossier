@@ -44,7 +44,7 @@ describe("stored settings", () => {
       fileNamePattern: "{name} – {company} – {doc}",
       includeRefs: false,
       signCoverLetters: false,
-      pageLimit: "1",
+      pageLimit: "2",
       nightlyBackup: true,
       jobRetentionHours: 24,
       baseThemeId: "editorial",
@@ -62,6 +62,7 @@ describe("stored settings", () => {
       jsearchHost: "openwebninja",
       adzunaAppId: null,
       adzunaKeyEnc: null,
+      arbeitsagenturAcceptedAt: null,
       agentEnabled: false,
       agentQuery: { keywords: "", place: "", country: "", radiusKm: 25, remoteOnly: false, postedWithin: "any" },
       agentHour: 7,
@@ -70,6 +71,8 @@ describe("stored settings", () => {
       agentMaxDrafts: 3,
       agentAutoDraft: false,
       agentRuns: [],
+      startupsViewedAt: null,
+      startupsLastRefresh: null,
       updateCheck: true,
       latestVersion: null,
       latestVersionUrl: null,
@@ -94,6 +97,7 @@ describe("stored settings", () => {
       usagePingChoice: null,
       usagePingChoiceAt: null,
       usagePingChoiceText: null,
+      connectorEnabledAt: null,
       browserTimeZone: null,
     });
   });
@@ -135,7 +139,9 @@ describe("stored settings", () => {
     expect(settingsFromRows([{ key: "onePage", value: "true" }]).pageLimit).toBe("1");
     // A limit chosen since wins over the old switch.
     expect(settingsFromRows([{ key: "onePage", value: "false" }, { key: "pageLimit", value: "2" }]).pageLimit).toBe("2");
-    expect(settingsFromRows([{ key: "pageLimit", value: "3" }]).pageLimit).toBe("1");
+    // Unknown, or not chosen: up to two pages.
+    expect(settingsFromRows([{ key: "pageLimit", value: "3" }]).pageLimit).toBe("2");
+    expect(settingsFromRows([]).pageLimit).toBe("2");
   });
 });
 

@@ -9,6 +9,8 @@ import { TONES } from "@/lib/tones";
 import { guardSources, guardUnits } from "../fact-guard";
 
 import {
+  applicationFacts,
+  candidateFacts,
   COVER_LETTER_APPROACH,
   CREATIVITY,
   jobForPrompt,
@@ -21,7 +23,7 @@ import {
   type Task,
 } from "./prompt-parts";
 
-export const WRITE_COVER_LETTER_VERSION = "write-cover-letter@4";
+export const WRITE_COVER_LETTER_VERSION = "write-cover-letter@5";
 
 const answerSchema = z.object({
   recipient: z.string(),
@@ -45,7 +47,8 @@ export type CoverLetterInput = {
   extracted: Extracted;
   match: Match | null;
   tone: Tone;
-  note: string;
+  /** What the candidate tells the AI for this application (APP-15). */
+  facts: string[];
   /** The posting as pasted, for the fact guard. */
   posting: string;
 };
@@ -56,13 +59,14 @@ export type CoverLetterInput = {
  * "sign-off"), which matches the tone. The sender, date and signature come
  * from the profile when the application is created (src/lib/letter-frame.ts).
  */
-export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider, { profile, extracted, match, tone, note, posting }, options) => {
+export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider, { profile, extracted, match, tone, facts, posting }, options) => {
   const answer = await provider.complete({
     system: system(
       INSTRUCTIONS,
       COVER_LETTER_APPROACH,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,
       truthfulness(options.strict),
+      candidateFacts(profile, facts),
       CREATIVITY[options.creativity],
       languageRule(options.language),
       UNTRUSTED_POSTING,
@@ -74,7 +78,7 @@ export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider,
         content: [
           `The candidate's profile:\n${profileForPrompt(profile)}`,
           `The job:\n${jobForPrompt(extracted, match)}`,
-          note.trim() && `The candidate adds: ${note.trim()}`,
+          applicationFacts(facts),
         ]
           .filter(Boolean)
           .join("\n\n"),
@@ -100,7 +104,7 @@ export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider,
   ]);
   return {
     // The recipient and greeting aren't claims about the candidate: only the paragraphs are checked.
-    data: options.strict ? guardUnits(units, guardSources(profile, extracted, posting)).map((unit) => (isFrameUnit(unit.id) ? units.find((entry) => entry.id === unit.id)! : unit)) : units,
+    data: options.strict ? guardUnits(units, guardSources(profile, extracted, posting, facts)).map((unit) => (isFrameUnit(unit.id) ? units.find((entry) => entry.id === unit.id)! : unit)) : units,
     promptVersion: WRITE_COVER_LETTER_VERSION,
   };
 };

@@ -25,24 +25,24 @@ describe("ResumeDocument", () => {
     expect(screen.getByText("jane.doe@example.com").parentElement?.textContent).toBe(
       "jane.doe@example.com  ·  +31 6 1234 5678  ·  Rotterdam, Netherlands  ·  example.com  ·  linkedin.com/in/janedoe-example",
     );
-    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Skills", "Languages"]);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Publications", "Skills", "Languages"]);
   });
 
   it("lists contact details first in the sidebar of sidebar layouts", () => {
     render(<ResumeDocument theme={theme("modern")} profile={profile} paper="A4" today={today} />);
-    expect(sectionTitles()).toEqual(["Contact", "Skills", "Languages", "Profile", "Experience", "Projects", "Education"]);
+    expect(sectionTitles()).toEqual(["Contact", "Skills", "Languages", "Profile", "Experience", "Projects", "Education", "Publications"]);
     const contact = screen.getByRole("heading", { name: "Contact" }).parentElement!;
     expect(within(contact).getAllByRole("listitem").map((item) => item.textContent)).toContain("example.com");
   });
 
   it("renders a sidebar theme in a single column when asked", () => {
     render(<ResumeDocument theme={theme("modern")} profile={profile} paper="A4" layout="SINGLE" today={today} />);
-    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Skills", "Languages"]);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Publications", "Skills", "Languages"]);
   });
 
   it("reads a sidebar at the end of the line after the main column, on its tinted panel", () => {
     render(<ResumeDocument theme={theme("studio")} profile={profile} paper="A4" today={today} />);
-    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Contact", "Skills", "Languages"]);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Publications", "Contact", "Skills", "Languages"]);
     const panel = screen.getByRole("heading", { name: "Contact" }).closest("section")!.parentElement!;
     expect(panel.className).toMatch(/sidebarPanel/);
     expect(screen.getByRole("heading", { name: "Profile" }).closest("section")!.parentElement!.className).not.toMatch(/sidebarPanel/);
@@ -71,7 +71,7 @@ describe("ResumeDocument", () => {
 
   it("keeps side headings in a single column", () => {
     render(<ResumeDocument theme={theme("folio")} profile={profile} paper="A4" today={today} />);
-    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Skills", "Languages"]);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Publications", "Skills", "Languages"]);
     expect(screen.getByRole("article", { name: "Resume" }).className).toMatch(/sideHeadings/);
   });
 
@@ -87,7 +87,7 @@ describe("ResumeDocument", () => {
   it("writes its headings, dates, levels and age in the document's language", () => {
     const withAge = { ...profile, basics: { ...profile.basics, showAge: true } };
     render(<ResumeDocument theme={theme("modern")} profile={withAge} paper="A4" today={today} language="German" includeReferences />);
-    expect(sectionTitles()).toEqual(["Kontakt", "Kenntnisse", "Sprachen", "Profil", "Berufserfahrung", "Projekte", "Ausbildung", "Referenzen"]);
+    expect(sectionTitles()).toEqual(["Kontakt", "Kenntnisse", "Sprachen", "Profil", "Berufserfahrung", "Projekte", "Ausbildung", "Publikationen", "Referenzen"]);
     expect(screen.getByText("März 2021 – Heute")).toBeInTheDocument();
     expect(screen.getByText("UX Designer").closest("[data-unit]")).toHaveTextContent("Kenntnisse · HTML & CSS, Interaction design");
     expect(screen.getByText(/^Dutch: Muttersprache · English: Fließend \(C2\)/)).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe("ResumeDocument", () => {
 
   it("keeps English headings for a language without its own", () => {
     render(<ResumeDocument theme={theme("editorial")} profile={profile} paper="A4" today={today} language="Hebrew" />);
-    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Skills", "Languages"]);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Publications", "Skills", "Languages"]);
     expect(screen.getByText("Mar 2021 – Present")).toBeInTheDocument();
   });
 
@@ -150,11 +150,22 @@ describe("ResumeDocument", () => {
     expect(project).toHaveTextContent("Skills · Design systems, Figma, HTML & CSS");
   });
 
+  it("shows publications with their bold, italics and a link that opens (#218)", () => {
+    render(<ResumeDocument theme={theme("editorial")} profile={profile} paper="A4" today={today} />);
+    const publication = screen.getByRole("heading", { name: "Publications" }).closest("section")!;
+    expect(publication).toHaveTextContent(
+      "Doe, J., & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. Proceedings of the Delft Design Conference, 4, 112–121. doi.org/10.5555/12345678",
+    );
+    expect(within(publication).getByText("Doe, J.").tagName).toBe("STRONG");
+    expect(within(publication).getByText("Proceedings of the Delft Design Conference").tagName).toBe("EM");
+    expect(within(publication).getByRole("link", { name: "doi.org/10.5555/12345678" })).toHaveAttribute("href", "https://doi.org/10.5555/12345678");
+  });
+
   it("leaves out empty sections", () => {
     render(
       <ResumeDocument
         theme={theme("modern")}
-        profile={{ ...profile, basics: { ...profile.basics, summary: "" }, skills: [], languages: [], projects: [], education: [] }}
+        profile={{ ...profile, basics: { ...profile.basics, summary: "" }, skills: [], languages: [], projects: [], education: [], publications: [] }}
         paper="A4"
       />,
     );
@@ -200,5 +211,81 @@ describe("ResumeDocument", () => {
     const page = screen.getByRole("article", { name: "Resume" });
     expect(page).toHaveAttribute("dir", "ltr");
     expect(page).not.toHaveAttribute("lang");
+  });
+
+  describe("the photo (#224)", () => {
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const withPhoto = { ...profile, photo: { src: png, onResumes: true } };
+    const photo = () => screen.queryByRole("img", { name: profile.basics.name });
+
+    it("sits at the end of the header, beside the name, headline and contacts", () => {
+      render(<ResumeDocument theme={theme("editorial")} profile={withPhoto} paper="A4" today={today} />);
+      const header = photo()!.parentElement!;
+      expect(header.tagName).toBe("HEADER");
+      expect(header.className).toMatch(/headerWithPhoto/);
+      expect(header.lastElementChild).toBe(photo());
+      expect(header.firstElementChild).toHaveTextContent(profile.basics.headline);
+      expect(photo()).toHaveAttribute("src", png);
+      expect(photo()!.className).toMatch(/photoCircle/);
+      expect(photo()!.style.getPropertyValue("--photo-width")).toBe("80");
+    });
+
+    it("goes where the theme puts it: the start of the header, above the name, or atop the sidebar", () => {
+      const { unmount } = render(<ResumeDocument theme={theme("signal")} profile={withPhoto} paper="A4" today={today} />);
+      expect(photo()!.parentElement!.firstElementChild).toBe(photo());
+      unmount();
+
+      const classic = render(<ResumeDocument theme={theme("classic")} profile={withPhoto} paper="A4" today={today} />);
+      const header = photo()!.parentElement!;
+      expect(header.firstElementChild).toBe(photo());
+      expect(header.className).not.toMatch(/headerWithPhoto/);
+      expect(photo()!.className).toMatch(/photoAbove/);
+      classic.unmount();
+
+      render(<ResumeDocument theme={theme("modern")} profile={withPhoto} paper="A4" today={today} />);
+      const column = photo()!.parentElement!;
+      expect(column.tagName).not.toBe("HEADER");
+      expect(column.firstElementChild).toBe(photo());
+      expect(within(column).getByRole("heading", { name: "Contact" })).toBeInTheDocument();
+      expect(photo()!.className).toMatch(/photoRounded/);
+      expect(photo()!.style.getPropertyValue("--photo-width")).toBe("104");
+    });
+
+    it("moves from the sidebar to the end of the header in a single column", () => {
+      render(<ResumeDocument theme={theme("modern")} profile={withPhoto} paper="A4" layout="SINGLE" today={today} />);
+      expect(photo()!.parentElement!.tagName).toBe("HEADER");
+      expect(photo()!.parentElement!.lastElementChild).toBe(photo());
+    });
+
+    it("draws a portrait 3:4, without rounding", () => {
+      render(<ResumeDocument theme={theme("chronicle")} profile={withPhoto} paper="A4" today={today} />);
+      expect(photo()!.style.getPropertyValue("--photo-width")).toBe("72");
+      expect(photo()!.style.getPropertyValue("--photo-height")).toBe("96");
+      expect(photo()!.className).not.toMatch(/photoCircle|photoRounded/);
+    });
+
+    it("follows Show on resumes, unless the application's switch says otherwise", () => {
+      const hidden = { ...profile, photo: { src: png, onResumes: false } };
+      const cases = [
+        { profile: withPhoto, showPhoto: undefined, shown: true },
+        { profile: withPhoto, showPhoto: null, shown: true },
+        { profile: withPhoto, showPhoto: false, shown: false },
+        { profile: hidden, showPhoto: undefined, shown: false },
+        { profile: hidden, showPhoto: true, shown: true },
+        { profile, showPhoto: true, shown: false },
+      ];
+      for (const { profile: entry, showPhoto, shown } of cases) {
+        const { unmount } = render(<ResumeDocument theme={theme("editorial")} profile={entry} paper="A4" showPhoto={showPhoto} today={today} />);
+        expect(photo() !== null).toBe(shown);
+        unmount();
+      }
+    });
+
+    it("leaves the header as it was without a photo", () => {
+      render(<ResumeDocument theme={theme("editorial")} profile={profile} paper="A4" today={today} />);
+      const header = screen.getByRole("heading", { level: 1 }).parentElement!;
+      expect(header.tagName).toBe("HEADER");
+      expect(header.className).not.toMatch(/headerWithPhoto/);
+    });
   });
 });

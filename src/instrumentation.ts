@@ -26,6 +26,19 @@ export async function register() {
     const { startAgentSchedule } = await import("@/lib/agent/schedule");
     startAgentSchedule();
 
+    // Startups' daily refresh, once it was refreshed by hand and while the screen is in use (#222).
+    const { startStartupsSchedule } = await import("@/lib/startups/schedule");
+    startStartupsSchedule();
+
+    // DOSSIER_JOBS_SOURCE=arbeitsagentur: the log says what that choice means (#223).
+    const { arbeitsagenturStartupNotice, loadJobSearchConfig } = await import("@/lib/job-search/config");
+    try {
+      const notice = arbeitsagenturStartupNotice(await loadJobSearchConfig());
+      if (notice) console.log(notice);
+    } catch (error) {
+      logServerError("job search", error);
+    }
+
     // DOSSIER_TELEMETRY, when set, is the usage ping's answer on record (#172).
     // Then the log says what the ping sends while it's on, or how to answer
     // while nobody has.

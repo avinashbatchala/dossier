@@ -19,9 +19,11 @@ import { READ_POSTING_STEPS, WRITE_DOCUMENTS_STEPS } from "@/lib/jobs/applicatio
 import type { ReadPostingResult } from "@/lib/jobs/read-posting";
 import type { WriteDocumentsResult } from "@/lib/jobs/write-documents";
 
+import { openPendingTab, sendPendingTab } from "@/lib/claude-tab";
+
 import { addSkill } from "../profile/actions";
 
-import { createApplication, fetchPostingText, startReadingPosting, startWritingDocuments } from "./actions";
+import { createApplication, fetchPostingText, handOffToClaude, startReadingPosting, startWritingDocuments } from "./actions";
 import { DetailsCard } from "./details-card";
 import { createDraftStore } from "./draft-store";
 import { MatchCard } from "./match-card";
@@ -57,11 +59,16 @@ export type Draft = {
   writeJobId: string | null;
   /** The Find jobs posting it was started from (E14-8); missing in drafts from before. */
   postingId?: string | null;
+  /** The startup it was started from with "Write to them" (#222). */
+  startupId?: string | null;
 };
 
-/** A posting handed over by "Start application" on Find jobs (E14-8). */
+/** A posting handed over by "Start application" on Find jobs (E14-8), or by "Write to them" on Startups (#222). */
 export type FromPosting = {
-  id: string;
+  /** The Find jobs posting; null for a startup. */
+  id: string | null;
+  /** The startup and its name, from Startups. */
+  startup?: { id: string; company: string };
   text: string;
   url: string;
   /** False when only the start of the posting came through. */
@@ -127,6 +134,8 @@ function useLeaveGuard(active: boolean, onLeave: () => void) {
 export type NewApplicationProps = {
   /** Whether an AI provider is set up; without one, the page points to Settings. */
   aiReady: boolean;
+  /** The Claude connector is on and Dossier has no usable AI model: a Claude chat writes it instead (#221). */
+  writeInClaude?: boolean;
   /** Offered through "Use a sample posting" before the first application. */
   samplePosting: string | null;
   /** Settings → default cover letter tone (SET-6). */
@@ -138,7 +147,7 @@ export type NewApplicationProps = {
 };
 
 /** The new application flow (E7): paste → read → review → create. */
-export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = false, fromPosting = null }: NewApplicationProps) {
+export function NewApplication({ aiReady, writeInClaude = false, samplePosting, defaultTone, fresh = false, fromPosting = null }: NewApplicationProps) {
   const [initial] = useState<Draft>(() => ({
     step: "paste",
     posting: "",
@@ -175,11 +184,13 @@ export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = fa
   // application" would, at the paste step, to check before reading it.
   useEffect(() => {
     if (!fromPosting) return;
-    draftStore?.set({ ...initial, posting: fromPosting.text, postingUrl: fromPosting.url, postingId: fromPosting.id });
+    draftStore?.set({ ...initial, posting: fromPosting.text, postingUrl: fromPosting.url, postingId: fromPosting.id, startupId: fromPosting.startup?.id ?? null });
     toast(
-      fromPosting.complete
-        ? "Here's the posting from Find jobs. Check it, then read it."
-        : "Only the start of this posting came through. Paste the rest from the posting's page, then read it.",
+      fromPosting.startup
+        ? `Here's what Startups knows about ${fromPosting.startup.company}, without its addresses. Add the role you're after if it doesn't say, then read it.`
+        : fromPosting.complete
+          ? "Here's the posting from Find jobs. Check it, then read it."
+          : "Only the start of this posting came through. Paste the rest from the posting's page, then read it.",
     );
     router.replace("/new");
   }, [fromPosting, initial, router]);
@@ -223,6 +234,20 @@ export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = fa
     if (result.ok) update({ step: "reading", readJobId: result.data, readFor: draft.posting.trim(), read: null });
   };
 
+  // #221: Claude chat writes it on the user's own Claude plan, through the
+  // connector, and saves it here as a Draft application.
+  const writeWithClaude = async () => {
+    if (!draft.posting.trim()) return toast("Paste a job posting first.");
+    // Opened now, while the click still counts: a tab opened after waiting is blocked as a pop-up.
+    const chat = openPendingTab();
+    setStarting(true);
+    const result = toastResult(await handOffToClaude({ posting: draft.posting, postingUrl: draft.postingUrl }));
+    setStarting(false);
+    if (!result.ok) return void chat?.close();
+    sendPendingTab(chat, result.data.url);
+    toast("Writing it in Claude. It shows up under Applications as a Draft once Claude has saved it.");
+  };
+
   // E7-8: the posting's text from its link, to check before reading it.
   const fetchFromLink = async () => {
     if (!draft.postingUrl.trim()) return toast("Enter the link to the posting first.");
@@ -261,7 +286,13 @@ export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = fa
     if (saving.current) return;
     saving.current = true;
     setSaveError(null);
-    const result = await createApplication({ writeJobId, details: draft.details, postingUrl: draft.postingUrl, postingId: draft.postingId ?? null });
+    const result = await createApplication({
+      writeJobId,
+      details: draft.details,
+      postingUrl: draft.postingUrl,
+      postingId: draft.postingId ?? null,
+      startupId: draft.startupId ?? null,
+    });
     saving.current = false;
     if (!result.ok) {
       setSaveError(result.error);
@@ -324,7 +355,17 @@ export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = fa
         <div ref={stepArea} className="contents">
           {draft.step === "paste" && (
             <>
-              {!aiReady && (
+              {writeInClaude ? (
+                <p role="note" className="rounded-card border border-line-card bg-card px-4 py-3 text-meta text-muted">
+                  Dossier has no AI model of its own, so Claude writes this one: <strong className="text-ink">Write it with Claude</strong> opens a
+                  chat in Claude that uses your Claude plan and the Dossier connector, and saves the resume and cover letter here as a Draft. To
+                  have Dossier write it instead,{" "}
+                  <Link href="/settings?section=ai" className="font-medium text-ink underline underline-offset-2">
+                    choose a model in Settings → AI provider
+                  </Link>
+                  .
+                </p>
+              ) : !aiReady && (
                 <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
                   No AI provider is set up yet, so nothing can read the posting.{" "}
                   <Link href="/settings?section=ai" className="font-medium text-warning underline underline-offset-2">
@@ -379,9 +420,9 @@ export function NewApplication({ aiReady, samplePosting, defaultTone, fresh = fa
                 )}
                 <Button
                   aria-disabled={!draft.posting.trim() || starting || undefined}
-                  onClick={() => void (starting ? undefined : read())}
+                  onClick={() => void (starting ? undefined : writeInClaude ? writeWithClaude() : read())}
                 >
-                  Read the posting →
+                  {writeInClaude ? "Write it with Claude →" : "Read the posting →"}
                 </Button>
               </div>
             </>

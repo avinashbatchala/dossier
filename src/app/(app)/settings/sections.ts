@@ -5,6 +5,7 @@ export const SETTINGS_SECTIONS = [
   { id: "agent", label: "Job agent" },
   { id: "documents", label: "Documents" },
   { id: "google", label: "Google" },
+  { id: "claude", label: "Claude connector" },
   { id: "data", label: "Your data" },
   { id: "about", label: "About" },
 ] as const;

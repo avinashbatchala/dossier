@@ -15,6 +15,7 @@ import { providerOption } from "@/lib/ai/provider-options";
 import { retry } from "@/lib/jobs/actions";
 import type { ImportProfileResult } from "@/lib/jobs/import-profile";
 import { messages } from "@/lib/messages";
+import { citationText } from "@/lib/citation";
 import { BASICS_FIELDS, formatDateRange, languageLevelLabel, type BasicsField } from "@/lib/profile";
 import { IMPORT_PROFILE_STEPS, importCounts, type ImportedProfile, type ImportMode } from "@/lib/profile-import";
 
@@ -195,7 +196,7 @@ export function ProfileImport({
               open={confirmReplace}
               onOpenChange={setConfirmReplace}
               title="Replace your profile?"
-              description="Your basics, skills, languages, roles, projects, education and references are removed first; then your profile holds exactly what was read from the resume. Your applications and their documents stay as they are."
+              description="Your basics, skills, languages, roles, projects, education, publications and references are removed first; then your profile holds exactly what was read from the resume. Your applications and their documents stay as they are."
               confirmLabel="Replace my profile"
               onConfirm={() => void apply("replace")}
             />
@@ -319,6 +320,14 @@ function Preview({ profile }: { profile: ImportedProfile }) {
             >
               {entry.notes && <p>{entry.notes}</p>}
             </Entry>
+          ))}
+        </Section>
+      )}
+
+      {profile.publications.length > 0 && (
+        <Section title="Publications">
+          {profile.publications.map((entry, index) => (
+            <Entry key={index} title={citationText(entry.citation)} meta={entry.link} unverified={entry.unverified} />
           ))}
         </Section>
       )}

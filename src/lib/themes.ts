@@ -4,6 +4,8 @@ import {
   HeaderStyle,
   HeadingStyle,
   PaperSize,
+  PhotoPosition,
+  PhotoShape,
   SidebarStyle,
   ThemeAlign,
   ThemeFont,
@@ -31,6 +33,9 @@ export type ThemeData = {
   headerStyle: HeaderStyle;
   sidebarStyle: SidebarStyle;
   dateStyle: DateStyle;
+  /** The profile photo's shape and place (#224). */
+  photoShape: PhotoShape;
+  photoPosition: PhotoPosition;
 };
 
 /** What a theme that doesn't say otherwise has: the look of the first six built-ins. */
@@ -38,6 +43,8 @@ export const THEME_STYLE_DEFAULTS = {
   headerStyle: HeaderStyle.PLAIN,
   sidebarStyle: SidebarStyle.PLAIN,
   dateStyle: DateStyle.INLINE,
+  photoShape: PhotoShape.CIRCLE,
+  photoPosition: PhotoPosition.HEADER_END,
 } satisfies Partial<ThemeData>;
 type StyleField = keyof typeof THEME_STYLE_DEFAULTS;
 
@@ -45,17 +52,17 @@ type StyleField = keyof typeof THEME_STYLE_DEFAULTS;
 export const BUILT_IN_THEMES: ThemeData[] = (
   [
     { id: "editorial", name: "Editorial", headFont: "NEWSREADER", bodyFont: "GEIST", accent: "#7a3b2e", layout: "SINGLE", align: "LEFT", headingStyle: "PLAIN", density: "REGULAR" },
-    { id: "classic", name: "Classic", headFont: "GARAMOND", bodyFont: "GARAMOND", accent: "#1d1c1a", layout: "SINGLE", align: "CENTER", headingStyle: "RULE", density: "REGULAR" },
-    { id: "modern", name: "Modern", headFont: "GEIST", bodyFont: "GEIST", accent: "#2f5d8a", layout: "SPLIT", align: "LEFT", headingStyle: "CAPS", density: "REGULAR" },
-    { id: "minimal", name: "Minimal", headFont: "PLEX_SANS", bodyFont: "PLEX_SANS", accent: "#6f6a62", layout: "SINGLE", align: "LEFT", headingStyle: "CAPS", density: "AIRY" },
-    { id: "technical", name: "Technical", headFont: "PLEX_MONO", bodyFont: "PLEX_SANS", accent: "#2d6a4f", layout: "SPLIT", align: "LEFT", headingStyle: "RULE", density: "COMPACT" },
-    { id: "ledger", name: "Ledger", headFont: "NEWSREADER", bodyFont: "PLEX_SANS", accent: "#1d1c1a", layout: "SPLIT", align: "LEFT", headingStyle: "RULE", density: "COMPACT" },
-    { id: "signal", name: "Signal", headFont: "MANROPE", bodyFont: "MANROPE", accent: "#1f3a5f", layout: "SINGLE", align: "LEFT", headingStyle: "BAR", density: "REGULAR", headerStyle: "BANNER" },
-    { id: "studio", name: "Studio", headFont: "SPACE_GROTESK", bodyFont: "INTER", accent: "#1f6f6b", layout: "SPLIT_END", align: "LEFT", headingStyle: "CAPS", density: "REGULAR", sidebarStyle: "TINTED" },
-    { id: "chronicle", name: "Chronicle", headFont: "FRAUNCES", bodyFont: "SOURCE_SERIF", accent: "#7b2337", layout: "SINGLE", align: "LEFT", headingStyle: "RULE", density: "REGULAR", dateStyle: "TIMELINE" },
-    { id: "folio", name: "Folio", headFont: "PLAYFAIR", bodyFont: "LORA", accent: "#1d1c1a", layout: "SIDE_HEADINGS", align: "LEFT", headingStyle: "PLAIN", density: "AIRY" },
-    { id: "console", name: "Console", headFont: "JETBRAINS_MONO", bodyFont: "WORK_SANS", accent: "#4a5563", layout: "SPLIT", align: "LEFT", headingStyle: "BAND", density: "COMPACT", sidebarStyle: "TINTED" },
-    { id: "atlas", name: "Atlas", headFont: "LIBRE_CASLON", bodyFont: "INTER", accent: "#a14a1f", layout: "SINGLE", align: "CENTER", headingStyle: "CAPS", density: "REGULAR", headerStyle: "BANNER", dateStyle: "TIMELINE" },
+    { id: "classic", name: "Classic", headFont: "GARAMOND", bodyFont: "GARAMOND", accent: "#1d1c1a", layout: "SINGLE", align: "CENTER", headingStyle: "RULE", density: "REGULAR", photoPosition: "ABOVE_NAME" },
+    { id: "modern", name: "Modern", headFont: "GEIST", bodyFont: "GEIST", accent: "#2f5d8a", layout: "SPLIT", align: "LEFT", headingStyle: "CAPS", density: "REGULAR", photoShape: "ROUNDED", photoPosition: "SIDEBAR" },
+    { id: "minimal", name: "Minimal", headFont: "PLEX_SANS", bodyFont: "PLEX_SANS", accent: "#6f6a62", layout: "SINGLE", align: "LEFT", headingStyle: "CAPS", density: "AIRY", photoShape: "SQUARE" },
+    { id: "technical", name: "Technical", headFont: "PLEX_MONO", bodyFont: "PLEX_SANS", accent: "#2d6a4f", layout: "SPLIT", align: "LEFT", headingStyle: "RULE", density: "COMPACT", photoShape: "SQUARE", photoPosition: "SIDEBAR" },
+    { id: "ledger", name: "Ledger", headFont: "NEWSREADER", bodyFont: "PLEX_SANS", accent: "#1d1c1a", layout: "SPLIT", align: "LEFT", headingStyle: "RULE", density: "COMPACT", photoShape: "PORTRAIT" },
+    { id: "signal", name: "Signal", headFont: "MANROPE", bodyFont: "MANROPE", accent: "#1f3a5f", layout: "SINGLE", align: "LEFT", headingStyle: "BAR", density: "REGULAR", headerStyle: "BANNER", photoPosition: "HEADER_START" },
+    { id: "studio", name: "Studio", headFont: "SPACE_GROTESK", bodyFont: "INTER", accent: "#1f6f6b", layout: "SPLIT_END", align: "LEFT", headingStyle: "CAPS", density: "REGULAR", sidebarStyle: "TINTED", photoPosition: "SIDEBAR" },
+    { id: "chronicle", name: "Chronicle", headFont: "FRAUNCES", bodyFont: "SOURCE_SERIF", accent: "#7b2337", layout: "SINGLE", align: "LEFT", headingStyle: "RULE", density: "REGULAR", dateStyle: "TIMELINE", photoShape: "PORTRAIT" },
+    { id: "folio", name: "Folio", headFont: "PLAYFAIR", bodyFont: "LORA", accent: "#1d1c1a", layout: "SIDE_HEADINGS", align: "LEFT", headingStyle: "PLAIN", density: "AIRY", photoShape: "ROUNDED", photoPosition: "HEADER_START" },
+    { id: "console", name: "Console", headFont: "JETBRAINS_MONO", bodyFont: "WORK_SANS", accent: "#4a5563", layout: "SPLIT", align: "LEFT", headingStyle: "BAND", density: "COMPACT", sidebarStyle: "TINTED", photoShape: "SQUARE", photoPosition: "SIDEBAR" },
+    { id: "atlas", name: "Atlas", headFont: "LIBRE_CASLON", bodyFont: "INTER", accent: "#a14a1f", layout: "SINGLE", align: "CENTER", headingStyle: "CAPS", density: "REGULAR", headerStyle: "BANNER", dateStyle: "TIMELINE", photoPosition: "ABOVE_NAME" },
   ] satisfies (Omit<ThemeData, "builtIn" | StyleField> & Partial<Pick<ThemeData, StyleField>>)[]
 ).map((theme) => ({ ...THEME_STYLE_DEFAULTS, ...theme, builtIn: true }));
 
@@ -211,6 +218,24 @@ export const DATE_STYLES: Record<DateStyle, { label: string }> = {
   [DateStyle.TIMELINE]: { label: "Timeline" },
 };
 
+/**
+ * Photo shapes (#224), with their size in page units in the header and in the
+ * sidebar. The photo is cropped 3:4; the square shapes show its middle.
+ */
+export const PHOTO_SHAPES: Record<PhotoShape, { label: string; header: { width: number; height: number }; sidebar: { width: number; height: number } }> = {
+  [PhotoShape.CIRCLE]: { label: "Circle", header: { width: 80, height: 80 }, sidebar: { width: 104, height: 104 } },
+  [PhotoShape.ROUNDED]: { label: "Rounded square", header: { width: 80, height: 80 }, sidebar: { width: 104, height: 104 } },
+  [PhotoShape.SQUARE]: { label: "Square", header: { width: 80, height: 80 }, sidebar: { width: 104, height: 104 } },
+  [PhotoShape.PORTRAIT]: { label: "Portrait", header: { width: 72, height: 96 }, sidebar: { width: 96, height: 128 } },
+};
+
+export const PHOTO_POSITIONS: Record<PhotoPosition, { label: string }> = {
+  [PhotoPosition.HEADER_END]: { label: "End of the header" },
+  [PhotoPosition.HEADER_START]: { label: "Start of the header" },
+  [PhotoPosition.ABOVE_NAME]: { label: "Above the name" },
+  [PhotoPosition.SIDEBAR]: { label: "Top of the sidebar" },
+};
+
 /** The sidebar layout's column width and the gap next to it. */
 export const SIDEBAR = { width: 150, gap: 28 };
 
@@ -241,6 +266,11 @@ export function resolveTheme(theme: ThemeData, layout: ThemeLayout = theme.layou
     centered: !split && theme.align === ThemeAlign.CENTER,
     banner: theme.headerStyle === HeaderStyle.BANNER,
     timeline: theme.dateStyle === DateStyle.TIMELINE,
+    photo: {
+      shape: theme.photoShape,
+      // Only a sidebar layout has a sidebar to put it in.
+      position: !split && theme.photoPosition === PhotoPosition.SIDEBAR ? PhotoPosition.HEADER_END : theme.photoPosition,
+    },
     headFamily: documentFamily(theme.headFont),
     bodyFamily: documentFamily(theme.bodyFont),
     accent: theme.accent,

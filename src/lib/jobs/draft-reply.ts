@@ -10,7 +10,7 @@ import { extractedOf } from "@/lib/application-data";
 import { proposeSlots, workingHours } from "@/lib/google/availability";
 import { formatSlot } from "@/lib/google/slots";
 import { prisma } from "@/lib/prisma";
-import { loadProfile } from "@/lib/profile-data";
+import { loadFactTexts, loadProfile } from "@/lib/profile-data";
 
 import { defineJob } from "./runner";
 
@@ -69,6 +69,7 @@ export const draftReplyJob = defineJob({
         thread: thread.map((entry) => `${entry.direction === EmailDirection.OUTGOING ? "The candidate" : entry.fromName || "They"} wrote:\n${entry.body.slice(0, 2000)}`),
         slots: offered,
         note,
+        facts: application ? await loadFactTexts(application.id) : [],
         posting: application?.postingText ?? "",
       },
       { ...options, language: null, signal },

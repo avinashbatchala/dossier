@@ -17,7 +17,7 @@ vi.mock("@/lib/ai", () => ({ getAiProvider: async () => provider.current }));
 vi.mock("@/lib/ai/task-options", () => ({ loadTaskOptions: async () => ({ creativity: "BALANCED", strict: true, language: null }) }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
-  return { loadProfile: async () => demoProfile() };
+  return { loadProfile: async () => demoProfile(), loadFactTexts: async () => [] };
 });
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
@@ -63,7 +63,7 @@ describe("refineJob (E8-5)", () => {
     expect(saved).toMatchObject({
       role: "AI",
       text: "Trimmed your summary.",
-      writtenWith: "refine-chat@5",
+      writtenWith: "refine-chat@7",
       previousTone: null,
       edits: [{ document: "RESUME", unitId: "summary", text: "Designer of calm tools.", previousText: resume[0].text }],
     });

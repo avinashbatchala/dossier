@@ -109,7 +109,7 @@ describe("basics", () => {
     address: "", city: "", country: "", linkedin: "", summary: "",
   };
 
-  it("counts filled fields, ignoring whitespace", () => {
+  it("counts filled required fields, ignoring whitespace", () => {
     expect(BASICS_FIELDS).toHaveLength(11);
     expect(filledBasics(empty)).toBe(0);
     expect(filledBasics({ ...empty, name: "Jane", email: "jane.doe@example.com", city: "  " })).toBe(2);
@@ -127,25 +127,34 @@ describe("basics", () => {
 
 describe("profile strength", () => {
   const basics = Object.fromEntries(BASICS_FIELDS.map((field) => [field, ""])) as Record<(typeof BASICS_FIELDS)[number], string>;
-  const none = { basics, experience: 0, education: 0, skills: 0, references: 0 };
-  const full = Object.fromEntries(BASICS_FIELDS.map((field) => [field, "x"])) as typeof basics;
+  const none = { basics, experience: 0, education: 0, skills: 0 };
+  const required = { ...basics, name: "L", headline: "h", email: "e", city: "c", country: "n", summary: "s" };
 
-  it("weighs basics 40, experience 25, education 15, skills 12 and references 8", () => {
+  it("weighs the required basics 40, experience 30, education 15 and skills 15", () => {
     expect(profileStrength(none).percent).toBe(0);
-    expect(profileStrength({ ...none, experience: 1 }).percent).toBe(25);
-    expect(profileStrength({ ...none, basics: full, experience: 3, education: 2, skills: 7, references: 2 }).percent).toBe(100);
-    // 4 of 11 basics = 14.5 → 15, plus skills 12
-    expect(profileStrength({ ...none, basics: { ...basics, name: "L", email: "e", city: "c", summary: "s" }, skills: 1 }).percent).toBe(27);
+    expect(profileStrength({ ...none, experience: 1 }).percent).toBe(30);
+    expect(profileStrength({ ...none, basics: required, experience: 3, education: 2, skills: 7 }).percent).toBe(100);
+    // 4 of 6 required basics = 26.7 → 27, plus skills 15
+    expect(profileStrength({ ...none, basics: { ...basics, name: "L", email: "e", city: "c", summary: "s" }, skills: 1 }).percent).toBe(42);
+  });
+
+  it("leaves out the optional basics (#216)", () => {
+    const optional = { ...basics, phone: "p", dob: "1992-04-18", website: "w", address: "a", linkedin: "l" };
+    expect(profileStrength({ ...none, basics: optional }).percent).toBe(0);
+    expect(filledBasics(optional)).toBe(0);
   });
 
   it("encourages at every level", () => {
     expect(profileStrength(none).hint).toBe("A good start. Experience matters most.");
-    expect(profileStrength({ ...none, basics: full, experience: 1 }).hint).toBe(
+    expect(profileStrength({ ...none, basics: required, experience: 1 }).hint).toBe(
       "Nice progress. A bit more detail makes tailoring sharper.",
     );
-    expect(profileStrength({ ...none, basics: full, experience: 1, education: 1, skills: 1 }).percent).toBe(92);
-    expect(profileStrength({ ...none, basics: full, experience: 1, education: 1, skills: 1 }).hint).toBe(
+    expect(profileStrength({ ...none, basics: { ...required, summary: "" }, experience: 1, education: 1, skills: 1 }).percent).toBe(93);
+    expect(profileStrength({ ...none, basics: { ...required, summary: "" }, experience: 1, education: 1, skills: 1 }).hint).toBe(
       "Looking great. The AI has plenty to work with.",
+    );
+    expect(profileStrength({ ...none, basics: required, experience: 1, education: 1, skills: 1 }).hint).toBe(
+      "All set. The optional sections are there if they help.",
     );
   });
 });

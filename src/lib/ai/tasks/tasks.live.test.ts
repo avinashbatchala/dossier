@@ -45,11 +45,11 @@ describe.runIf(live.has("ollama") || mistral !== null || lmStudio !== null)("liv
     console.log(`match (${time()}):`, match.items.map((item) => `${item.result.padEnd(7)} ${item.requirement}: ${item.note}`).join("\n"));
     expect(match.items).toHaveLength(extracted.requirements.length);
 
-    const { data: resume } = await tailorResume(provider, { profile, extracted, match, note: "", posting: sample.ledgerly.posting }, options);
+    const { data: resume } = await tailorResume(provider, { profile, extracted, match, facts: [], posting: sample.ledgerly.posting }, options);
     console.log(`resume (${time()}):`, resume.map((unit) => `[${unit.id}] ${unit.text}${unit.unverified ? `  ⚑ ${unit.unverified.join(", ")}` : ""}`).join("\n"));
     expect(resume.find((unit) => unit.id === "summary")?.text.length).toBeGreaterThan(20);
 
-    const { data: letter } = await writeCoverLetter(provider, { profile, extracted, match, tone: "WARM", note: "", posting: sample.ledgerly.posting }, options);
+    const { data: letter } = await writeCoverLetter(provider, { profile, extracted, match, tone: "WARM", facts: [], posting: sample.ledgerly.posting }, options);
     console.log(`letter (${time()}):`, letter.map((unit) => `[${unit.id}] ${unit.text}${unit.unverified ? `  ⚑ ${unit.unverified.join(", ")}` : ""}`).join("\n\n"));
     expect(letter.at(-1)).toMatchObject({ id: "sign-off", text: "Warm regards," });
     expect(letter.length).toBeGreaterThanOrEqual(3);

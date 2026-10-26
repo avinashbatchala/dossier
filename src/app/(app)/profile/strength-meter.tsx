@@ -13,7 +13,6 @@ export function StrengthMeter({ profile }: { profile: ProfileData }) {
     experience: profile.experience.length,
     education: profile.education.length,
     skills: profile.skills.length,
-    references: profile.references.length,
   });
 
   return (

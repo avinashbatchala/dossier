@@ -16,7 +16,7 @@ vi.mock("@/lib/ai", () => ({ getAiProvider: async () => provider.current }));
 vi.mock("@/lib/ai/task-options", () => ({ loadTaskOptions: async () => ({ creativity: "BALANCED", strict: true, language: null }) }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
-  return { loadProfile: async () => demoProfile() };
+  return { loadProfile: async () => demoProfile(), loadFactTexts: async () => [] };
 });
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
@@ -66,13 +66,27 @@ describe("writeEmailJob", () => {
       { id: "subject", text: "Application: Senior Product Designer" },
       { id: "body", text: expect.stringMatching(/^Dear John,\n\nI'm applying/) },
     ]);
-    expect(document.writtenWith).toBe("write-email@1");
+    expect(document.writtenWith).toBe("write-email@2");
     expect(document.versions.map((version) => version.cause)).toEqual(["WRITTEN"]);
     const prompt = JSON.stringify(mock.calls[0]);
     expect(prompt).toMatch(/Dutch/);
     // The letter's paragraphs go along; its sender's contact details never do.
     expect(prompt).toContain("Payments are where trust is won.");
     expect(prompt).not.toContain("jane@example.com");
+  });
+
+  it("sends a startup's application to the address it publishes, which the AI never sees (#222)", async () => {
+    const emails = [
+      { email: "jane@ledgerly.example", label: "Person", from: "", onRequest: true, foundAt: "" },
+      { email: "jobs@ledgerly.example", label: "Hiring", from: "", onRequest: false, foundAt: "" },
+    ];
+    await prisma().startup.create({ data: { source: "HN", externalId: "1", company: "Ledgerly", roles: [], emails, links: [], reasons: [], applicationId: "app-1" } });
+    await prisma().application.update({ where: { id: "app-1" }, data: { postingText: "Ledgerly is hiring a Senior Product Designer." } });
+    const mock = new MockProvider({ reply: () => answer({ contactEmail: null, contactName: null }) });
+    provider.current = mock;
+    const result = await writeEmailJob.run({ applicationId: "app-1" }, context);
+    expect(result.units[0]).toMatchObject({ id: "to", text: "jobs@ledgerly.example" });
+    expect(JSON.stringify(mock.calls)).not.toContain("ledgerly.example");
   });
 
   it("writes over the email it had, keeping a recipient typed in, and returns the old one for Undo", async () => {

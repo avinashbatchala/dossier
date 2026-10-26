@@ -9,6 +9,8 @@ import { TONES } from "@/lib/tones";
 import { guardSources, guardUnits } from "../fact-guard";
 
 import {
+  applicationFacts,
+  candidateFacts,
   CREATIVITY,
   jobForPrompt,
   languageRule,
@@ -22,7 +24,7 @@ import {
 } from "./prompt-parts";
 import { withoutFrame } from "./write-cover-letter";
 
-export const WRITE_EMAIL_VERSION = "write-email@1";
+export const WRITE_EMAIL_VERSION = "write-email@2";
 
 const answerSchema = z.object({
   contactName: z.string().nullable(),
@@ -47,7 +49,8 @@ export type EmailInput = {
   extracted: Extracted;
   match: Match | null;
   tone: Tone;
-  note: string;
+  /** What the candidate tells the AI for this application (APP-15). */
+  facts: string[];
   /** The posting as pasted: where to send the application, and for the fact guard. */
   posting: string;
   /** The cover letter's paragraphs, so the email doesn't repeat them. */
@@ -60,12 +63,13 @@ export type EmailInput = {
  * message ends with the sign-off and the candidate's name. An address the
  * posting doesn't contain is never used, so the recipient may be empty.
  */
-export const writeEmail: Task<EmailInput, Unit[]> = async (provider, { profile, extracted, match, tone, note, posting, letter }, options) => {
+export const writeEmail: Task<EmailInput, Unit[]> = async (provider, { profile, extracted, match, tone, facts, posting, letter }, options) => {
   const answer = await provider.complete({
     system: system(
       INSTRUCTIONS,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,
       truthfulness(options.strict),
+      candidateFacts(profile, facts),
       CREATIVITY[options.creativity],
       languageRule(options.language),
       UNTRUSTED_POSTING,
@@ -78,7 +82,7 @@ export const writeEmail: Task<EmailInput, Unit[]> = async (provider, { profile, 
           `The candidate's profile:\n${profileForPrompt(profile)}`,
           `The job:\n${jobForPrompt(extracted, match)}`,
           letter.length > 0 && `The cover letter it goes with:\n${letter.join("\n\n")}`,
-          note.trim() && `The candidate adds: ${note.trim()}`,
+          applicationFacts(facts),
           `The posting, for who to send it to and how:\n${postingForPrompt(posting)}`,
         ]
           .filter(Boolean)
@@ -104,7 +108,7 @@ export const writeEmail: Task<EmailInput, Unit[]> = async (provider, { profile, 
   const [to, ...written] = emailUnits({ to: recipient(answer.contactName, answer.contactEmail, posting), subject: oneLine(answer.subject), body });
   return {
     // The recipient comes from the posting; the subject and message are checked like the letter's paragraphs.
-    data: [to, ...(options.strict ? guardUnits(written, guardSources(profile, extracted, posting)) : written)],
+    data: [to, ...(options.strict ? guardUnits(written, guardSources(profile, extracted, posting, facts)) : written)],
     promptVersion: WRITE_EMAIL_VERSION,
   };
 };

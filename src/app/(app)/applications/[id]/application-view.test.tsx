@@ -14,6 +14,7 @@ import {
   addMatchSkill,
   addNote,
   deleteNote,
+  leaveOutUnit,
   listVersions,
   loadVersion,
   putBackTrimmed,
@@ -22,7 +23,9 @@ import {
   restoreVersion,
   saveUnit,
   sendMessage,
+  setApplicationTheme,
   setFollowThemeLayout,
+  setShowPhoto,
   startRegenerating,
   startWritingEmail,
   undoEmailRewrite,
@@ -32,7 +35,9 @@ import {
 import { ApplicationView, type ApplicationViewProps } from "./application-view";
 
 vi.mock("./actions", () => ({
+  setApplicationTheme: vi.fn(async () => ({ ok: true, data: null })),
   setFollowThemeLayout: vi.fn(async () => ({ ok: true, data: null })),
+  setShowPhoto: vi.fn(async () => ({ ok: true, data: null })),
   saveUnit: vi.fn(async ({ text }: { text: string }) => ({ ok: true, data: { text } })),
   startRegenerating: vi.fn(async () => ({ ok: true, data: "job-1" })),
   restoreUnit: vi.fn(async () => ({ ok: true, data: null })),
@@ -44,6 +49,7 @@ vi.mock("./actions", () => ({
   deleteNote: vi.fn(async () => ({ ok: true, data: { body: "Called John.", createdAt: "2026-10-03T13:00:00.000Z", updatedAt: "2026-10-03T13:00:00.000Z" } })),
   restoreNote: vi.fn(async () => ({ ok: true, data: null })),
   putBackTrimmed: vi.fn(async () => ({ ok: true, data: null })),
+  leaveOutUnit: vi.fn(async () => ({ ok: true, data: { index: 2 } })),
   listVersions: vi.fn(async () => ({ ok: true, data: [] })),
   loadVersion: vi.fn(),
   restoreVersion: vi.fn(async () => ({ ok: true, data: null, toast: "Restored the resume as it was then." })),
@@ -91,16 +97,20 @@ const props: ApplicationViewProps = {
     language: "English",
     followThemeLayout: false,
     signatureOnLetter: false,
+    showPhoto: null,
     archived: false,
     nextInterviewAt: null,
   },
   posting: { text: "Ledgerly is hiring.\n\n  - Figma", url: "", pasted: "27 Sep" },
   match: null,
   requirements: [],
+  facts: [{ id: "f1", text: "I know their product as a customer." }],
   activity: [{ kind: "created", id: "created", date: "27 Sep" }],
   meta: ["Amsterdam"],
   resume: { units: demoResumeUnits(), theme: theme("editorial") },
   letter: { units: demoLetterUnits(), theme: theme("editorial") },
+  themes: [...BUILT_IN_THEMES, { ...theme("modern"), id: "mine", name: "Mine", builtIn: false }],
+  baseThemeId: "modern",
   email: null,
   writingEmail: null,
   attachments: { resume: "Jane Doe – Ledgerly – Resume.pdf", letter: "Jane Doe – Ledgerly – Cover letter.pdf" },
@@ -121,6 +131,7 @@ const props: ApplicationViewProps = {
 beforeEach(() => {
   window.history.replaceState(null, "", "/applications/app-1");
   vi.mocked(setFollowThemeLayout).mockClear();
+  vi.mocked(setApplicationTheme).mockClear();
   vi.mocked(saveUnit).mockClear();
   vi.mocked(startRegenerating).mockClear();
   vi.mocked(restoreUnit).mockClear();
@@ -156,11 +167,15 @@ describe("the document tabs (E8-2)", () => {
     render(<ApplicationView {...props} initialTab="posting" />);
     expect(screen.getByRole("tab", { name: /Job posting/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/Ledgerly is hiring\./)).toHaveTextContent("Ledgerly is hiring. - Figma");
+    // The application's facts for the AI come first (APP-15).
+    const facts = screen.getByRole("region", { name: "Facts for this application" });
+    expect(within(facts).getByLabelText("Fact 1")).toHaveValue("I know their product as a customer.");
+    expect(within(facts).getByRole("link", { name: "Facts about me" })).toHaveAttribute("href", "/profile?section=facts");
   });
 
   it("shows the tailored resume in its theme, in a single column by default", () => {
     render(<ApplicationView {...props} />);
-    expect(screen.getByText("Tailored resume · Editorial theme")).toBeInTheDocument();
+    expect(screen.getByText(/^Tailored resume ·/)).toHaveTextContent("Tailored resume · Editorial theme");
     const resume = screen.getByRole("article", { name: "Resume" });
     expect(resume.querySelector('[data-unit="summary"]')).toHaveTextContent(demoResumeUnits()[0].text);
     // Editorial is a single-column theme: nothing to switch.
@@ -175,6 +190,64 @@ describe("the document tabs (E8-2)", () => {
 
     await user.click(screen.getByRole("switch", { name: "Sidebar layout" }));
     expect(setFollowThemeLayout).toHaveBeenCalledWith({ id: "app-1", follow: true });
+  });
+
+  it("has a Photo switch while the profile has a photo, starting from its Show on resumes (#224)", async () => {
+    const user = userEvent.setup();
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const profile = { ...props.profile, photo: { src: png, onResumes: true } };
+    render(<ApplicationView {...props} profile={profile} />);
+    const resume = screen.getByRole("article", { name: "Resume" });
+    expect(within(resume).getByRole("img", { name: profile.basics.name })).toBeInTheDocument();
+
+    const toggle = screen.getByRole("switch", { name: "Photo" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await user.click(toggle);
+    expect(setShowPhoto).toHaveBeenCalledWith({ id: "app-1", show: false });
+  });
+
+  it("shows the photo as the application says, and has no Photo switch without one (#224)", () => {
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const profile = { ...props.profile, photo: { src: png, onResumes: false } };
+    const { unmount } = render(<ApplicationView {...props} profile={profile} application={{ ...props.application, showPhoto: true }} />);
+    expect(screen.getByRole("switch", { name: "Photo" })).toHaveAttribute("aria-checked", "true");
+    expect(within(screen.getByRole("article", { name: "Resume" })).getByRole("img")).toBeInTheDocument();
+    unmount();
+
+    render(<ApplicationView {...props} />);
+    expect(screen.queryByRole("switch", { name: "Photo" })).not.toBeInTheDocument();
+  });
+
+  it("changes the resume's and cover letter's theme together from the Theme menu (#226)", async () => {
+    const user = userEvent.setup();
+    let answer: (result: { ok: true; data: null }) => void = () => {};
+    vi.mocked(setApplicationTheme).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    render(<ApplicationView {...props} />);
+    expect(screen.queryByRole("switch", { name: "Sidebar layout" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Theme: Editorial" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("menuitemradio", { name: "Editorial" })).toHaveAttribute("aria-checked", "true");
+    expect(within(menu).getByRole("menuitemradio", { name: "Modern base theme" })).toBeInTheDocument();
+    expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent).slice(-2)).toEqual(["Atlas", "Mine"]);
+    expect(within(menu).getByRole("separator")).toBeInTheDocument();
+
+    // Shown in the new theme while it's saved: Modern has a sidebar, so its layout switch appears.
+    await user.click(within(menu).getByRole("menuitemradio", { name: "Modern base theme" }));
+    expect(setApplicationTheme).toHaveBeenCalledWith({ id: "app-1", themeId: "modern" });
+    expect(screen.getByRole("button", { name: "Theme: Modern" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Sidebar layout" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Cover letter" }));
+    expect(screen.getByRole("button", { name: "Theme: Modern" })).toBeInTheDocument();
+    await act(async () => answer({ ok: true, data: null }));
+  });
+
+  it("doesn't save the theme the documents already have", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} initialTab="letter" />);
+    await user.click(screen.getByRole("button", { name: "Theme: Editorial" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Editorial" }));
+    expect(setApplicationTheme).not.toHaveBeenCalled();
   });
 
   it("follows the theme's layout when the application says so", () => {
@@ -217,6 +290,31 @@ describe("editing a unit (E8-3)", () => {
     expect(within(frame).getByRole("button", { name: "Edit" })).toBeInTheDocument();
     // Printed parts that aren't units, like the header, have none.
     expect(screen.getAllByRole("group")).toHaveLength(demoResumeUnits().length);
+  });
+
+  it("leaves a part of the resume out, with Undo on the toast (#217)", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} />);
+    const frame = screen.getByRole("group", { name: "Summary" });
+    expect(within(frame).getAllByRole("button").map((button) => button.textContent)).toEqual(["Edit", "Regenerate", "Ask AI", "Leave out"]);
+    await user.click(within(frame).getByRole("button", { name: "Leave out" }));
+    expect(leaveOutUnit).toHaveBeenCalledWith({ id: "app-1", unitId: "summary" });
+    expect(toast).toHaveBeenLastCalledWith("Left out: Summary.", { action: expect.objectContaining({ label: "Undo" }) });
+    await act(async () => vi.mocked(toast).mock.lastCall?.[1]?.action?.onClick());
+    expect(putBackTrimmed).toHaveBeenCalledWith({ id: "app-1", index: 2 });
+    expect(toast).toHaveBeenLastCalledWith("Put back.");
+  });
+
+  it("keeps a publication as written: Edit and Leave out, no Regenerate or Ask AI (#218)", () => {
+    render(<ApplicationView {...props} />);
+    const publication = screen.getByRole("group", { name: /^Publication “Doe, J\./ });
+    expect(within(publication).getAllByRole("button").map((button) => button.textContent)).toEqual(["Edit", "Leave out"]);
+    expect(within(publication).getByText("Doe, J.").tagName).toBe("STRONG");
+  });
+
+  it("leaves nothing out of the cover letter", () => {
+    render(<ApplicationView {...props} initialTab="letter" />);
+    expect(screen.queryByRole("button", { name: "Leave out" })).not.toBeInTheDocument();
   });
 
   it("swaps in a text box and saves what was written", async () => {
@@ -620,7 +718,7 @@ describe("the Job posting tab (E8-7)", () => {
   it("shows only the posting when it wasn't matched", () => {
     open({ match: null });
     expect(screen.queryByRole("heading", { name: "How you match" })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("tabpanel")).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).queryByRole("link", { name: /opens in a new tab/ })).not.toBeInTheDocument();
   });
 });
 
@@ -733,6 +831,20 @@ describe("one-page trimming on the Resume tab (E10-10)", () => {
     await user.click(within(note).getByRole("button", { name: "Put back 1 bullet from the Fieldnote role" }));
     expect(putBackTrimmed).toHaveBeenCalledWith({ id: "app-1", index: 1 });
     expect(toast).toHaveBeenLastCalledWith("Put back. The resume may run over its page limit now.");
+  });
+
+  it("lists parts left out by hand with them, and says which the page limit left out (#217)", async () => {
+    const user = userEvent.setup();
+    const trimmed = [
+      { kind: "unit" as const, unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 },
+      { kind: "unit" as const, unit: { id: "languages", label: "Languages", text: "Dutch: Native" }, index: 9, byHand: true as const },
+    ];
+    render(<ApplicationView {...props} resume={{ units: demoResumeUnits(), theme: theme("editorial"), trimmed }} />);
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent("Left out of this resume:Studio Brik role · to fit the page limitPut backLanguagesPut back");
+    await user.click(within(note).getByRole("button", { name: "Put back the Languages" }));
+    expect(putBackTrimmed).toHaveBeenCalledWith({ id: "app-1", index: 1 });
+    expect(toast).toHaveBeenLastCalledWith("Put back.");
   });
 
   it("says nothing when nothing was left out", () => {

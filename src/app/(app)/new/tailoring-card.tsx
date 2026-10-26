@@ -46,6 +46,7 @@ export function TailoringCard({
       </div>
       <Textarea
         label="Anything I should know?"
+        hint="Kept with the application as a fact for the AI. Change it later on its Job posting tab."
         rows={3}
         placeholder="e.g. I'm relocating to Amsterdam in January. Or: lean on my research work."
         value={note}

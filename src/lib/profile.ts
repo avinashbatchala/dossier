@@ -1,4 +1,5 @@
 import { LanguageLevel } from "@/generated/prisma/enums";
+import type { ProfilePhoto } from "@/lib/photo";
 
 /** Proficiency levels in the order the language select lists them (PRD PRO-4). */
 export const LANGUAGE_LEVELS: readonly { value: LanguageLevel; label: string }[] = [
@@ -59,7 +60,7 @@ export function formatDateRange(span: DateSpan, options: DateFormatOptions = {})
   return [start, end].filter(Boolean).join(" – ");
 }
 
-/** The Basics fields in the form's order (PRO-1); the section count is "filled/11". */
+/** The Basics fields in the form's order (PRO-1). */
 export const BASICS_FIELDS = [
   "name",
   "headline",
@@ -74,6 +75,12 @@ export const BASICS_FIELDS = [
   "summary",
 ] as const;
 export type BasicsField = (typeof BASICS_FIELDS)[number];
+
+/** The Basics fields a profile needs (#216); the rest are optional, and the section count is "filled/6". */
+export const REQUIRED_BASICS = ["name", "headline", "email", "city", "country", "summary"] as const satisfies readonly BasicsField[];
+
+/** Whether a Basics field is optional: phone, date of birth, address, website and LinkedIn. */
+export const isOptionalBasic = (field: BasicsField) => !(REQUIRED_BASICS as readonly BasicsField[]).includes(field);
 
 // The profile as the editor works with it: plain values (dates of birth as
 // "YYYY-MM-DD"), loaded by loadProfile() in src/lib/profile-data.ts.
@@ -119,6 +126,8 @@ export type ProjectItem = DateSpan & {
   skillIds: string[];
 };
 export type EducationItem = DateSpan & { id: string; degree: string; school: string; notes: string };
+/** A publication (#218): the citation as written, with **bold** and *italic*, and where to read it. */
+export type PublicationItem = { id: string; citation: string; link: string; onResumes: boolean };
 export type ReferenceItem = {
   id: string;
   name: string;
@@ -127,19 +136,37 @@ export type ReferenceItem = {
   email: string;
   phone: string;
 };
+/** A fact the user tells the AI (PRO-14): about themselves, or for one application. */
+export type FactItem = { id: string; text: string };
 export type ProfileData = {
   basics: Basics;
+  /** The photo for resumes (#224); null without one. Never given to the AI. */
+  photo: ProfilePhoto | null;
   skills: SkillItem[];
   languages: LanguageItem[];
   experience: ExperienceItem[];
   projects: ProjectItem[];
   education: EducationItem[];
+  /** In the order set by hand, with the ones kept off resumes too. */
+  publications: PublicationItem[];
   references: ReferenceItem[];
+  /** "Facts about me": never on a document, only given to the AI. */
+  facts: FactItem[];
 };
 
-/** How many Basics fields have something in them. */
+/** The facts worth sending: trimmed, without empty ones. */
+export function factTexts(facts: { text: string }[]): string[] {
+  return facts.map((fact) => fact.text.trim()).filter(Boolean);
+}
+
+/** The publications a resume shows: those with "Show on resumes" on and a citation. */
+export function resumePublications(publications: readonly PublicationItem[]): PublicationItem[] {
+  return publications.filter((entry) => entry.onResumes && entry.citation.trim() !== "");
+}
+
+/** How many required Basics fields have something in them. */
 export function filledBasics(basics: Record<BasicsField, string>): number {
-  return BASICS_FIELDS.filter((field) => basics[field].trim() !== "").length;
+  return REQUIRED_BASICS.filter((field) => basics[field].trim() !== "").length;
 }
 
 /** Age in whole years on `today`, from a "YYYY-MM-DD" date of birth; null without a valid one. */
@@ -155,29 +182,30 @@ export function ageOn(dob: string, today: Date): number | null {
 }
 
 /**
- * Profile strength (PRO-9): filled Basics fields ÷ 11 × 40, plus 25 for any
- * experience, 15 for any education, 12 for any skills and 8 for any references.
+ * Profile strength (PRO-9): filled required Basics fields ÷ 6 × 40, plus 30
+ * for any experience, 15 for any education and 15 for any skills. Optional
+ * sections and fields don't count (#216), so it reaches 100% without them.
  */
 export function profileStrength(profile: {
   basics: Record<BasicsField, string>;
   experience: number;
   education: number;
   skills: number;
-  references: number;
 }): { percent: number; hint: string } {
   const percent = Math.round(
-    (filledBasics(profile.basics) / BASICS_FIELDS.length) * 40 +
-      (profile.experience > 0 ? 25 : 0) +
+    (filledBasics(profile.basics) / REQUIRED_BASICS.length) * 40 +
+      (profile.experience > 0 ? 30 : 0) +
       (profile.education > 0 ? 15 : 0) +
-      (profile.skills > 0 ? 12 : 0) +
-      (profile.references > 0 ? 8 : 0),
+      (profile.skills > 0 ? 15 : 0),
   );
   const hint =
-    percent >= 90
-      ? "Looking great. The AI has plenty to work with."
-      : percent >= 50
-        ? "Nice progress. A bit more detail makes tailoring sharper."
-        : "A good start. Experience matters most.";
+    percent === 100
+      ? "All set. The optional sections are there if they help."
+      : percent >= 90
+        ? "Looking great. The AI has plenty to work with."
+        : percent >= 50
+          ? "Nice progress. A bit more detail makes tailoring sharper."
+          : "A good start. Experience matters most.";
   return { percent, hint };
 }
 

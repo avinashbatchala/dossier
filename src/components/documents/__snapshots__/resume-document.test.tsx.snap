@@ -332,6 +332,43 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
           </div>
         </div>
       </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
     </div>
     <div
       class="_column_fa1ef7"
@@ -705,6 +742,43 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
           </div>
         </div>
       </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
     </div>
     <div
       class="_column_fa1ef7"
@@ -1076,6 +1150,43 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -1502,6 +1613,43 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
           </div>
         </div>
       </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
     </div>
   </div>
 </article>
@@ -1837,6 +1985,43 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -2210,6 +2395,43 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -2636,6 +2858,43 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
           </div>
         </div>
       </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
     </div>
   </div>
 </article>
@@ -2971,6 +3230,43 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -3397,6 +3693,43 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
           </div>
         </div>
       </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
     </div>
   </div>
 </article>
@@ -3732,6 +4065,43 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -4072,6 +4442,43 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>
@@ -4544,6 +4951,43 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Publications
+        </h2>
+        <div
+          class="_publication_fa1ef7"
+          data-unit="publication:u1"
+        >
+          <p>
+            <strong>
+              Doe, J.
+            </strong>
+            , & Vermeer, K. (2016). Trust in automated scheduling: A field study with dispatch planners. 
+            <em>
+              Proceedings of the Delft Design Conference
+            </em>
+            , 4, 112–121.
+             
+            <a
+              class="_link_fa1ef7"
+              href="https://doi.org/10.5555/12345678"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                doi.org/10.5555/12345678
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
     </div>

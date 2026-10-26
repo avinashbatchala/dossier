@@ -57,13 +57,15 @@ describe("saveTheme", () => {
     headerStyle: "BANNER",
     sidebarStyle: "TINTED",
     dateStyle: "TIMELINE",
+    photoShape: "PORTRAIT",
+    photoPosition: "SIDEBAR",
   } as const;
 
   it("saves a new theme and makes it the base theme (RES-4)", async () => {
     const result = await saveTheme(draft);
     expect(result).toMatchObject({
       ok: true,
-      data: { name: "Green mono", accent: "#2d6a4f", builtIn: false, headerStyle: "BANNER", sidebarStyle: "TINTED", dateStyle: "TIMELINE" },
+      data: { name: "Green mono", accent: "#2d6a4f", builtIn: false, headerStyle: "BANNER", sidebarStyle: "TINTED", dateStyle: "TIMELINE", photoShape: "PORTRAIT", photoPosition: "SIDEBAR" },
       toast: "Saved “Green mono”. It's now your base resume theme.",
     });
     const id = result.ok ? result.data.id : "";

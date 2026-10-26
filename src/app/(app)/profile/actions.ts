@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { fieldsFromBasics, inEntryOrder } from "@/lib/profile";
 import { findOrCreateSkill, firstSort, nextSort } from "@/lib/profile-entries";
 import { discardProfileImports, importProfileJob } from "@/lib/jobs/import-profile";
+import { isPhotoDataUrl, PHOTO_KEY, PHOTO_MAX_LENGTH, PHOTO_ON_RESUMES_KEY } from "@/lib/photo";
 import { loadProfileName } from "@/lib/profile-data";
 import { importCounts } from "@/lib/profile-import";
 import { applyImportedProfile } from "@/lib/profile-import-apply";
@@ -50,6 +51,41 @@ export const saveBasics = action(
     return null;
   },
 );
+
+// ─── Photo (#224) ────────────────────────────────────────────────────────────
+
+/** "Show on resumes" is on unless its row says "false". */
+const photoOnResumesRow = (onResumes: boolean) =>
+  onResumes
+    ? prisma.profileField.deleteMany({ where: { key: PHOTO_ON_RESUMES_KEY } })
+    : prisma.profileField.upsert({
+        where: { key: PHOTO_ON_RESUMES_KEY },
+        create: { key: PHOTO_ON_RESUMES_KEY, value: "false" },
+        update: { value: "false" },
+      });
+
+/** Saves the cropped photo, or puts a removed one back as it was (Undo). */
+export const savePhoto = action(
+  z.object({ src: z.string().max(PHOTO_MAX_LENGTH).refine(isPhotoDataUrl), onResumes: z.boolean() }),
+  async ({ src, onResumes }) => {
+    await prisma.$transaction([
+      prisma.profileField.upsert({ where: { key: PHOTO_KEY }, create: { key: PHOTO_KEY, value: src }, update: { value: src } }),
+      photoOnResumesRow(onResumes),
+    ]);
+    return null;
+  },
+);
+
+/** The photo's "Show on resumes". */
+export const setPhotoOnResumes = action(z.object({ onResumes: z.boolean() }), async ({ onResumes }) => {
+  await photoOnResumesRow(onResumes);
+  return null;
+});
+
+export const removePhoto = action(z.object({}), async () => {
+  await prisma.profileField.deleteMany({ where: { key: { in: [PHOTO_KEY, PHOTO_ON_RESUMES_KEY] } } });
+  return null;
+});
 
 const id = z.string().min(1);
 const skillName = z.string().trim().min(1, "Type a skill first.").max(100);
@@ -317,6 +353,61 @@ export const restoreEducation = action(educationFields, async (entry) =>
     }),
   ),
 );
+
+// ─── Publications (#218) ─────────────────────────────────────────────────────
+
+const publicationFields = z.object({
+  id,
+  citation: text(3000),
+  link: text(500),
+  onResumes: z.boolean(),
+});
+
+const publicationItem = (entry: z.infer<typeof publicationFields>) => ({
+  id: entry.id,
+  citation: entry.citation,
+  link: entry.link,
+  onResumes: entry.onResumes,
+});
+
+/** "+ Add a publication": a blank entry at the top, where the newest usually goes. */
+export const createPublication = action(z.object({}), async () =>
+  publicationItem(await prisma.publication.create({ data: { sort: await firstSort(prisma.publication) } })),
+);
+
+/** Autosaves a publication. Saving one that was just removed does nothing. */
+export const savePublication = action(publicationFields, async ({ id, ...data }) => {
+  await prisma.publication.updateMany({ where: { id }, data });
+  return null;
+});
+
+export const removePublication = action(z.object({ id }), async ({ id }) => {
+  await prisma.publication.deleteMany({ where: { id } });
+  return null;
+});
+
+/** Puts a removed publication back; the list then saves its place in the order. */
+export const restorePublication = action(publicationFields, async (entry) =>
+  publicationItem(
+    await prisma.publication.upsert({
+      where: { id: entry.id },
+      create: { ...entry, sort: await nextSort(prisma.publication) },
+      update: {},
+    }),
+  ),
+);
+
+/** Saves the publications' order: `ids` is every publication, in the new order. */
+export const reorderPublications = action(z.object({ ids: z.array(id) }), async ({ ids }) => {
+  await prisma.$transaction(async (tx) => {
+    const known = new Set((await tx.publication.findMany({ select: { id: true } })).map((entry) => entry.id));
+    if (ids.length !== known.size || new Set(ids).size !== ids.length || !ids.every((entryId) => known.has(entryId))) {
+      throw new ActionError("The list changed in the meantime. Reload the page and try again.");
+    }
+    for (const [sort, entryId] of ids.entries()) await tx.publication.update({ where: { id: entryId }, data: { sort } });
+  });
+  return null;
+});
 
 // ─── Order (E4-9) ────────────────────────────────────────────────────────────
 

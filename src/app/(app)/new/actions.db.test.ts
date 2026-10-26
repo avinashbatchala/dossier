@@ -124,9 +124,10 @@ describe("createApplication", () => {
       extractedWith: "extract-posting@1",
       matchedWith: "match-requirements@1",
       tone: "FORMAL",
-      userNote: "Relocating in January.",
       language: "English",
     });
+    // "Anything I should know?" is the application's first fact (APP-15).
+    expect(await prisma().fact.findMany({ where: { applicationId: id }, select: { text: true } })).toEqual([{ text: "Relocating in January." }]);
     expect(application.deadline?.toISOString().slice(0, 10)).toBe("2026-10-20");
     expect(application.documents.map((document) => [document.kind, document.themeId, document.writtenWith])).toEqual([
       ["RESUME", "editorial", "tailor-resume@1"],
@@ -144,6 +145,14 @@ describe("createApplication", () => {
     const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "", postingId: posting.id });
     expect(result.ok).toBe(true);
     expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ applicationId: result.ok ? result.data : "" });
+  });
+
+  it("links the startup it was written to from Startups (#222)", async () => {
+    await finishedJobs();
+    const startup = await prisma().startup.create({ data: { source: "HN", externalId: "1", company: "Ledgerly", roles: [], emails: [], links: [], reasons: [] } });
+    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "", startupId: startup.id });
+    expect(result.ok).toBe(true);
+    expect(await prisma().startup.findUniqueOrThrow({ where: { id: startup.id } })).toMatchObject({ applicationId: result.ok ? result.data : "", status: "NEW" });
   });
 
   it("leaves a posting that already has an application, and one that's gone, alone", async () => {
@@ -210,6 +219,7 @@ describe("createApplication", () => {
 
   it("trims the resume to its page limit and says what was cut (E10-10)", async () => {
     const { fitResumeToPages } = await import("@/lib/page-limit");
+    await prisma().setting.create({ data: { key: "pageLimit", value: "1" } });
     await finishedJobs();
     trim.result = {
       trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],
@@ -223,10 +233,9 @@ describe("createApplication", () => {
     trim.result = { trimmed: [], fits: true };
   });
 
-  it("trims to two pages when that's the limit (SET-9)", async () => {
+  it("trims to two pages unless another limit was chosen (SET-9)", async () => {
     const { fitResumeToPages } = await import("@/lib/page-limit");
     vi.mocked(fitResumeToPages).mockClear();
-    await prisma().setting.create({ data: { key: "pageLimit", value: "2" } });
     await finishedJobs();
     trim.result = {
       trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],

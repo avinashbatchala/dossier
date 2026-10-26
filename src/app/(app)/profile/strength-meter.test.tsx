@@ -14,12 +14,12 @@ describe("StrengthMeter", () => {
   it("is a labelled progress bar with the score and the hint", () => {
     render(
       <StrengthMeter
-        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [{} as never], projects: [], education: [], references: [] }}
+        profile={{ basics: { ...basics, name: "Jane" }, skills: [], languages: [], experience: [{} as never], projects: [], education: [], publications: [], references: [], facts: [], photo: null }}
       />,
     );
     const bar = screen.getByRole("progressbar", { name: "Profile strength" });
-    expect(bar).toHaveAttribute("aria-valuenow", "29"); // 1/11 × 40 = 3.6 → plus 25
+    expect(bar).toHaveAttribute("aria-valuenow", "37"); // 1/6 × 40 = 6.7 → plus 30
     expect(bar).toHaveAccessibleDescription("A good start. Experience matters most.");
-    expect(screen.getByText("29%")).toBeInTheDocument();
+    expect(screen.getByText("37%")).toBeInTheDocument();
   });
 });

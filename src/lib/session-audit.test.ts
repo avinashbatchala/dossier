@@ -15,6 +15,13 @@ const OPEN_ROUTES = new Set([
   // Google's redirect comes from Google's site, so route()'s same-origin check
   // would refuse it; it checks the session and its signed state itself (E15-1).
   "src/app/api/google/callback/route.ts",
+  // The Claude connector (#221) is called by Claude, not the browser: it
+  // checks its OAuth token instead, and answers 404 while it's off.
+  "src/app/api/mcp/route.ts",
+  "src/app/api/oauth/metadata/route.ts",
+  "src/app/api/oauth/protected-resource/route.ts",
+  "src/app/api/oauth/register/route.ts",
+  "src/app/api/oauth/token/route.ts",
 ]);
 
 const sources = globSync("src/**/*.{ts,tsx}").filter((file) => !/\.test\.tsx?$/.test(file) && !file.startsWith("src/generated/"));
@@ -63,6 +70,14 @@ describe("session checks (E11-5)", () => {
     const source = read("src/app/api/google/callback/route.ts");
     expect(source).toContain("await getSession()");
     expect(source).toContain("await verifyState(");
+  });
+
+  it("checks the token and the switch in the Claude connector itself (#221)", () => {
+    const mcp = read("src/app/api/mcp/route.ts");
+    expect(mcp).toContain("await verifyAccessToken(");
+    for (const file of [...OPEN_ROUTES].filter((entry) => /\/api\/(mcp|oauth)\//.test(entry))) {
+      expect(read(file), file).toContain("if (!(await connectorSince())) return new Response(null, { status: 404 });");
+    }
   });
 
   it("defines every route handler with route()", () => {

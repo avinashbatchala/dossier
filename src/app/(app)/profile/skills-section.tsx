@@ -17,11 +17,25 @@ import { useTrackSave } from "@/components/save-tracker";
 export type UpdateProfile = (change: (profile: ProfileData) => ProfileData) => void;
 
 /** A card in the Skills & languages section: title, "{n} added", content. */
-export function ChipCard({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+export function ChipCard({
+  title,
+  count,
+  optional = false,
+  children,
+}: {
+  title: string;
+  count: number;
+  /** Doesn't count towards Profile strength (#216). */
+  optional?: boolean;
+  children: ReactNode;
+}) {
   return (
     <Card className="flex flex-col gap-4 px-7 py-6">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-lead font-medium">{title}</h3>
+        <h3 className="text-lead font-medium">
+          {title}
+          {optional && <span className="font-normal text-muted"> (optional)</span>}
+        </h3>
         <span className="text-meta text-muted">{count} added</span>
       </div>
       {children}
@@ -184,7 +198,7 @@ function LanguagesCard({ profile, update }: { profile: ProfileData; update: Upda
   }
 
   return (
-    <ChipCard title="Languages" count={profile.languages.length}>
+    <ChipCard title="Languages" count={profile.languages.length} optional>
       {profile.languages.length > 0 && (
         <ul className="flex flex-col border-t border-line" aria-label="Your languages">
           {profile.languages.map((language) => (

@@ -8,9 +8,9 @@ import { TONES } from "@/lib/tones";
 import { factSources, guardSources, unverifiedFacts } from "../fact-guard";
 
 import { emailForPrompt, UNTRUSTED_EMAIL } from "./classify-reply";
-import { CREATIVITY, jobForPrompt, NO_EM_DASHES, profileForPrompt, system, truthfulness, type Task } from "./prompt-parts";
+import { applicationFacts, candidateFacts, CREATIVITY, jobForPrompt, NO_EM_DASHES, profileForPrompt, system, truthfulness, type Task } from "./prompt-parts";
 
-export const DRAFT_REPLY_VERSION = "draft-reply@2";
+export const DRAFT_REPLY_VERSION = "draft-reply@3";
 
 const answerSchema = z.object({
   greeting: z.string(),
@@ -41,6 +41,8 @@ export type DraftReplyInput = {
   slots: string[];
   /** What the candidate adds, e.g. "Notice period: 3 months" or "make it shorter". */
   note: string;
+  /** What the candidate tells the AI for the application the email is about (APP-15). */
+  facts: string[];
   /** The application's posting, for the fact guard. */
   posting: string;
 };
@@ -49,12 +51,13 @@ export type DraftedReply = { body: string; gaps: string[]; unverified: string[] 
 
 /** Drafts the answer to an employer's email (E15-4), with what it couldn't answer from the profile. */
 export const draftReply: Task<DraftReplyInput, DraftedReply> = async (provider, input, options) => {
-  const { profile, extracted, tone, email, timeZone, thread, slots, note, posting } = input;
+  const { profile, extracted, tone, email, timeZone, thread, slots, note, facts, posting } = input;
   const answer = await provider.complete({
     system: system(
       INSTRUCTIONS,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,
       truthfulness(options.strict),
+      candidateFacts(profile, facts),
       CREATIVITY[options.creativity],
       UNTRUSTED_EMAIL,
       NO_EM_DASHES,
@@ -68,6 +71,7 @@ export const draftReply: Task<DraftReplyInput, DraftedReply> = async (provider, 
           thread.length > 0 && `Earlier in this conversation:\n${thread.map((entry) => `<earlier>\n${entry}\n</earlier>`).join("\n")}`,
           `The email to answer:\n${emailForPrompt(email, timeZone)}`,
           slots.length > 0 ? `Times to offer:\n${slots.map((slot) => `• ${slot}`).join("\n")}` : "No times to offer: don't propose any.",
+          applicationFacts(facts),
           note.trim() && `The candidate adds: ${note.trim()}`,
         ]
           .filter(Boolean)
@@ -86,7 +90,7 @@ export const draftReply: Task<DraftReplyInput, DraftedReply> = async (provider, 
     .join("\n\n");
   // The employer's mail, the note and the slots may be quoted back: they back facts too.
   const sources = options.strict
-    ? factSources([guardSources(profile, extracted, posting).text, email.body, email.from, email.subject, note, ...slots, ...thread])
+    ? factSources([guardSources(profile, extracted, posting, facts).text, email.body, email.from, email.subject, note, ...slots, ...thread])
     : null;
   return {
     data: { body, gaps: answer.gaps.map((gap) => gap.trim()).filter(Boolean), unverified: sources ? unverifiedFacts(body, sources) : [] },

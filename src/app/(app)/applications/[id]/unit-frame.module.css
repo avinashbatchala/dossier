@@ -88,9 +88,19 @@
    (--preview-scale, document.module.css), so zoom undoes that here. */
 .toolbar,
 .status,
-.check,
-.editor {
+.check {
   zoom: calc(1 / var(--preview-scale, 1));
+}
+
+/* The editor can't use zoom: Chrome on macOS crashes the tab when a text box
+   in a zoomed block takes focus on the shrunk page. It grows the theme's
+   spacing, type and radius (globals.css) by the same factor instead. */
+.editor {
+  --px: calc(1px / var(--preview-scale, 1));
+  --spacing: calc(var(--px) * 4);
+  --text-xs: calc(var(--px) * 12);
+  --text-control: calc(var(--px) * 13.5);
+  --radius-control: calc(var(--px) * 8);
 }
 
 @media (prefers-reduced-motion: reduce) {

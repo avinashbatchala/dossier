@@ -6,6 +6,7 @@ import { JobStatus, Tone } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
 import { createApplicationFromDocuments } from "@/lib/application-create";
 import { matchSchema } from "@/lib/application-data";
+import { handOffPastedPosting } from "@/lib/connector/handoff";
 import { readPostingJob } from "@/lib/jobs/read-posting";
 import { startJob } from "@/lib/jobs/runner";
 import { writeDocumentsJob } from "@/lib/jobs/write-documents";
@@ -16,6 +17,20 @@ import { prisma } from "@/lib/prisma";
 export const startReadingPosting = action(
   z.object({ posting: z.string().trim().min(1, "Paste a job posting first.").max(100_000) }),
   ({ posting }) => startJob(readPostingJob, { posting }),
+);
+
+/**
+ * "Write it with Claude →" (#221, the connector on and no AI model of
+ * Dossier's own): keeps the posting for the connector to read and gives the
+ * claude.ai chat to open, where Claude writes the application on the user's
+ * own Claude plan.
+ */
+export const handOffToClaude = action(
+  z.object({
+    posting: z.string().trim().min(1, "Paste a job posting first.").max(100_000),
+    postingUrl: z.string().trim().max(2000),
+  }),
+  async ({ posting, postingUrl }) => ({ url: await handOffPastedPosting({ text: posting, url: /^https?:\/\//i.test(postingUrl) ? postingUrl : "" }) }),
 );
 
 const detailsSchema = z.object({
@@ -108,8 +123,10 @@ export const createApplication = action(
     postingUrl: z.string().max(2000),
     /** The Find jobs posting it was started from (E14-8). */
     postingId: z.string().min(1).max(100).nullish(),
+    /** The startup it was started from on Startups (#222). */
+    startupId: z.string().min(1).max(100).nullish(),
   }),
-  async ({ writeJobId, details, postingUrl, postingId }) => {
+  async ({ writeJobId, details, postingUrl, postingId, startupId }) => {
     const job = await prisma.job.findUnique({ where: { id: writeJobId } });
     if (!job || job.type !== writeDocumentsJob.type || job.status !== JobStatus.DONE) {
       throw new ActionError("Those documents aren't ready. Try creating the application again.");
@@ -127,7 +144,7 @@ export const createApplication = action(
       postingUrl: postingLink(postingUrl),
       tone: input.tone,
       note: input.note,
-      claim: { kind: "manual", writeJobId, readJobId: input.readJobId, postingId: postingId ?? null },
+      claim: { kind: "manual", writeJobId, readJobId: input.readJobId, postingId: postingId ?? null, startupId: startupId ?? null },
     });
   },
 );

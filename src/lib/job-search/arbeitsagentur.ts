@@ -8,6 +8,7 @@ import type { JobSourceAdapter, RequestContext } from "./adapter";
 import { JobSearchError, jobSearchError } from "./errors";
 import { requestJson } from "./http";
 import { POSTED_WITHIN, safeLink, type FoundPosting, type SearchPage, type SearchQuery } from "./search";
+import { arbeitsagenturPage } from "./sources";
 import { fromMarkdown } from "./text";
 
 // The Bundesagentur für Arbeit (E14-3): Germany's federal job board, free
@@ -82,7 +83,7 @@ export function postingFromOffer(offer: Offer): FoundPosting {
     remote: offer.homeofficeprozent != null && offer.homeofficeprozent >= 100 ? true : offer.homeofficemoeglich === false ? false : null,
     salary: salaryOf(offer),
     postedAt: Number.isNaN(posted) ? null : new Date(posted).toISOString(),
-    url: (safeLink(offer.externeURL) || `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(offer.referenznummer)}`).slice(0, 2000),
+    url: (safeLink(offer.externeURL) || arbeitsagenturPage({ source: "ARBEITSAGENTUR", externalId: offer.referenznummer })!).slice(0, 2000),
     via: "",
     description: "",
     complete: false,

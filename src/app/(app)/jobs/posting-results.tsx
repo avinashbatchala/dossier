@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
 
 import { ScoreBadge } from "@/components/score-badge";
+import { linksAttribution, SourceAttribution } from "@/components/source-attribution";
 import { toast, toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
 import { useJob } from "@/hooks/use-job";
+import { openPendingTab, sendPendingTab } from "@/lib/claude-tab";
 import { cn } from "@/lib/cn";
 import { fitBand, type PostingFit } from "@/lib/fit";
 import type { JobView } from "@/lib/jobs/runner";
 import { postedAgo, postingKey, type FoundPosting, type PostingState, type ShownPosting, type StoredSearch } from "@/lib/job-search/search";
-import { SOURCE_INFO } from "@/lib/job-search/sources";
+import { arbeitsagenturPage, SOURCE_INFO } from "@/lib/job-search/sources";
 
 import { dismissFoundPosting, loadFullText, restorePosting, savePostingForLater, showMorePostings, startScoringPosting, unsavePosting } from "./actions";
 import { useStartApplication } from "./use-start-application";
@@ -19,7 +21,11 @@ import { useStartApplication } from "./use-start-application";
 /** Narrow windows show the posting above the list. */
 const NARROW = "(max-width: 1023px)";
 
-export type PostingResultsProps = { today: string } & (
+export type PostingResultsProps = {
+  today: string;
+  /** Score opens a Claude chat, which scores through the connector: it's on, and Dossier has no AI model of its own (#221). */
+  scoreInClaude?: boolean;
+} & (
   | {
       mode: "search";
       /** The kept search (E14-10). */
@@ -115,8 +121,17 @@ export function PostingResults(props: PostingResultsProps) {
     const key = postingKey(posting);
     if (scoring[key]) return;
     setScoring((current) => ({ ...current, [key]: { jobId: "", step: null } }));
+    // Opened now, while the click still counts: a tab opened after waiting is blocked as a pop-up (#221).
+    const chat = props.scoreInClaude ? openPendingTab() : null;
     const result = toastResult(await startScoringPosting({ posting: withoutState(posting) }));
-    setScoring((current) => (result.ok ? { ...current, [key]: { jobId: result.data.jobId, step: null } } : without(current, key)));
+    if (result.ok && "handoff" in result.data) {
+      sendPendingTab(chat, result.data.handoff);
+      setScoring((current) => without(current, key));
+      toast("Scoring it in Claude. Reload this page once Claude has saved the score.");
+      return;
+    }
+    chat?.close();
+    setScoring((current) => (result.ok && "jobId" in result.data ? { ...current, [key]: { jobId: result.data.jobId, step: null } } : without(current, key)));
   };
 
   const scoringChanged = (key: string, job: JobView<PostingFit>) => {
@@ -323,8 +338,11 @@ function PostingList({
                 </span>
               </span>
               <span className="text-meta text-muted">{[posting.company, posting.place, posting.remote ? "Remote" : ""].filter(Boolean).join(" · ")}</span>
-              <span className="truncate text-xs text-muted">
-                {[postedAgo(posting.postedAt, now), posting.via && `via ${posting.via}`, posting.salary].filter(Boolean).join(" · ")}
+              <span className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-xs text-muted">
+                  {[postedAgo(posting.postedAt, now), posting.via && `via ${posting.via}`, posting.salary].filter(Boolean).join(" · ")}
+                </span>
+                <SourceAttribution source={posting.source} url={posting.url} placeholder />
               </span>
             </button>
             {/* A button can't hold another, so the pill lies over the room the card keeps for it, with the card's border and padding. */}
@@ -342,6 +360,12 @@ function PostingList({
                 >
                   {pillLabel}
                 </button>
+              </span>
+            )}
+            {/* Adzuna's label is a link, so it lies over room the card keeps too (E14-2). */}
+            {linksAttribution(posting.source) && (
+              <span className="pointer-events-none absolute inset-0 flex items-end justify-end border border-transparent px-4 py-3.5">
+                <SourceAttribution source={posting.source} url={posting.url} className="pointer-events-auto" />
               </span>
             )}
           </li>
@@ -425,6 +449,7 @@ function PostingDetail({
   children?: ReactNode;
 }) {
   const headingId = useId();
+  const sourcePage = arbeitsagenturPage(posting);
   // The posting as first shown; the component is keyed by it.
   const [initial] = useState(posting);
   const [text, setText] = useState<Text>(initial.complete ? { status: "ready", text: initial.description } : { status: "loading" });
@@ -488,6 +513,13 @@ function PostingDetail({
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         )}
+        {/* A BA posting with a link of its own still links to its ad on arbeitsagentur.de (#223). */}
+        {sourcePage && sourcePage !== posting.url && (
+          <a href={sourcePage} target="_blank" rel="noopener noreferrer" className={buttonClassName("secondary", "sm")}>
+            On arbeitsagentur.de<span aria-hidden>↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        )}
         <Button variant="secondary" size="sm" aria-disabled={scoring ? true : undefined} onClick={scoring ? undefined : onScore}>
           {scoring ? "Scoring…" : state.score ? "Score again" : "Score"}
         </Button>
@@ -524,7 +556,7 @@ function PostingDetail({
         )}
       </div>
       {/* As the source's terms ask (E14-2, E14-3). */}
-      {SOURCE_INFO[posting.source].attribution && <p className="text-xs text-muted">{SOURCE_INFO[posting.source].attribution}</p>}
+      <SourceAttribution source={posting.source} url={posting.url} className="self-start" />
     </section>
   );
 }

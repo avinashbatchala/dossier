@@ -4,7 +4,7 @@ import { demoProfile } from "@/lib/demo-profile";
 
 import sample from "../../../prisma/seed/prototype-sample.json";
 
-import { factSources, guardUnits, sourcesFor, unverifiedFacts } from "./fact-guard";
+import { factSources, guardSources, guardUnits, sourcesFor, unverifiedFacts } from "./fact-guard";
 
 const profile = demoProfile();
 const extracted = {
@@ -63,6 +63,14 @@ describe("the fact guard (E6-6)", () => {
   it("flags years the profile doesn't have", () => {
     expect(check("Designing since 2015")).toEqual([]);
     expect(check("Designing since 2009")).toEqual(["2009"]);
+  });
+
+  it("takes the profile's facts and the application's as backing too (PRO-14, APP-15)", () => {
+    const told = { ...profile, facts: [{ id: "f1", text: "I spent a year at Klarna before design school." }] };
+    const claim = "A year at Klarna, and a talk at Config.";
+    expect(unverifiedFacts(claim, sourcesFor(profile, extracted, sample.ledgerly.posting, 11))).toEqual(["Klarna", "Config"]);
+    expect(unverifiedFacts(claim, sourcesFor(told, extracted, sample.ledgerly.posting, 11))).toEqual(["Config"]);
+    expect(unverifiedFacts(claim, guardSources(told, extracted, sample.ledgerly.posting, ["I gave a talk at Config last year."]))).toEqual([]);
   });
 });
 

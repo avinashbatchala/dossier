@@ -29,6 +29,7 @@ export default async function PrintTailoredDocumentPage({ params }: PageProps<"/
           profile={profile}
           paper={settings.paper}
           followThemeLayout={application.followThemeLayout}
+          showPhoto={application.showPhoto}
           language={application.language}
           includeReferences={includeReferences}
         />

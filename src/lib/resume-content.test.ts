@@ -72,16 +72,21 @@ describe("resumeContent", () => {
       experience: [],
       projects: [],
       education: [],
+      publications: [],
       references: [],
+      facts: [],
+      photo: null,
     };
     expect(resumeContent(empty)).toEqual({
       name: "Your name",
       headline: "",
+      photo: null,
       contacts: [],
       summary: "",
       experience: [],
       projects: [],
       education: [],
+      publications: [],
       skills: "",
       languages: "",
       references: [],
@@ -117,6 +122,25 @@ describe("resumeContent", () => {
     const tailored = resumeContent(profile, { units: [{ id: "project:p1", label: "Tidewater project", text: "Shipped a token pipeline" }] });
     expect(tailored.projects.map((project) => project.bullets)).toEqual([["Shipped a token pipeline"]]);
     expect(resumeContent(profile, { units: [] }).projects).toEqual([]);
+  });
+
+  it("shows publications word for word, with their link, and not the ones kept off resumes (#218)", () => {
+    expect(resumeContent(profile).publications).toEqual([
+      {
+        id: "u1",
+        citation: profile.publications[0].citation,
+        link: "doi.org/10.5555/12345678",
+        href: "https://doi.org/10.5555/12345678",
+      },
+    ]);
+    const hidden = { ...profile, publications: [{ ...profile.publications[0], onResumes: false }, { id: "u2", citation: " ", link: "", onResumes: true }] };
+    expect(resumeContent(hidden).publications).toEqual([]);
+    // A tailored resume takes the citation from its unit, and a DOI on its own opens at doi.org.
+    const doi = { ...profile, publications: [{ ...profile.publications[0], link: "10.1038/s41388-024-03270-3" }] };
+    expect(resumeContent(doi, { units: [{ id: "publication:u1", label: "Publication", text: "Doe, J. (2016). *Edited.*" }] }).publications).toEqual([
+      { id: "u1", citation: "Doe, J. (2016). *Edited.*", link: "doi.org/10.1038/s41388-024-03270-3", href: "https://doi.org/10.1038/s41388-024-03270-3" },
+    ]);
+    expect(resumeContent(profile, { units: [] }).publications).toEqual([]);
   });
 
   it("includes only the parts a tailored resume has units for, in their order", () => {

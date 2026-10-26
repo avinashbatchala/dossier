@@ -22,7 +22,7 @@ import { emailJobKey, writeEmailJob } from "@/lib/jobs/write-email";
 import { prisma } from "@/lib/prisma";
 import { findOrCreateSkill } from "@/lib/profile-entries";
 import { loadSignature } from "@/lib/signature-data";
-import { cleanUnitText, unitName } from "@/lib/unit-text";
+import { cleanUnitText, isPublicationUnit, unitName } from "@/lib/unit-text";
 
 const GONE = "That application no longer exists.";
 const PART_GONE = "That part of the document no longer exists. Reload the page to see what's there now.";
@@ -53,6 +53,32 @@ export const setSignatureOnLetter = action(
     return null;
   },
 );
+
+/** The Resume tab's Photo switch (#224): show the profile photo on this resume or not, whatever the profile says. */
+export const setShowPhoto = action(z.object({ id: z.string().min(1), show: z.boolean() }), async ({ id, show }) => {
+  const { count } = await prisma.application.updateMany({ where: { id }, data: { showPhoto: show } });
+  if (count === 0) throw new ActionError(GONE);
+  refresh(id);
+  return null;
+});
+
+/**
+ * The Theme menu on the Resume and Cover letter tabs (#226, public issue 10):
+ * gives the application's resume and cover letter another theme, together.
+ * Only their look changes, so nothing is written again.
+ */
+export const setApplicationTheme = action(z.object({ id: z.string().min(1), themeId: z.string().min(1) }), async ({ id, themeId }) => {
+  if (!(await prisma.theme.count({ where: { id: themeId } }))) {
+    throw new ActionError("That theme doesn't exist anymore. Reload the page to see your themes.");
+  }
+  if (!(await prisma.application.count({ where: { id } }))) throw new ActionError(GONE);
+  await prisma.document.updateMany({
+    where: { applicationId: id, kind: { in: [DocumentKind.RESUME, DocumentKind.COVER_LETTER] } },
+    data: { themeId },
+  });
+  refresh(id);
+  return null;
+});
 
 /**
  * The next interview's date and time (E9-9), or null to remove it. It shows
@@ -136,6 +162,10 @@ export const startRegenerating = action(
     // The sender, date and signature come from the profile and the day, not the AI (E8-11).
     if ((frame && !WRITTEN_FRAME_UNITS.has(unitId)) || (document === DocumentKind.EMAIL && !WRITTEN_EMAIL_UNITS.has(unitId))) {
       throw new ActionError("This part isn't written by the AI. Edit it instead.");
+    }
+    // A publication is the user's own citation (#218).
+    if (document === DocumentKind.RESUME && isPublicationUnit(unitId)) {
+      throw new ActionError("A publication stays as you wrote it. Edit it instead.");
     }
     if (frame && shown) {
       await updateDocuments(id, async (documents) => {
@@ -340,8 +370,33 @@ export const restoreNote = action(
 );
 
 /**
- * "Put back" (E10-10): restores a role or bullets left out to fit the page limit.
- * Putting back twice changes nothing more.
+ * "Leave out" (#217): takes a part off the tailored resume. It's listed with
+ * what the page limit left out, so "Put back" brings it back to its place.
+ * Returns where it is in that list, for Undo.
+ */
+export const leaveOutUnit = action(z.object({ id: z.string().min(1), unitId: z.string().min(1) }), async ({ id, unitId }) => {
+  const cut = await updateDocuments(id, async (documents) => {
+    const units = documents[DocumentKind.RESUME];
+    const index = units ? units.findIndex((unit) => unit.id === unitId) : -1;
+    if (!units || index < 0) throw new ActionError(PART_GONE);
+    const [unit] = units.splice(index, 1);
+    return { kind: "unit" as const, unit, index, byHand: true as const };
+  });
+  // Written after the document itself: updateDocuments checks it wasn't changed meanwhile.
+  const row = await prisma.document.findUniqueOrThrow({
+    where: { applicationId_kind: { applicationId: id, kind: DocumentKind.RESUME } },
+    select: { id: true, trimmed: true },
+  });
+  const earlier = trimmedSchema.safeParse(row.trimmed);
+  const trimmed = [...(earlier.success ? earlier.data : []), cut];
+  await prisma.document.update({ where: { id: row.id }, data: { trimmed } });
+  refresh(id);
+  return { index: trimmed.length - 1 };
+});
+
+/**
+ * "Put back" (E10-10, #217): restores a part or bullets left out, by hand or
+ * to fit the page limit. Putting back twice changes nothing more.
  */
 export const putBackTrimmed = action(z.object({ id: z.string().min(1), index: z.number().int().min(0) }), async ({ id, index }) => {
   const row = await prisma.document.findUnique({ where: { applicationId_kind: { applicationId: id, kind: DocumentKind.RESUME } } });
@@ -416,7 +471,7 @@ export const restoreVersion = action(z.object({ id: z.string().min(1), versionId
         await saveVersion(tx, version.document.id, current, { cause: VersionCause.BEFORE_RESTORE });
       }
       documents[kind] = units;
-      // Parts left out to fit the page limit that the restored version has again are no longer left out.
+      // Parts left out that the restored version has again are no longer left out.
       if (kind !== DocumentKind.RESUME) return null;
       const row = await tx.document.findUniqueOrThrow({ where: { id: version.document.id }, select: { trimmed: true } });
       const trimmed = trimmedSchema.safeParse(row.trimmed);

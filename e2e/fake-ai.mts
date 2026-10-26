@@ -30,6 +30,8 @@ type Unit = { id: string; label: string; text: string };
 
 /** Emails written so far, so writing again gives a different one. */
 let emails = 0;
+/** The last request's messages, for specs that check what a prompt carried (GET /last). */
+let last: Message[] = [];
 
 const answers: Record<string, (messages: Message[]) => unknown> = {
   extracted_posting: () => ({
@@ -165,6 +167,7 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     ],
     projects: [],
     education: [],
+    publications: [],
     references: [],
   }),
 
@@ -203,6 +206,7 @@ createServer((request, response) => {
     response.end(JSON.stringify(body));
   };
   if (request.method === "GET" && request.url === "/health") return send(200, { ok: true });
+  if (request.method === "GET" && request.url === "/last") return send(200, { messages: last });
   if (request.method === "GET" && request.url === "/v1/models") {
     return send(200, { object: "list", data: [{ id: "fake-model", object: "model", created: 0, owned_by: "e2e" }] });
   }
@@ -212,6 +216,7 @@ createServer((request, response) => {
   request.on("data", (chunk) => (raw += chunk));
   request.on("end", () => {
     const body = JSON.parse(raw) as Request;
+    last = body.messages;
     const name = body.response_format?.json_schema?.name;
     const answer = name && answers[name];
     if (!answer) return send(400, { error: { message: `No fake answer for "${name}".` } });

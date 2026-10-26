@@ -10,7 +10,7 @@ import { extractedOf, unitSchema, unitsSchema } from "@/lib/application-data";
 import { updateDocuments } from "@/lib/document-units";
 import { withoutPrivateParts } from "@/lib/letter-frame";
 import { prisma } from "@/lib/prisma";
-import { loadProfile } from "@/lib/profile-data";
+import { loadFactTexts, loadProfile } from "@/lib/profile-data";
 
 import { defineJob } from "./runner";
 
@@ -47,7 +47,7 @@ export const regenerateUnitJob = defineJob({
     const unit = units?.find((entry) => entry.id === unitId);
     if (!application || !units || !unit || unit.text !== from) return { outcome: "changed" as const };
 
-    const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
+    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(), loadFactTexts(applicationId)]);
     const { data } = await regenerateUnit(
       provider,
       {
@@ -58,7 +58,7 @@ export const regenerateUnitJob = defineJob({
         profile,
         extracted: extractedOf(application),
         tone: application.tone,
-        note: application.userNote,
+        facts,
         posting: application.postingText,
       },
       // The rest of the document is in this language, so the new part is too.

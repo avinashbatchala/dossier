@@ -9,13 +9,15 @@ import { renderPdf } from "@/lib/pdf/render";
 import { prisma } from "@/lib/prisma";
 import type { ProfileData } from "@/lib/profile";
 import { pagesInWords } from "@/lib/settings";
-import { bulletLines } from "@/lib/unit-text";
+import { bulletLines, isPublicationUnit } from "@/lib/unit-text";
+import { citationExcerpt } from "@/lib/citation";
 
 // "Resume length" (E10-10, SET-9): a new tailored resume that runs over its
 // page limit is trimmed once, when the application is created (decided 28
 // September 2026). Measured in the real PDF: the oldest roles go first, then
-// the last bullets of the oldest roles left, then the oldest projects. What's
-// cut is kept on the document, so it can be put back.
+// the last bullets of the oldest roles left, then the oldest projects, then
+// publications from the bottom of the list (#218). What's cut is kept on the
+// document, so it can be put back.
 
 /** Enough for any resume: roles and bullets run out long before. */
 const MAX_CUTS = 30;
@@ -55,7 +57,10 @@ export function nextCut(units: Unit[], profile: ProfileData): Cut | null {
   }
   // Then the oldest project (PRO-13).
   const projects = oldestFirst(units, profile.projects, "project:");
-  return projects.length > 0 ? leaveOut(units, projects[0]) : null;
+  if (projects.length > 0) return leaveOut(units, projects[0]);
+  // Then the last publication (#218).
+  const index = units.findLastIndex((unit) => isPublicationUnit(unit.id));
+  return index >= 0 ? leaveOut(units, { unit: units[index], index }) : null;
 }
 
 /** Bullets cut from the same role one at a time are kept together. */
@@ -124,6 +129,7 @@ export function describeTrim(trimmed: Trimmed, profile: ProfileData, fits: boole
     }
     const project = profile.projects.find((entry) => `project:${entry.id}` === cut.unit.id);
     if (project) return `Left out the ${project.name.trim() || "untitled"} project to fit ${limit}`;
+    if (isPublicationUnit(cut.unit.id)) return `Left out the publication “${citationExcerpt(cut.unit.text)}” to fit ${limit}`;
     const entry = profile.experience.find((role) => `experience:${role.id}` === cut.unit.id);
     const name = entry?.company.trim() || entry?.role.trim() || cut.unit.label;
     const years = entry?.startYear ? ` (${entry.startYear}–${entry.current ? "now" : (entry.endYear ?? "")})` : "";

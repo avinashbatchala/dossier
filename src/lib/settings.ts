@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
 import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
+import { startupsRefreshSchema } from "@/lib/startups/types";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
 export const DATE_FORMATS: readonly { value: DateFormat; label: string }[] = [
@@ -124,7 +125,8 @@ export const settingsSchema = z.object({
   includeRefs: flag(false),
   /** Draw the uploaded signature image on new cover letters (E17). */
   signCoverLetters: flag(false),
-  pageLimit: pageLimit.catch("1"),
+  /** Up to two pages unless chosen (decided 22 October 2026: resumes aren't forced to one page). */
+  pageLimit: pageLimit.catch("2"),
   nightlyBackup: flag(true),
   /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */
   jobRetentionHours: z.coerce.number().refine(isJobRetention).catch(DEFAULT_JOB_RETENTION_HOURS),
@@ -153,6 +155,8 @@ export const settingsSchema = z.object({
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
   adzunaAppId: z.string().nullable().catch(null),
   adzunaKeyEnc: z.string().nullable().catch(null),
+  /** When "I understand" was ticked under the Bundesagentur für Arbeit's note (#223); its searches wait for it. */
+  arbeitsagenturAcceptedAt: z.iso.datetime().nullable().catch(null),
   // Job agent (E16): one search, run once a day. Off until it's turned on.
   // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
@@ -169,6 +173,11 @@ export const settingsSchema = z.object({
   agentAutoDraft: flag(false),
   /** The latest runs, newest first. They belong to the install: exports leave them out (INSTALL_SETTINGS). */
   agentRuns: json(z.array(agentRunSchema)).catch([]),
+  // Startups (#222): when the screen was last opened, since the daily refresh
+  // only runs while it's in use, and what the last refresh found. They belong
+  // to the install, not its data, so exports leave them out (INSTALL_SETTINGS).
+  startupsViewedAt: z.iso.datetime().nullable().catch(null),
+  startupsLastRefresh: json(startupsRefreshSchema).nullable().catch(null),
   /** "Check for updates daily" in Settings → About (update-check.ts). */
   updateCheck: flag(true),
   // The newest release the update check has seen, the UTC day it last
@@ -217,6 +226,11 @@ export const settingsSchema = z.object({
   usagePingChoice: z.enum(["on", "off"]).nullable().catch(null),
   usagePingChoiceAt: z.string().nullable().catch(null),
   usagePingChoiceText: z.coerce.number().int().nullable().catch(null),
+  // The Claude connector (#221): when it was turned on, or Claude was last
+  // disconnected; null while it's off, and then its addresses answer 404.
+  // Every connector token carries it, so a new value signs Claude out. It
+  // belongs to the install, so exports leave it out (INSTALL_SETTINGS).
+  connectorEnabledAt: z.iso.datetime().nullable().catch(null),
   // The browser's time zone as it last told the server, for work done
   // without a request, such as the inbox check (time-zone.ts). It belongs
   // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).
@@ -229,6 +243,7 @@ export function settingsFromRows(rows: readonly { key: string; value: string }[]
   const values: Record<string, string> = Object.fromEntries(rows.map((row) => [row.key, row.value]));
   // Up to 1.7, the limit was "Keep resumes to one page" (onePage), and off meant no limit. Databases and export files may still have it.
   if (values.pageLimit === undefined && values.onePage === "false") values.pageLimit = "none";
+  if (values.pageLimit === undefined && values.onePage === "true") values.pageLimit = "1";
   return settingsSchema.parse(values);
 }
 

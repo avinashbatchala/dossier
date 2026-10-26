@@ -32,6 +32,7 @@ describe("tailoringSummary (E7-6)", () => {
     expect(summary.list).toEqual([
       "Rewrote your summary for the Senior Product Designer role",
       "Reworded your Northwind Logistics and Fieldnote roles for this job",
+      "Kept your publication word for word",
       "Ordered your skills by what Ledgerly asks for",
       "Left out references, since the posting doesn't ask for them",
       "Wrote a warm cover letter",

@@ -5,7 +5,7 @@ import { useId, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ThemeFont } from "@/generated/prisma/enums";
+import { PhotoPosition, ThemeFont } from "@/generated/prisma/enums";
 import { cn } from "@/lib/cn";
 import {
   ACCENTS,
@@ -15,6 +15,8 @@ import {
   HEADER_STYLES,
   HEADING_STYLES,
   LAYOUTS,
+  PHOTO_POSITIONS,
+  PHOTO_SHAPES,
   SIDEBAR_STYLES,
   THEME_FONTS,
   accentName,
@@ -113,6 +115,20 @@ export function ThemeBuilder({ draft, onChange, onSave, onCancel, saving }: Them
         hint={split ? "Sidebar layouts always align the header left." : undefined}
       />
       <Choices label="Header style" value={draft.headerStyle} options={options(HEADER_STYLES)} onChange={set("headerStyle")} />
+      <Choices
+        label="Photo"
+        value={draft.photoShape}
+        options={options(PHOTO_SHAPES)}
+        onChange={set("photoShape")}
+        hint="Your photo from Profile → Basics, while it's shown on resumes."
+      />
+      <Choices
+        label="Photo position"
+        // Only sidebar layouts have a sidebar to put it in; the others show it at the end of the header.
+        value={!split && draft.photoPosition === PhotoPosition.SIDEBAR ? PhotoPosition.HEADER_END : draft.photoPosition}
+        options={options(PHOTO_POSITIONS).filter((option) => split || option.value !== PhotoPosition.SIDEBAR)}
+        onChange={set("photoPosition")}
+      />
       <Choices label="Section titles" value={draft.headingStyle} options={options(HEADING_STYLES)} onChange={set("headingStyle")} />
       <Choices label="Dates" value={draft.dateStyle} options={options(DATE_STYLES)} onChange={set("dateStyle")} />
       <Choices label="Spacing" value={draft.density} options={options(DENSITIES)} onChange={set("density")} />

@@ -33,7 +33,9 @@ type Db = Pick<
   | "experience"
   | "project"
   | "education"
+  | "publication"
   | "reference"
+  | "fact"
   | "application"
 >;
 
@@ -66,7 +68,9 @@ export async function hasUserData(db: Db): Promise<boolean> {
     db.experience.count(),
     db.project.count(),
     db.education.count(),
+    db.publication.count(),
     db.reference.count(),
+    db.fact.count(),
     db.application.count(),
   ]);
   const basics = basicsFromFields(fields);
@@ -99,11 +103,13 @@ export async function seedDemo(
         await tx.experience.deleteMany();
         await tx.project.deleteMany();
         await tx.education.deleteMany();
+        await tx.publication.deleteMany();
         await tx.reference.deleteMany();
+        await tx.fact.deleteMany();
       }
 
       // ── Profile ──
-      const { experience, projects, education, skills, languages, references } = sample.profile;
+      const { experience, projects, education, publications, skills, languages, references, facts } = sample.profile;
       await tx.profileField.deleteMany();
       await tx.profileField.createMany({
         data: Object.entries(fieldsFromBasics(demoProfile().basics)).flatMap(([key, value]) =>
@@ -156,6 +162,11 @@ export async function seedDemo(
         });
         educationIds.set(id, created.id);
       }
+      const publicationIds = new Map<string, string>();
+      for (const [sort, { id, citation, link }] of publications.entries()) {
+        const created = await tx.publication.create({ data: { citation, link, sort } });
+        publicationIds.set(id, created.id);
+      }
       await tx.reference.createMany({
         data: references.map(({ name, relation, company, email, phone }, sort) => ({
           name,
@@ -166,6 +177,7 @@ export async function seedDemo(
           sort,
         })),
       });
+      await tx.fact.createMany({ data: facts.map((text, sort) => ({ text, sort })) });
 
       // ── Applications ──
       const ledgerly = sample.ledgerly;
@@ -271,6 +283,7 @@ export async function seedDemo(
         (id) => experienceIds.get(id)!,
         (id) => educationIds.get(id)!,
         (id) => projectIds.get(id)!,
+        (id) => publicationIds.get(id)!,
       );
       const letterUnits = demoLetterUnits();
       const extract = ledgerly.extract;
@@ -302,6 +315,7 @@ export async function seedDemo(
           language: "English",
           createdAt: now,
           updatedAt: now,
+          facts: { create: ledgerly.facts.map((text, sort) => ({ text, sort })) },
           documents: {
             create: [
               { kind: "RESUME", units: unitsSchema.parse(resumeUnits), themeId: "editorial" },

@@ -122,3 +122,31 @@ describe("Score in Find jobs (#208)", () => {
     expect(screen.getByRole("button", { name: "Score" })).toBeInTheDocument();
   });
 });
+
+describe("Score in Claude (#221)", () => {
+  it("opens a Claude chat that scores the posting through the connector", async () => {
+    const user = userEvent.setup();
+    const tab = { closed: false, opener: {}, location: { href: "about:blank" }, close: vi.fn() };
+    const windowOpen = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    vi.mocked(startScoringPosting).mockResolvedValueOnce({ ok: true, data: { handoff: "https://claude.ai/new?q=score" } });
+    render(<PostingResults mode="saved" postings={[posting("a")]} today="2026-10-20T10:00:00.000Z" scoreInClaude />);
+    await user.click(screen.getByRole("button", { name: "Score" }));
+    expect(windowOpen).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(tab.location.href).toBe("https://claude.ai/new?q=score");
+    expect(toast).toHaveBeenCalledWith("Scoring it in Claude. Reload this page once Claude has saved the score.");
+    // Nothing is scoring here.
+    expect(screen.getByRole("button", { name: "Score" })).not.toHaveAttribute("aria-disabled");
+    windowOpen.mockRestore();
+  });
+
+  it("closes the waiting tab when Dossier scores it after all", async () => {
+    const user = userEvent.setup();
+    const tab = { closed: false, opener: {}, location: { href: "about:blank" }, close: vi.fn() };
+    const windowOpen = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    render(<PostingResults mode="saved" postings={[posting("a")]} today="2026-10-20T10:00:00.000Z" scoreInClaude />);
+    await user.click(screen.getByRole("button", { name: "Score" }));
+    expect(tab.close).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Scoring…" })).toBeInTheDocument();
+    windowOpen.mockRestore();
+  });
+});

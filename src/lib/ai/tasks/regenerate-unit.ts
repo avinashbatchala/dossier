@@ -11,6 +11,8 @@ import { bulletLines, isBulletUnit } from "@/lib/unit-text";
 import { guardSources, guardUnits } from "../fact-guard";
 
 import {
+  applicationFacts,
+  candidateFacts,
   COVER_LETTER_APPROACH,
   CREATIVITY,
   jobForPrompt,
@@ -23,7 +25,7 @@ import {
   type Task,
 } from "./prompt-parts";
 
-export const REGENERATE_UNIT_VERSION = "regenerate-unit@5";
+export const REGENERATE_UNIT_VERSION = "regenerate-unit@6";
 
 /** What the letter's frame parts are, for the model (E8-11). */
 const FRAME_PARTS: Record<string, string> = {
@@ -57,14 +59,15 @@ export type RegenerateInput = {
   profile: ProfileData;
   extracted: Extracted;
   tone: Tone;
-  note: string;
+  /** What the candidate tells the AI for this application (APP-15). */
+  facts: string[];
   /** The posting as pasted, for the fact guard. */
   posting: string;
 };
 
 /** APP-5: a fresh version of one part, the rest left alone; the unit comes back with its new text. */
 export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, input, options) => {
-  const { kind, unit, document, profile, extracted, tone, note, posting } = input;
+  const { kind, unit, document, profile, extracted, tone, facts, posting } = input;
   const bullets = isBulletUnit(unit.id);
   const isProject = unit.id.startsWith("project:");
   const what = DOCUMENT_NAMES[kind];
@@ -84,6 +87,7 @@ export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, inpu
       kind === DocumentKind.COVER_LETTER && FRAME_PARTS[unit.id],
       kind === DocumentKind.EMAIL && EMAIL_PARTS[unit.id],
       truthfulness(options.strict),
+      candidateFacts(profile, facts),
       CREATIVITY[options.creativity],
       languageRule(options.language),
       UNTRUSTED_POSTING,
@@ -96,7 +100,7 @@ export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, inpu
           `The candidate's profile:\n${profileForPrompt(profile)}`,
           `The job:\n${jobForPrompt(extracted, null)}`,
           `The whole ${what} now:\n${JSON.stringify(document, null, 2)}`,
-          note.trim() && `The candidate adds: ${note.trim()}`,
+          applicationFacts(facts),
           `Write a new version of "${unit.label}" (${unit.id}). Its current text:\n${unit.text}`,
         ]
           .filter(Boolean)
@@ -117,7 +121,7 @@ export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, inpu
     data:
       options.strict && !isFrameUnit(unit.id)
         ? // The email's greeting names its recipient, from the posting or typed in by the user.
-          guardUnits([updated], guardSources(profile, extracted, kind === DocumentKind.EMAIL ? [posting, emailParts(document).to].join("\n") : posting))[0]
+          guardUnits([updated], guardSources(profile, extracted, kind === DocumentKind.EMAIL ? [posting, emailParts(document).to].join("\n") : posting, facts))[0]
         : { ...updated, unverified: undefined },
     promptVersion: REGENERATE_UNIT_VERSION,
   };

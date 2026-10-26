@@ -17,7 +17,7 @@ test("restores the first draft after a change from the chat", async ({ page }) =
 
   const summary = page.locator('[data-unit="summary"]');
   // The part's text, without its toolbar's labels.
-  const draft = (await summary.textContent())!.replace(/EditRegenerateAsk AI$/, "");
+  const draft = (await summary.textContent())!.replace(/EditRegenerateAsk AILeave out$/, "");
   await page.getByRole("textbox", { name: "Ask for a change" }).fill("Make the summary shorter");
   await page.getByRole("textbox", { name: "Ask for a change" }).press("Enter");
   await expect(page.getByRole("log", { name: "Conversation" }).getByText("Done. I made the summary shorter.")).toBeVisible();

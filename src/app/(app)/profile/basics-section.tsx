@@ -7,9 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutosave } from "@/hooks/use-autosave";
-import { ageOn, type Basics, type BasicsField } from "@/lib/profile";
+import type { ProfilePhoto } from "@/lib/photo";
+import { ageOn, isOptionalBasic, type Basics, type BasicsField } from "@/lib/profile";
 
 import { saveBasics } from "./actions";
+import { PhotoField } from "./photo-field";
 import { useTrackSave } from "@/components/save-tracker";
 
 type FieldSpec = {
@@ -49,8 +51,27 @@ function formatHint(field: BasicsField, value: string): string | undefined {
   return undefined;
 }
 
-/** The Basics section (PRO-1, PRO-2), autosaved as you type (PRO-10). */
-export function BasicsSection({ basics, onChange }: { basics: Basics; onChange: (basics: Basics) => void }) {
+/** A field label that says the field is optional (#216). */
+function Optional({ label }: { label: string }) {
+  return (
+    <>
+      {label} <span className="font-normal text-muted">(optional)</span>
+    </>
+  );
+}
+
+/** The Basics section (PRO-1, PRO-2), autosaved as you type (PRO-10), with the photo (#224), saved as it changes. */
+export function BasicsSection({
+  basics,
+  onChange,
+  photo,
+  onPhotoChange,
+}: {
+  basics: Basics;
+  onChange: (basics: Basics) => void;
+  photo: ProfilePhoto | null;
+  onPhotoChange: (photo: ProfilePhoto | null) => void;
+}) {
   const track = useTrackSave();
   const { flush } = useAutosave(basics, (value) => track(saveBasics(value)));
   // Hints show once you've left a field, not while you're typing in it.
@@ -65,11 +86,12 @@ export function BasicsSection({ basics, onChange }: { basics: Basics; onChange: 
 
   return (
     <Card className="grid grid-cols-2 gap-x-[18px] gap-y-5">
+      <PhotoField photo={photo} onChange={onPhotoChange} />
       {FIELDS.map(({ field, label, wide, placeholder, type, autoComplete }) => (
         <Input
           key={field}
           className={wide ? "col-span-2" : undefined}
-          label={label}
+          label={isOptionalBasic(field) ? <Optional label={label} /> : label}
           type={type}
           placeholder={placeholder}
           autoComplete={autoComplete}

@@ -154,6 +154,15 @@ describe("job search variables (E14-4)", () => {
     });
   });
 
+  it("reads whether the Bundesagentur für Arbeit is offered, and refuses choosing it while it's off (#223)", () => {
+    expect(parseEnv(valid).DOSSIER_JOBS_ARBEITSAGENTUR).toBeUndefined();
+    expect(parseEnv({ ...valid, DOSSIER_JOBS_ARBEITSAGENTUR: " OFF " }).DOSSIER_JOBS_ARBEITSAGENTUR).toBe("off");
+    expect(problems({ ...valid, DOSSIER_JOBS_ARBEITSAGENTUR: "no" })).toEqual(['DOSSIER_JOBS_ARBEITSAGENTUR must be on or off (got "no").']);
+    expect(problems({ ...valid, DOSSIER_JOBS_SOURCE: "arbeitsagentur", DOSSIER_JOBS_ARBEITSAGENTUR: "off" })).toEqual([
+      "DOSSIER_JOBS_SOURCE is arbeitsagentur, but DOSSIER_JOBS_ARBEITSAGENTUR is off. Choose another source, or remove one of the two.",
+    ]);
+  });
+
   it("rejects sources and hosts it doesn't know, without echoing keys", () => {
     expect(problems({ ...valid, DOSSIER_JOBS_SOURCE: "linkedin", DOSSIER_JSEARCH_HOST: "google", DOSSIER_JSEARCH_KEY: "ak_secret" })).toEqual([
       'DOSSIER_JOBS_SOURCE must be one of jsearch, adzuna, arbeitsagentur, off (got "linkedin").',

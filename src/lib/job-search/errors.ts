@@ -6,6 +6,10 @@ import { SOURCE_INFO } from "./sources";
 // (E14-1). A source's own error text never reaches the screen or the logs.
 
 export type JobSearchProblem =
+  /** The source isn't offered on this server (DOSSIER_JOBS_ARBEITSAGENTUR=off). */
+  | "off"
+  /** The Bundesagentur für Arbeit's note hasn't been accepted yet (#223). */
+  | "not-accepted"
   /** No key saved for a source that needs one. */
   | "no-key"
   /** The source refused the key. */
@@ -36,6 +40,8 @@ export class JobSearchError extends Error {
 export function jobSearchError(problem: JobSearchProblem, source: JobSource, { country = "", detail }: { country?: string; detail?: string } = {}) {
   const { name, quotaPeriod } = SOURCE_INFO[source];
   const message = {
+    off: `${name} isn't offered on this server. Choose another source in Settings → Job search.`,
+    "not-accepted": `Read the note about ${name} and tick “I understand” before Dossier searches it.`,
     "no-key": `Add your ${name} ${source === "ADZUNA" ? "app ID and key" : "key"} in Settings → Job search first.`,
     key: `${name} didn't accept your key. Check it in Settings → Job search.`,
     quota: quotaPeriod

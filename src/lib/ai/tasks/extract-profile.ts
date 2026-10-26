@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 import { LanguageLevel } from "@/generated/prisma/enums";
+import { citationExcerpt, escapeMarks, publicationLink } from "@/lib/citation";
 import { BASICS_FIELDS, sameName } from "@/lib/profile";
 import { importedProfileSchema, type ImportedProfile } from "@/lib/profile-import";
 
 import { system, type Task } from "./prompt-parts";
 
-export const EXTRACT_PROFILE_VERSION = "extract-profile@2";
+export const EXTRACT_PROFILE_VERSION = "extract-profile@3";
 
 // What the model returns; code checks every part of it (E4-10).
 const text = z.string().nullable();
@@ -38,6 +39,7 @@ const answerSchema = z.object({
   ),
   projects: z.array(z.object({ name: z.string(), link: text, ...dates, bullets: z.array(z.string()), skills: z.array(z.string()) })),
   education: z.array(z.object({ degree: z.string(), school: z.string(), ...dates, notes: text })),
+  publications: z.array(z.object({ citation: z.string(), link: text })),
   references: z.array(z.object({ name: z.string(), relation: text, company: text, email: text, phone: text })),
 });
 
@@ -50,6 +52,7 @@ Take everything only from the resume: never add, guess or improve facts. Use nul
 - experience: every role, most recent first. startYear and endYear as four-digit years, startMonth and endMonth as 1–12 (null when only a year is given); current is true when the role hasn't ended ("present", "today"). bullets: what they did, one item per point, in the resume's words. skills: the skills from your skills list this role mentions.
 - projects: every project the resume lists apart from its roles (side, open-source, course or thesis projects), most recent first, with its link if given, the same dates, bullets as for roles, and the skills from your skills list it mentions. A project described inside a role stays in that role's bullets.
 - education: every degree, course or certificate, with the same dates, and notes (grade, focus, thesis) if given.
+- publications: every paper, article, book or chapter the resume lists as the candidate's publications, in its order. citation: the whole entry exactly as the resume writes it, word for word, without its link; link: its DOI or web address if given.
 - references: only people the resume names as references, with how they know the candidate (relation), their company, email and phone.
 Keep the resume's language; don't translate.`;
 
@@ -157,6 +160,17 @@ export function checkedProfile(answer: z.infer<typeof answerSchema>, resume: str
         ...span(entry),
         unverified: missing(clean(entry.degree), clean(entry.school)),
       })),
+    // A citation is kept word for word (#218): its asterisks stay asterisks, not formatting.
+    publications: answer.publications
+      .filter((entry) => clean(entry.citation))
+      .map((entry) => {
+        const citation = escapeMarks(clean(entry.citation)).slice(0, 3000);
+        return {
+          citation,
+          link: publicationLink(clean(entry.link)).slice(0, 500),
+          unverified: inResume(clean(entry.citation)) ? [] : [citationExcerpt(citation)],
+        };
+      }),
     references: answer.references
       .filter((entry) => clean(entry.name))
       .map((entry) => ({

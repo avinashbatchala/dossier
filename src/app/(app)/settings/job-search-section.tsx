@@ -3,6 +3,7 @@
 import { RadioGroup } from "radix-ui";
 import { useId, useState } from "react";
 
+import { ArbeitsagenturNote } from "@/components/arbeitsagentur-note";
 import { useTrackSave } from "@/components/save-tracker";
 import { toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,8 @@ type Connection =
 /**
  * Settings → Job search (E14-4): which source Find jobs searches, and its
  * key. Each field saves on its own; a key is saved when you leave its field
- * and never shown again.
+ * and never shown again. The Bundesagentur für Arbeit is saved only once its
+ * note is accepted, and isn't offered when the server turns it off (#223).
  */
 export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }) {
   const track = useTrackSave();
@@ -52,8 +54,14 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
   const choose = async (next: Choice) => {
     setView((current) => ({ ...current, source: next }));
     changed();
+    if (next === "ARBEITSAGENTUR" && !view.arbeitsagentur.acceptedAt) return;
     apply(toastResult(await track(saveJobSource({ source: next }))));
   };
+
+  const acceptArbeitsagentur = async () => apply(toastResult(await track(saveJobSource({ source: "ARBEITSAGENTUR", accepted: true }))));
+  const choices = view.arbeitsagentur.offered ? CHOICES : CHOICES.filter((entry) => entry.value !== "ARBEITSAGENTUR");
+  // The BA can't be tested, or searched, before its note is accepted.
+  const testable = source !== "ARBEITSAGENTUR" || Boolean(view.arbeitsagentur.acceptedAt);
 
   const chooseHost = async (host: JSearchHost) => {
     setView((current) => ({ ...current, jsearch: { ...current.jsearch, host } }));
@@ -93,7 +101,7 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
         onValueChange={(value) => void choose(value as Choice)}
         className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3"
       >
-        {CHOICES.map((entry) => (
+        {choices.map((entry) => (
           <RadioGroup.Item
             key={entry.value}
             value={entry.value}
@@ -158,18 +166,20 @@ export function JobSearchSection({ initial }: { initial: JobSearchSettingsView }
               </div>
             )}
             {source === "ARBEITSAGENTUR" && (
-              <p className="text-sm text-muted">
-                No key needed. Dossier uses the public access that the Arbeitsagentur&apos;s own job search uses. It isn&apos;t an official
-                API, so it can change without notice.
-              </p>
+              <>
+                <ArbeitsagenturNote accepted={Boolean(view.arbeitsagentur.acceptedAt)} onAccept={acceptArbeitsagentur} />
+                <p className="text-sm text-muted">No key needed. The job agent doesn&apos;t search this source; choose JSearch or Adzuna for it.</p>
+              </>
             )}
 
-            <div className="flex flex-wrap items-center gap-3.5 pt-1">
-              <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-                {connection.status === "testing" ? "Testing…" : "Test connection"}
-              </Button>
-              <ConnectionStatus connection={connection} source={source} />
-            </div>
+            {testable && (
+              <div className="flex flex-wrap items-center gap-3.5 pt-1">
+                <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
+                  {connection.status === "testing" ? "Testing…" : "Test connection"}
+                </Button>
+                <ConnectionStatus connection={connection} source={source} />
+              </div>
+            )}
           </Card>
         </>
       )}

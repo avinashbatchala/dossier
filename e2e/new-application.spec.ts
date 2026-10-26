@@ -33,6 +33,9 @@ test("reads a posting, shows the match and writes tailored documents", async ({ 
   await expect(page.getByRole("article", { name: "Resume" })).toContainText("Jane Doe");
   await page.getByRole("tab", { name: "Cover letter" }).click();
   await expect(page.getByText("Payments are where trust is won or lost")).toBeVisible();
+  // What you told the AI is the application's first fact (APP-15).
+  await page.getByRole("tab", { name: /Job posting/ }).click();
+  await expect(page.getByRole("region", { name: "Facts for this application" }).getByRole("textbox", { name: "Fact 1", exact: true })).toHaveValue("I'm moving to Amsterdam in January.");
 });
 
 test("won't fetch a posting from the server's own network (E7-8)", async ({ page }) => {

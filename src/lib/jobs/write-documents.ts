@@ -34,10 +34,12 @@ export const writeDocumentsJob = defineJob({
   async run({ posting, extracted, match, tone, note }, { step, signal }) {
     await step(WRITE_DOCUMENTS_STEPS[0]);
     const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
-    const resume = await tailorResume(provider, { profile, extracted, match, note, posting }, { ...options, signal });
+    // "Anything I should know?" is the application's first fact (APP-15).
+    const facts = note.trim() ? [note.trim()] : [];
+    const resume = await tailorResume(provider, { profile, extracted, match, facts, posting }, { ...options, signal });
 
     await step(WRITE_DOCUMENTS_STEPS[1]);
-    const letter = await writeCoverLetter(provider, { profile, extracted, match, tone, note, posting }, { ...options, signal });
+    const letter = await writeCoverLetter(provider, { profile, extracted, match, tone, facts, posting }, { ...options, signal });
 
     return { resume: resume.data, resumeWith: resume.promptVersion, letter: letter.data, letterWith: letter.promptVersion };
   },

@@ -26,6 +26,7 @@ export type AgentCandidateView = {
   facts: string;
   /** "Posted 2 days ago · via LinkedIn on JSearch". */
   origin: string;
+  source: JobSource;
   url: string;
   score: number;
   reasons: string[];
@@ -118,6 +119,7 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
     ]
       .filter(Boolean)
       .join(" · "),
+    source: candidate.source,
     url: candidate.url,
     score: candidate.score,
     reasons: stringsOf(candidate.reasons),

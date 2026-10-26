@@ -37,6 +37,10 @@ const imported: ImportedProfile = {
     { name: "Design tokens CLI", link: "", bullets: "Built a CLI", skills: ["figma"], startYear: 2024, startMonth: null, endYear: null, endMonth: null, current: true, unverified: [] },
   ],
   education: [{ degree: "MSc Interaction Design", school: "TU Delft", notes: "", startYear: 2015, startMonth: null, endYear: 2017, endMonth: null, current: false, unverified: [] }],
+  publications: [
+    { citation: "Doe, J. (2024). Calm payouts.", link: "https://doi.org/10.5555/1", unverified: [] },
+    { citation: "Doe, J. (2025). A new one.", link: "", unverified: [] },
+  ],
   references: [{ name: "Jane Doe", relation: "Manager", company: "", email: "jane.doe@example.com", phone: "", unverified: [] }],
 };
 
@@ -51,6 +55,7 @@ async function existingProfile() {
   });
   await prisma().reference.create({ data: { name: "jane doe", relation: "", company: "Fieldnote", sort: 0 } });
   await prisma().project.create({ data: { name: "Payout simulator", bullets: "My own project bullets", startYear: 2023, sort: 0 } });
+  await prisma().publication.create({ data: { citation: "**Doe, J.** (2024). *Calm payouts.*", onResumes: false, sort: 0 } });
 }
 
 describe("applyImportedProfile (E4-10)", () => {
@@ -86,6 +91,12 @@ describe("applyImportedProfile (E4-10)", () => {
     expect(projects[1]).toMatchObject({ bullets: "Built a CLI", current: true });
     expect(projects[1].skills.map((link) => link.skill.name)).toEqual(["Figma"]);
 
+    // Publications (#218) match by their text without marks, keep their formatting and switch, and new ones go after.
+    expect(await prisma().publication.findMany({ orderBy: { sort: "asc" }, select: { citation: true, link: true, onResumes: true } })).toEqual([
+      { citation: "**Doe, J.** (2024). *Calm payouts.*", link: "https://doi.org/10.5555/1", onResumes: false },
+      { citation: "Doe, J. (2025). A new one.", link: "", onResumes: true },
+    ]);
+
     expect(await prisma().education.count()).toBe(1);
     const references = await prisma().reference.findMany();
     expect(references).toHaveLength(1);
@@ -105,14 +116,20 @@ describe("applyImportedProfile (E4-10)", () => {
     await prisma().setting.create({ data: { key: "experienceOrder", value: "manual" } });
     await prisma().setting.create({ data: { key: "projectOrder", value: "manual" } });
     await prisma().profileField.create({ data: { key: "showAge", value: "false" } });
+    // A resume's text has no photo, so the profile's stays (#224).
+    await prisma().profileField.createMany({ data: [{ key: "photo", value: "data:image/png;base64,iVBORw0KGgo=" }, { key: "photoOnResumes", value: "false" }] });
     await applyImportedProfile(prisma(), imported, "replace");
 
     const fields = Object.fromEntries((await prisma().profileField.findMany()).map((field) => [field.key, field.value]));
-    expect(fields).toEqual({ name: "John Doe", city: "Utrecht", showAge: "false" });
+    expect(fields).toEqual({ name: "John Doe", city: "Utrecht", showAge: "false", photo: "data:image/png;base64,iVBORw0KGgo=", photoOnResumes: "false" });
     expect((await prisma().skill.findMany()).map((skill) => skill.name).sort()).toEqual(["User research", "figma"]);
     expect((await prisma().experience.findMany()).map((role) => role.company).sort()).toEqual(["Acme Payments", "fieldnote"]);
     expect((await prisma().setting.findUnique({ where: { key: "experienceOrder" } }))?.value).toBe("date");
     expect((await prisma().project.findMany()).map((project) => project.name).sort()).toEqual(["Design tokens CLI", "payout simulator"]);
     expect((await prisma().setting.findUnique({ where: { key: "projectOrder" } }))?.value).toBe("date");
+    expect((await prisma().publication.findMany({ orderBy: { sort: "asc" } })).map((entry) => entry.citation)).toEqual([
+      "Doe, J. (2024). Calm payouts.",
+      "Doe, J. (2025). A new one.",
+    ]);
   });
 });

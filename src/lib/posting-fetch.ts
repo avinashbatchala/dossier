@@ -99,8 +99,10 @@ export const guardedLookup: LookupFunction = (hostname, options, callback) => {
 
 type Response = { status: number; headers: http.IncomingHttpHeaders; body: Buffer };
 
+const USER_AGENT = `Mozilla/5.0 (compatible; Dossier/${appVersion}; self-hosted job search)`;
+
 /** One request, with the guarded lookup, a time limit and a size limit. */
-function request(url: URL, lookup: LookupFunction, timeoutMs: number): Promise<Response> {
+function request(url: URL, lookup: LookupFunction, timeoutMs: number, userAgent: string): Promise<Response> {
   return new Promise((resolve, reject) => {
     const client = url.protocol === "https:" ? https : http;
     const outgoing = client.get(
@@ -108,7 +110,7 @@ function request(url: URL, lookup: LookupFunction, timeoutMs: number): Promise<R
       {
         lookup,
         headers: {
-          "user-agent": `Mozilla/5.0 (compatible; Dossier/${appVersion}; self-hosted job search)`,
+          "user-agent": userAgent,
           accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
           "accept-encoding": "gzip, deflate, br",
           "accept-language": "en;q=0.9, *;q=0.5",
@@ -152,6 +154,26 @@ export async function fetchPosting(
   link: string,
   { lookup = guardedLookup, timeoutMs = TIMEOUT_MS }: { lookup?: LookupFunction; timeoutMs?: number } = {},
 ): Promise<FetchedPosting> {
+  const page = await fetchHtml(link, { lookup, timeoutMs });
+  if (!page.ok) return { ok: false, error: page.error };
+  const posting = postingFromHtml(page.html);
+  if (!posting) return { ok: false, error: FETCH_MESSAGES.unreadable };
+  return { ok: true, ...posting, url: page.url };
+}
+
+export type FetchedPage = { ok: true; html: string; url: string } | { ok: false; error: string; status?: number };
+
+/**
+ * A web page's text, with the same guards as fetching a posting: public
+ * addresses only (checked again after every redirect), and limits on time,
+ * size and redirects. `status` is the site's answer when it refused. Used
+ * for postings, and for a startup's own pages and robots.txt (#222), which
+ * pass Dossier's identifying `userAgent`.
+ */
+export async function fetchHtml(
+  link: string,
+  { lookup = guardedLookup, timeoutMs = TIMEOUT_MS, userAgent = USER_AGENT }: { lookup?: LookupFunction; timeoutMs?: number; userAgent?: string } = {},
+): Promise<FetchedPage> {
   let url: URL;
   try {
     url = new URL(link);
@@ -171,7 +193,7 @@ export async function fetchPosting(
     let response: Response;
     try {
       response = await Promise.race([
-        request(url, lookup, timeoutMs),
+        request(url, lookup, timeoutMs, userAgent),
         new Promise<never>((_, reject) => setTimeout(() => reject(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" })), Math.max(0, deadline - Date.now())).unref()),
       ]);
     } catch (error) {
@@ -187,13 +209,11 @@ export async function fetchPosting(
       url = new URL(location, url);
       continue;
     }
-    if (response.status >= 400) return { ok: false, error: FETCH_MESSAGES.failed(response.status) };
+    if (response.status >= 400) return { ok: false, error: FETCH_MESSAGES.failed(response.status), status: response.status };
 
     const type = String(response.headers["content-type"] ?? "");
     if (type && !/text\/html|application\/xhtml\+xml|text\/plain/i.test(type)) return { ok: false, error: FETCH_MESSAGES.notPage };
-    const posting = postingFromHtml(decode(response.body, type));
-    if (!posting) return { ok: false, error: FETCH_MESSAGES.unreadable };
-    return { ok: true, ...posting, url: url.toString() };
+    return { ok: true, html: decode(response.body, type), url: url.toString() };
   }
 }
 

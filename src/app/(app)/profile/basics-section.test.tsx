@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ProfilePhoto } from "@/lib/photo";
 import type { Basics } from "@/lib/profile";
 
 import { saveBasics } from "./actions";
@@ -17,7 +18,8 @@ const empty: Basics = {
 
 function Harness({ initial = empty }: { initial?: Basics }) {
   const [basics, setBasics] = useState(initial);
-  return <BasicsSection basics={basics} onChange={setBasics} />;
+  const [photo, setPhoto] = useState<ProfilePhoto | null>(null);
+  return <BasicsSection basics={basics} onChange={setBasics} photo={photo} onPhotoChange={setPhoto} />;
 }
 
 describe("BasicsSection", () => {
@@ -29,15 +31,15 @@ describe("BasicsSection", () => {
     vi.useRealTimers();
   });
 
-  it("has every Basics field, labelled", () => {
+  it("has every Basics field, labelled, with the optional ones marked (#216)", () => {
     render(<Harness />);
     for (const label of [
-      "Full name", "Headline", "Email", "Phone", "Date of birth", "Website",
-      "Street address", "City", "Country", "LinkedIn", "A few lines about you",
+      "Full name", "Headline", "Email", "Phone (optional)", "Date of birth (optional)", "Website (optional)",
+      "Street address (optional)", "City", "Country", "LinkedIn (optional)", "A few lines about you",
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
-    expect(screen.getByLabelText("Date of birth")).toHaveAttribute("type", "date");
+    expect(screen.getByLabelText("Date of birth (optional)")).toHaveAttribute("type", "date");
   });
 
   it("autosaves 500 ms after typing stops", async () => {
@@ -62,7 +64,7 @@ describe("BasicsSection", () => {
     expect(option).not.toBeChecked();
     expect(option).toHaveAccessibleName("Show my age on resumes (add your date of birth first)");
 
-    fireEvent.change(screen.getByLabelText("Date of birth"), { target: { value: "1992-04-18" } });
+    fireEvent.change(screen.getByLabelText("Date of birth (optional)"), { target: { value: "1992-04-18" } });
     expect(option).toHaveAccessibleName(/^Show my age on resumes \(you're \d+; off by default, as many places advise leaving it out\)$/);
   });
 
@@ -79,7 +81,7 @@ describe("BasicsSection", () => {
     fireEvent.change(email, { target: { value: "jane.doe@example.com" } });
     expect(email).not.toHaveAccessibleDescription();
 
-    const website = screen.getByLabelText("Website");
+    const website = screen.getByLabelText("Website (optional)");
     fireEvent.change(website, { target: { value: "example.com" } });
     await act(async () => fireEvent.blur(website));
     expect(website).not.toHaveAccessibleDescription();

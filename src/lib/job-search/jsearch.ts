@@ -10,27 +10,24 @@ import { safeLink, type FoundPosting, type PostedWithin, type SearchPage, type S
 
 // JSearch (E14-1): Google for Jobs through OpenWeb Ninja, or the same API on
 // RapidAPI. One search page is one request from the plan (200 a month free).
-// OpenWeb Ninja's search-v2 nests the jobs under `data` and pages with a
-// cursor; the RapidAPI endpoint returns a list and pages by number. Both are
-// read here.
+// Both hosts answer search-v2, which nests the jobs under `data` and pages
+// with a cursor. RapidAPI's old /search, which paged by number, now answers
+// 404.
 
-const HOSTS: Record<JSearchHost, { base: string; path: string; headers: (key: string) => Record<string, string> }> = {
+const SEARCH_PATH = "/search-v2";
+
+const HOSTS: Record<JSearchHost, { base: string; headers: (key: string) => Record<string, string> }> = {
   openwebninja: {
     base: "https://api.openwebninja.com/jsearch",
-    path: "/search-v2",
     headers: (key) => ({ "x-api-key": key }),
   },
   rapidapi: {
     base: "https://jsearch.p.rapidapi.com",
-    path: "/search",
     headers: (key) => ({ "x-rapidapi-key": key, "x-rapidapi-host": "jsearch.p.rapidapi.com" }),
   },
 };
 
 const DATE_POSTED: Record<PostedWithin, string> = { any: "all", day: "today", "3days": "3days", week: "week", month: "month" };
-
-/** RapidAPI's pages hold ten jobs; a full page means there may be more. */
-const PAGE_SIZE = 10;
 
 // Every field may be missing or null; one odd field doesn't drop the posting.
 const maybeText = z.string().nullish().catch(null);
@@ -66,7 +63,7 @@ const jobSchema = z.object({
 type Job = z.output<typeof jobSchema>;
 
 const responseSchema = z.object({
-  data: z.union([z.array(z.unknown()), z.object({ jobs: z.array(z.unknown()), cursor: z.string().nullish() })]),
+  data: z.object({ jobs: z.array(z.unknown()), cursor: z.string().nullish() }),
 });
 
 const PERIODS: Record<string, string> = { YEAR: "a year", MONTH: "a month", WEEK: "a week", DAY: "a day", HOUR: "an hour" };
@@ -130,20 +127,16 @@ function queryText({ keywords, place }: SearchQuery): string {
 }
 
 function searchUrl(query: SearchQuery, host: JSearchHost, next: string | null, baseUrl?: string): URL {
-  const { base, path } = HOSTS[host];
-  const url = new URL(`${baseUrl ?? base}${path}`);
+  const url = new URL(`${baseUrl ?? HOSTS[host].base}${SEARCH_PATH}`);
   url.searchParams.set("query", queryText(query));
   // Without a country, JSearch searches the US.
   url.searchParams.set("country", query.country || "us");
   url.searchParams.set("date_posted", DATE_POSTED[query.postedWithin]);
   if (query.place) url.searchParams.set("radius", String(query.radiusKm));
   if (query.remoteOnly) url.searchParams.set("work_from_home", "true");
-  if (host === "openwebninja") {
-    if (next?.startsWith("cursor:")) url.searchParams.set("cursor", next.slice("cursor:".length));
-  } else {
-    url.searchParams.set("page", next?.startsWith("page:") ? next.slice("page:".length) : "1");
-    url.searchParams.set("num_pages", "1");
-  }
+  // A page number kept in a past search from RapidAPI's old /search starts
+  // over; Show more leaves out the postings it already has.
+  if (next?.startsWith("cursor:")) url.searchParams.set("cursor", next.slice("cursor:".length));
   return url;
 }
 
@@ -157,26 +150,17 @@ async function searchPage(
   const answer = responseSchema.safeParse(await requestJson("JSEARCH", url, { headers: HOSTS[host].headers(key), signal: context.signal }));
   if (!answer.success) throw jobSearchError("changed", "JSEARCH", { detail: `${url.pathname}: unexpected answer` });
 
-  const { data } = answer.data;
-  const raw = Array.isArray(data) ? data : data.jobs;
+  const { jobs, cursor } = answer.data.data;
   const seen = new Set<string>();
   const postings: FoundPosting[] = [];
-  for (const item of raw) {
+  for (const item of jobs) {
     const job = jobSchema.safeParse(item);
     if (!job.success || seen.has(job.data.job_id)) continue;
     seen.add(job.data.job_id);
     postings.push(postingFromJob(job.data));
   }
 
-  const page = Number(url.searchParams.get("page") ?? "1");
-  const nextToken = !Array.isArray(data)
-    ? data.cursor
-      ? `cursor:${data.cursor}`
-      : null
-    : raw.length >= PAGE_SIZE
-      ? `page:${page + 1}`
-      : null;
-  return { postings, next: nextToken };
+  return { postings, next: cursor ? `cursor:${cursor}` : null };
 }
 
 export const jsearch: JobSourceAdapter<"JSEARCH"> = {

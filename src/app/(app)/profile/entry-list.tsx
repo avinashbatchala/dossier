@@ -20,12 +20,12 @@ export type Ordering = {
   mode: EntryOrder;
   /** Saves an order set by hand: every entry's id, in order. */
   save: (ids: string[]) => Promise<ActionResult<null>>;
-  /** Back to date order; answers with the ids in that order. */
-  sortByDate: () => Promise<ActionResult<string[]>>;
+  /** Back to date order; answers with the ids in that order. Without it, the entries have no dates and only an order set by hand (#218). */
+  sortByDate?: () => Promise<ActionResult<string[]>>;
 };
 
 /**
- * A list of entries (experience, education, references): one card open at a
+ * A list of entries (experience, education, publications, references): one card open at a
  * time, "+ Add…" creates a blank entry and opens it, and Remove takes effect
  * at once with Undo in the toast (#36). With `ordering`, entries can be
  * dragged or moved up and down (E4-9).
@@ -127,7 +127,7 @@ export function EntryList<T extends { id: string }>({
   }
 
   async function sortByDate() {
-    if (!ordering) return;
+    if (!ordering?.sortByDate) return;
     const result = await track(ordering.sortByDate());
     if (!result.ok) return toast(result.error);
     const position = new Map(result.data.map((id, index) => [id, index]));
@@ -177,7 +177,9 @@ export function EntryList<T extends { id: string }>({
     <div className="flex flex-col gap-3">
       {ordering && items.length > 1 && (
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 text-meta text-muted">
-          {mode === "manual" ? (
+          {!ordering.sortByDate ? (
+            <span>In your own order. Drag an entry or use its arrows to move it.</span>
+          ) : mode === "manual" ? (
             <>
               <span>In your own order.</span>
               <Button variant="text" size="sm" onClick={() => void sortByDate()}>

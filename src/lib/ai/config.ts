@@ -115,3 +115,17 @@ export async function isAiConfigured(): Promise<boolean> {
   if (env.DOSSIER_AI_PROVIDER) return true;
   return Boolean((await loadSettings()).provider);
 }
+
+/**
+ * Whether Dossier's own AI model can be called: a provider with its model,
+ * and a key for the hosted ones that always need one. Without it, and with
+ * the Claude connector on, the AI buttons hand the work to Claude chat
+ * (src/lib/connector/handoff.ts, #221).
+ */
+export async function isAiUsable(): Promise<boolean> {
+  if (!(await isAiConfigured())) return false;
+  const config = await loadAiConfig();
+  if (!config.model || config.apiKeyProblem) return false;
+  const needsKey = config.provider === AiProvider.ANTHROPIC || config.provider === AiProvider.MISTRAL;
+  return !needsKey || Boolean(config.apiKey);
+}

@@ -67,6 +67,8 @@ function omit<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit
 }
 
 const json = (value: unknown) => (value === null || value === undefined ? Prisma.DbNull : (value as Prisma.InputJsonValue));
+/** A JSON list for a column that can't be null (#222): anything else reads as empty. */
+const jsonList = (value: unknown) => (Array.isArray(value) ? value : []) as Prisma.InputJsonValue;
 
 /**
  * Replaces all user data with the export's, in one transaction. Each saved
@@ -75,7 +77,20 @@ const json = (value: unknown) => (value === null || value === undefined ? Prisma
  * install's own settings (the usage ping's) stay as they are.
  */
 export async function importExport(db: PrismaClient, data: DossierExport): Promise<void> {
-  const { profile, themes, settings, applications, postings, searches, agentCandidates, signature, apiKey, jobSourceKeys } = data;
+  const {
+    profile,
+    themes,
+    settings,
+    applications,
+    postings,
+    searches,
+    agentCandidates,
+    startups,
+    startupBlocks,
+    signature,
+    apiKey,
+    jobSourceKeys,
+  } = data;
   const fromFile: Record<string, string | null> = {
     apiKeyEnc: apiKey ? encryptApiKey(apiKey) : null,
     jsearchKeyEnc: jobSourceKeys?.jsearch ? encryptSecret(JOB_SOURCE_KEY, jobSourceKeys.jsearch) : null,
@@ -88,12 +103,13 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       // notes and jobs along; the other jobs (a resume import, postings read
       // for applications never created) hold the old data too.
       await tx.job.deleteMany();
-      await tx.agentCandidate.deleteMany();
       // The uploaded signature belongs to the profile being replaced (E17).
       await tx.signature.deleteMany();
       await tx.posting.deleteMany();
       await tx.postingSearch.deleteMany();
       await tx.agentCandidate.deleteMany();
+      await tx.startup.deleteMany();
+      await tx.startupBlock.deleteMany();
       // Scores of postings (#208) belong to the profile being replaced; they're left out of exports, since they can be made again.
       await tx.postingScore.deleteMany();
       // Mail from Gmail belongs to the applications being replaced; the next check fetches what's still relevant.
@@ -106,7 +122,9 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
         tx.profileField.deleteMany(),
         tx.language.deleteMany(),
         tx.education.deleteMany(),
+        tx.publication.deleteMany(),
         tx.reference.deleteMany(),
+        tx.fact.deleteMany(),
         tx.theme.deleteMany({ where: { builtIn: false } }),
         tx.setting.deleteMany({ where: { key: { notIn: keptKeys } } }),
       ]);
@@ -126,7 +144,9 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
         skipDuplicates: true,
       });
       await tx.education.createMany({ data: profile.education });
+      await tx.publication.createMany({ data: profile.publications });
       await tx.reference.createMany({ data: profile.references });
+      await tx.fact.createMany({ data: profile.facts });
       await tx.theme.createMany({ data: themes.map((theme) => ({ ...theme, builtIn: false })) });
       await tx.setting.createMany({ data: settings.filter((setting) => !SECRET_SETTINGS.includes(setting.key) && !INSTALL_SETTINGS.includes(setting.key)) });
       for (const [key, value] of Object.entries(fromFile)) if (value) await tx.setting.create({ data: { key, value } });
@@ -134,7 +154,7 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       const themeIds = new Set((await tx.theme.findMany({ select: { id: true } })).map((theme) => theme.id));
       await tx.application.createMany({
         data: applications.map((application) => ({
-          ...omit(application, "events", "documents", "messages", "notes"),
+          ...omit(application, "events", "documents", "messages", "notes", "facts", "userNote"),
           extracted: json(application.extracted),
           match: json(application.match),
         })),
@@ -169,6 +189,15 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
       await tx.note.createMany({
         data: applications.flatMap((application) => application.notes.map((note) => ({ ...note, applicationId: application.id }))),
       });
+      // An older file's "Anything I should know?" becomes the application's first fact, as on upgrading (APP-15).
+      await tx.fact.createMany({
+        data: applications.flatMap((application) => [
+          ...(application.facts.length === 0 && application.userNote?.trim()
+            ? [{ text: application.userNote.trim(), createdAt: application.createdAt, updatedAt: application.createdAt }]
+            : []),
+          ...application.facts,
+        ].map((fact) => ({ ...fact, applicationId: application.id }))),
+      });
       // A posting's application that isn't in the file leaves it unlinked.
       const applicationIds = new Set(applications.map((application) => application.id));
       await tx.posting.createMany({
@@ -186,6 +215,19 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
           applicationId: candidate.applicationId && applicationIds.has(candidate.applicationId) ? candidate.applicationId : null,
         })),
       });
+      // Startups (#222) with what the user did with them; an application that isn't in the file leaves one unlinked.
+      await tx.startup.createMany({
+        data: startups.map((startup) => ({
+          ...startup,
+          roles: jsonList(startup.roles),
+          emails: jsonList(startup.emails),
+          links: jsonList(startup.links),
+          reasons: jsonList(startup.reasons),
+          applicationId: startup.applicationId && applicationIds.has(startup.applicationId) ? startup.applicationId : null,
+        })),
+      });
+      await tx.startupBlock.createMany({ data: startupBlocks, skipDuplicates: true });
+      // The uploaded signature (E17) belongs to the profile being replaced.
       if (signature) {
         await tx.signature.create({
           data: { id: "signature", data: Buffer.from(signature.data, "base64"), mimeType: signature.mimeType },

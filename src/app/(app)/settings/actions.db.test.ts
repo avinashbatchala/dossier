@@ -14,12 +14,14 @@ import { jsearchV2LastPage } from "@/test/job-search-fixtures";
 
 import {
   addDocumentLanguage,
+  disconnectClaude,
   listAiModels,
   saveAiProvider,
   saveApiKey,
   saveJobSearchDetails,
   saveJobSource,
   saveJobSourceKey,
+  setConnector,
   testAiConnection,
   testJobSource,
   updateSettings,
@@ -152,11 +154,32 @@ describe("job search settings (E14-4)", () => {
   it("saves the source, Off included, and says what the section shows", async () => {
     expect(await saveJobSource({ source: "JSEARCH" })).toEqual({
       ok: true,
-      data: { source: "JSEARCH", jsearch: { host: "openwebninja", keyState: "none" }, adzuna: { appId: "", keyState: "none" } },
+      data: {
+        source: "JSEARCH",
+        jsearch: { host: "openwebninja", keyState: "none" },
+        adzuna: { appId: "", keyState: "none" },
+        arbeitsagentur: { offered: true, acceptedAt: null },
+      },
     });
     await saveJobSource({ source: "OFF" });
     expect((await settings()).jobSource).toBe("OFF");
     expect(await saveJobSource({ source: "LINKEDIN" as never })).toMatchObject({ ok: false });
+  });
+
+  it("saves the Bundesagentur für Arbeit only with its note accepted (#223)", async () => {
+    expect(await saveJobSource({ source: "ARBEITSAGENTUR" })).toEqual({
+      ok: false,
+      error: "Tick “I understand” under the note about the Bundesagentur für Arbeit first.",
+    });
+    expect((await settings()).jobSource).toBeNull();
+    const saved = await saveJobSource({ source: "ARBEITSAGENTUR", accepted: true });
+    expect(saved).toMatchObject({ ok: true, data: { source: "ARBEITSAGENTUR", arbeitsagentur: { offered: true, acceptedAt: expect.any(String) } } });
+    const { jobSource, arbeitsagenturAcceptedAt } = await settings();
+    expect(jobSource).toBe("ARBEITSAGENTUR");
+    expect(Date.parse(arbeitsagenturAcceptedAt!)).toBeGreaterThan(Date.now() - 60_000);
+    // Once accepted, switching back needs no second tick.
+    await saveJobSource({ source: "JSEARCH" });
+    expect(await saveJobSource({ source: "ARBEITSAGENTUR" })).toMatchObject({ ok: true });
   });
 
   it("stores each source's key encrypted, keeps it when switching, and only says it's set", async () => {
@@ -206,5 +229,22 @@ describe("job search settings (E14-4)", () => {
       data: { connected: false, message: "JSearch didn't accept your key. Check it in Settings → Job search." },
     });
     vi.unstubAllGlobals();
+  });
+});
+
+describe("the Claude connector (#221)", () => {
+  it("turns on with the time it did, which every token carries, and off again", async () => {
+    expect(await disconnectClaude({})).toEqual({ ok: false, error: "The Claude connector is off already." });
+    expect(await setConnector({ on: true })).toEqual({ ok: true, data: { on: true } });
+    const since = (await settings()).connectorEnabledAt;
+    expect(Date.parse(since!)).toBeGreaterThan(Date.now() - 60_000);
+
+    // Disconnect Claude: a new time, so every token stops working.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(await disconnectClaude({})).toMatchObject({ ok: true, toast: "Claude is disconnected. Connect it again from Claude to use Dossier there." });
+    expect((await settings()).connectorEnabledAt).not.toBe(since);
+
+    await setConnector({ on: false });
+    expect((await settings()).connectorEnabledAt).toBeNull();
   });
 });

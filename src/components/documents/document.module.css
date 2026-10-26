@@ -85,6 +85,49 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * The profile photo (#224), cropped 3:4: the square shapes show its middle.
+ * Beside the name, the name, headline and contacts form a block next to it;
+ * above the name it has a line of its own, centred in a centred header.
+ */
+.photo {
+  flex: none;
+  width: calc(var(--u) * var(--photo-width));
+  height: calc(var(--u) * var(--photo-height));
+  object-fit: cover;
+  break-inside: avoid;
+}
+
+.photoCircle {
+  border-radius: 50%;
+}
+
+.photoRounded {
+  border-radius: calc(var(--u) * 12);
+}
+
+.headerWithPhoto {
+  flex-direction: row;
+  align-items: center;
+  gap: calc(var(--u) * 20);
+}
+
+.headerText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: calc(var(--u) * 4);
+  min-width: 0;
+}
+
+.photoAbove {
+  margin-bottom: calc(var(--u) * 8);
+}
+
+.centered .photoAbove {
+  align-self: center;
+}
+
 /* ─── Columns and sections ─────────────────────────────────────────────── */
 
 .columns {
@@ -186,6 +229,23 @@
 
 .muted {
   color: var(--doc-muted);
+}
+
+/* Publications (#218): one citation each, with its link after it. */
+.publication {
+  text-wrap: pretty;
+  break-inside: avoid;
+}
+
+.publication + .publication {
+  margin-top: calc(var(--u) * 5);
+}
+
+.link,
+.link:hover {
+  color: var(--doc-muted);
+  text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .references {
@@ -394,7 +454,8 @@
  * Text wraps a little differently at different sizes, enough to move a line
  * to the next page, so the page is laid out at the paper's own size, as
  * printed, and shrunk to the preview's. --preview-scale is that factor;
- * app UI inside the page (the unit toolbar and editor) undoes it with zoom.
+ * app UI inside the page undoes it: the unit toolbar with zoom, the editor
+ * with larger sizes (unit-frame.module.css).
  *
  * Other browsers show one long page with a line where each page ends.
  */

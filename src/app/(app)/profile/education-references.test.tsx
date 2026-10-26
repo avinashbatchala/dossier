@@ -30,9 +30,12 @@ const profile: ProfileData = {
   education: [
     { id: "d1", degree: "MSc Design for Interaction", school: "TU Delft", notes: "", startYear: 2013, startMonth: null, endYear: 2015, endMonth: null, current: false },
   ],
+  publications: [],
   references: [
     { id: "r1", name: "John Doe", relation: "Former manager", company: "Northwind Logistics", email: "john.doe@example.com", phone: "" },
   ],
+  facts: [],
+  photo: null,
 };
 
 function Harness({ section }: { section: "education" | "references" }) {

@@ -99,6 +99,16 @@ describe("proxy", () => {
     }
   });
 
+  it("lets the Claude connector's endpoint, sign-in and metadata through without a session (#221)", async () => {
+    for (const path of ["/api/mcp", "/api/oauth/token", "/api/oauth/register", "/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource/api/mcp"]) {
+      const response = await proxy(request(path));
+      expect(response.headers.get("x-middleware-next"), path).toBe("1");
+    }
+    // The consent page is an ordinary page: sign in first.
+    expect(getRedirectUrl(await proxy(request("/oauth/authorize?client_id=x")))).toBe("http://localhost:3000/login?next=%2Foauth%2Fauthorize%3Fclient_id%3Dx");
+    expect((await proxy(request("/api/mcpx"))).status).toBe(401);
+  });
+
   it("answers API requests with 401 JSON instead of a redirect", async () => {
     const response = await proxy(request("/api/pdf/1"));
     expect(response.status).toBe(401);

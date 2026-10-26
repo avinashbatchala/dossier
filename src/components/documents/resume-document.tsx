@@ -1,12 +1,13 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 
-import type { PaperSize, ThemeLayout } from "@/generated/prisma/enums";
+import { CitationText } from "@/components/citation";
+import { PhotoPosition, PhotoShape, type PaperSize, type ThemeLayout } from "@/generated/prisma/enums";
 import { cn } from "@/lib/cn";
 import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
 import type { ProfileData } from "@/lib/profile";
 import { resumeContent, type ResumeContent, type ResumeOptions } from "@/lib/resume-content";
-import { resolveTheme, type ThemeData } from "@/lib/themes";
+import { PHOTO_SHAPES, resolveTheme, type ThemeData } from "@/lib/themes";
 
 import { Contact, ContactLine, DocumentPage, DocumentSection, plainUnit, type UnitRenderer } from "./document-page";
 import styles from "./document.module.css";
@@ -46,8 +47,12 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
   const labels = documentLabels(language);
   const content = resumeContent(profile, options, labels);
   const { lang, dir } = documentLanguage(language, sampleText(content));
+  const { shape, position } = resolved.photo;
+  const photo = (size: "header" | "sidebar", className?: string) =>
+    content.photo && <ResumePhoto key="photo" src={content.photo} name={content.name} shape={shape} size={size} className={className} />;
 
   const sidebar = [
+    position === PhotoPosition.SIDEBAR && photo("sidebar"),
     resolved.split && content.contacts.length > 0 && (
       <DocumentSection key="contact" title={labels.contact}>
         <ul className={styles.contactList}>
@@ -158,6 +163,37 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </DocumentSection>
     ),
+    content.publications.length > 0 && (
+      <DocumentSection key="publications" title={labels.publications}>
+        {content.publications.map((entry) => (
+          <Fragment key={entry.id}>
+            {renderUnit({
+              id: `publication:${entry.id}`,
+              className: styles.publication,
+              children: (
+                <p>
+                  <CitationText text={entry.citation} />
+                  {entry.link && (
+                    <>
+                      {" "}
+                      {entry.href ? (
+                        <a href={entry.href} target="_blank" rel="noreferrer" className={styles.link}>
+                          <Contact>{entry.link}</Contact>
+                        </a>
+                      ) : (
+                        <span className={styles.link}>
+                          <Contact>{entry.link}</Contact>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </p>
+              ),
+            })}
+          </Fragment>
+        ))}
+      </DocumentSection>
+    ),
     content.references.length > 0 && (
       <DocumentSection key="references" title={labels.references}>
         <div className={styles.references}>
@@ -184,12 +220,23 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
   // A tinted sidebar is drawn as a panel, unless there's nothing in it.
   const panel = resolved.tintedSidebar && sidebar.length > 0 ? sidebar : null;
 
+  const title = (
+    <>
+      <h1 className={styles.name}>{content.name}</h1>
+      {content.headline && <p className={styles.headline}>{content.headline}</p>}
+      {!resolved.split && content.contacts.length > 0 && <ContactLine items={content.contacts} />}
+    </>
+  );
+  // A photo beside the name puts the name, headline and contacts in a block of their own.
+  const beside = content.photo && (position === PhotoPosition.HEADER_START || position === PhotoPosition.HEADER_END);
+
   return (
     <DocumentPage theme={resolved} paper={paper} lang={lang} dir={dir} label="Resume">
-      <header className={styles.header}>
-        <h1 className={styles.name}>{content.name}</h1>
-        {content.headline && <p className={styles.headline}>{content.headline}</p>}
-        {!resolved.split && content.contacts.length > 0 && <ContactLine items={content.contacts} />}
+      <header className={cn(styles.header, beside && styles.headerWithPhoto)}>
+        {position === PhotoPosition.ABOVE_NAME && photo("header", styles.photoAbove)}
+        {position === PhotoPosition.HEADER_START && photo("header")}
+        {beside ? <div className={styles.headerText}>{title}</div> : title}
+        {position === PhotoPosition.HEADER_END && photo("header")}
       </header>
       <div className={styles.columns}>
         {columns.map((sections, index) => (
@@ -199,6 +246,28 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </div>
     </DocumentPage>
+  );
+}
+
+const SHAPE_CLASSES: Record<PhotoShape, string | undefined> = {
+  [PhotoShape.CIRCLE]: styles.photoCircle,
+  [PhotoShape.ROUNDED]: styles.photoRounded,
+  [PhotoShape.SQUARE]: undefined,
+  [PhotoShape.PORTRAIT]: undefined,
+};
+
+/** The profile photo (#224) in the theme's shape, at its size in the header or the sidebar. */
+function ResumePhoto({ src, name, shape, size, className }: { src: string; name: string; shape: PhotoShape; size: "header" | "sidebar"; className?: string }) {
+  const { width, height } = PHOTO_SHAPES[shape][size];
+  return (
+    // A data URL drawn as it is, in the preview and in the PDF: there's nothing for next/image to optimise.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={name}
+      className={cn(styles.photo, SHAPE_CLASSES[shape], className)}
+      style={{ "--photo-width": width, "--photo-height": height } as CSSProperties}
+    />
   );
 }
 

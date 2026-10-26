@@ -55,6 +55,7 @@ const profile: ImportedProfile = {
   ],
   projects: [],
   education: [],
+  publications: [],
   references: [],
 };
 const done = { id: "job-1", type: "import-profile", status: "DONE", step: null, error: null, result: { profile, readWith: "extract-profile@1" } } as const;

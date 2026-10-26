@@ -42,6 +42,24 @@ test("regenerates one part from its toolbar", async ({ page }) => {
   await expect(summary).toContainText("In short:");
 });
 
+test("opens the editor at the app's size without zoom, which crashes the tab in Chrome on macOS", async ({ page }) => {
+  await page.goto(url);
+  const summary = page.locator('[data-unit="summary"]');
+  await summary.hover();
+  await summary.getByRole("button", { name: "Edit" }).click();
+  const editor = page.getByRole("textbox", { name: "Edit Summary" });
+  await expect(editor).toBeFocused();
+  const { zoomed, fontSize } = await editor.evaluate((box: HTMLElement) => {
+    let zoomed = false;
+    for (let el: Element | null = box; el; el = el.parentElement) zoomed ||= getComputedStyle(el).zoom !== "1";
+    // The page is shrunk with scale, so the text's size on screen is its font size times that.
+    const scale = box.getBoundingClientRect().width / box.offsetWidth;
+    return { zoomed, fontSize: parseFloat(getComputedStyle(box).fontSize) * scale };
+  });
+  expect(zoomed).toBe(false);
+  expect(fontSize).toBeCloseTo(13.5, 1);
+});
+
 test("edits the letter's greeting and date, which a letter from before showed without storing (E8-11)", async ({ page }) => {
   await page.goto(`${url}?tab=letter`);
   const greeting = page.locator('[data-unit="greeting"]');

@@ -9,10 +9,16 @@ import { addSkill } from "../profile/actions";
 
 import { cancel } from "@/lib/jobs/actions";
 
-import { createApplication, fetchPostingText, startReadingPosting, startWritingDocuments } from "./actions";
+import { createApplication, fetchPostingText, handOffToClaude, startReadingPosting, startWritingDocuments } from "./actions";
 import { NewApplication } from "./new-application";
 
-vi.mock("./actions", () => ({ startReadingPosting: vi.fn(), startWritingDocuments: vi.fn(), createApplication: vi.fn(), fetchPostingText: vi.fn() }));
+vi.mock("./actions", () => ({
+  startReadingPosting: vi.fn(),
+  startWritingDocuments: vi.fn(),
+  createApplication: vi.fn(),
+  fetchPostingText: vi.fn(),
+  handOffToClaude: vi.fn(),
+}));
 vi.mock("../profile/actions", () => ({ addSkill: vi.fn(async ({ name }: { name: string }) => ({ ok: true, data: { skill: { id: "s9", name }, added: true } })) }));
 vi.mock("@/lib/jobs/actions", () => ({ retry: vi.fn(async () => ({ ok: true, data: null })), cancel: vi.fn(async () => ({ ok: true, data: null })) }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
@@ -112,6 +118,25 @@ describe("the paste step (E7-1)", () => {
   it("points to Settings when no AI provider is set up", () => {
     render(<NewApplication {...props} aiReady={false} />);
     expect(screen.getByRole("link", { name: "Choose one in Settings → AI provider" })).toHaveAttribute("href", "/settings?section=ai");
+  });
+
+  it("hands the posting to a Claude chat when the connector is on and Dossier has no model (#221)", async () => {
+    const tab = { closed: false, opener: {}, location: { href: "about:blank" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    vi.mocked(handOffToClaude).mockResolvedValue({ ok: true, data: { url: "https://claude.ai/new?q=write" } });
+    render(<NewApplication {...props} aiReady={false} writeInClaude />);
+    expect(screen.getByRole("note")).toHaveTextContent(/Dossier has no AI model of its own, so Claude writes this one/);
+    await userEvent.type(screen.getByLabelText("Job posting"), "Ledgerly is hiring.");
+    await userEvent.type(screen.getByLabelText(/^Link to the posting/), "https://jobs.example/1");
+    await userEvent.click(screen.getByRole("button", { name: "Write it with Claude →" }));
+    // The tab opens during the click, then goes to the chat.
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(handOffToClaude).toHaveBeenCalledWith({ posting: "Ledgerly is hiring.", postingUrl: "https://jobs.example/1" });
+    expect(tab.location.href).toBe("https://claude.ai/new?q=write");
+    expect(tab.opener).toBeNull();
+    expect(startReadingPosting).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith("Writing it in Claude. It shows up under Applications as a Draft once Claude has saved it.");
+    open.mockRestore();
   });
 });
 
@@ -331,6 +356,19 @@ describe("creating the application (E7-6)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Create application →" }));
     emit({ id: "job-2", type: "write-documents", status: "DONE", step: "Writing your cover letter" });
     await vi.waitFor(() => expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({ postingUrl: "https://jobs.example/1", postingId: "posting-1" })));
+  });
+
+  it("starts from a startup handed over by Startups, and creates the application for it (#222)", async () => {
+    vi.mocked(startWritingDocuments).mockResolvedValue({ ok: true, data: "job-2" });
+    vi.mocked(createApplication).mockResolvedValue({ ok: true, data: "app-1" });
+    render(<NewApplication {...props} fromPosting={{ id: null, startup: { id: "startup-1", company: "Canalworks" }, text: "Canalworks is hiring a designer.", url: "https://news.example/1", complete: true }} />);
+    expect(screen.getByLabelText("Job posting")).toHaveValue("Canalworks is hiring a designer.");
+    expect(toast).toHaveBeenCalledWith("Here's what Startups knows about Canalworks, without its addresses. Add the role you're after if it doesn't say, then read it.");
+    await userEvent.click(screen.getByRole("button", { name: "Read the posting →" }));
+    emit({ status: "DONE", result: read });
+    await userEvent.click(screen.getByRole("button", { name: "Create application →" }));
+    emit({ id: "job-2", type: "write-documents", status: "DONE", step: "Writing your cover letter" });
+    await vi.waitFor(() => expect(createApplication).toHaveBeenCalledWith(expect.objectContaining({ postingId: null, startupId: "startup-1" })));
   });
 
   it("goes back to the details when writing fails", async () => {

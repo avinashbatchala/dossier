@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { encryptApiKey } from "./api-key";
-import { resolveAiConfig } from "./config";
+import { isAiUsable, resolveAiConfig } from "./config";
 import { AiError } from "./errors";
 import { createProvider } from "./index";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+const saved = vi.hoisted(() => ({ settings: { provider: null, baseUrl: null, model: null, apiKeyEnc: null } as Record<string, unknown> }));
+vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => saved.settings }));
 
 const noEnv = {} as Parameters<typeof resolveAiConfig>[1];
 const nothingSaved = { provider: null, baseUrl: null, model: null, apiKeyEnc: null };
@@ -85,5 +87,26 @@ describe("createProvider", () => {
     expect(createProvider({ ...base, provider: "ANTHROPIC" }).kind).toBe("ANTHROPIC");
     expect(createProvider({ ...base, provider: "MISTRAL" }).kind).toBe("MISTRAL");
     expect(createProvider({ ...base, provider: "LMSTUDIO" }).kind).toBe("LMSTUDIO");
+  });
+});
+
+describe("isAiUsable (#221)", () => {
+  const usable = async (settings: Record<string, unknown>) => {
+    saved.settings = { provider: null, baseUrl: null, model: null, apiKeyEnc: null, ...settings };
+    return isAiUsable();
+  };
+
+  it("needs a provider with its model", async () => {
+    expect(await usable({})).toBe(false);
+    expect(await usable({ provider: "LOCAL" })).toBe(false);
+    expect(await usable({ provider: "LOCAL", model: "qwen2.5:7b" })).toBe(true);
+    // An OpenAI-compatible server may need no key.
+    expect(await usable({ provider: "OPENAI", baseUrl: "http://llm.lan/v1", model: "gpt-x" })).toBe(true);
+  });
+
+  it("needs a readable key for the hosted providers that always need one", async () => {
+    expect(await usable({ provider: "ANTHROPIC" })).toBe(false);
+    expect(await usable({ provider: "ANTHROPIC", apiKeyEnc: encryptApiKey("sk-saved") })).toBe(true);
+    expect(await usable({ provider: "MISTRAL", apiKeyEnc: encryptApiKey("sk", "b".repeat(32)) })).toBe(false);
   });
 });

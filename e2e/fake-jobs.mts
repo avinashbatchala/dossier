@@ -3,7 +3,7 @@
 // (DOSSIER_JOBS_TEST_BASE_URL), and this answers in that source's own shape,
 // so the adapters' real request and response handling runs end to end.
 
-import { createServer, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const port = Number(process.env.FAKE_JOBS_PORT ?? 3998);
 /** The JSearch key the app is given in e2e/support.ts. */
@@ -36,6 +36,52 @@ function send(response: ServerResponse, status: number, body: unknown) {
   response.end(JSON.stringify(body));
 }
 
+// Startups (#222): YC job posts and "Who is hiring?" through Hacker News'
+// APIs, and the startups' own sites, which the app reaches at
+// /startups/<host>/<path>. The profile is in Rotterdam, the Netherlands.
+const days = (count: number) => Math.round((Date.now() - count * 86_400_000) / 1000);
+const HN_API: Record<string, unknown> = {
+  "/v0/jobstories.json": [101, 102],
+  "/v0/item/101.json": { id: 101, type: "job", title: "Canalworks (YC W25) Is Hiring a Product Designer (Remote, EU)", url: "https://canalworks.example/careers", time: days(2) },
+  "/v0/item/102.json": { id: 102, type: "job", title: "Faraway (YC S24) Is Hiring in Austin, TX", url: "https://www.ycombinator.com/companies/faraway/jobs/1", time: days(20) },
+};
+const hiringPost = (id: number, text: string) => ({ id, text, created_at: new Date(Date.now() - 3 * 86_400_000).toISOString() });
+const ALGOLIA: Record<string, unknown> = {
+  "/api/v1/search_by_date": { hits: [{ objectID: "500", title: "Ask HN: Who is hiring? (October 2026)" }] },
+  "/api/v1/items/500": {
+    children: [
+      hiringPost(501, "Harbourlight | Senior Product Designer | Rotterdam, Netherlands | Onsite<p>We design software for ports in Figma. Apply at jobs@harbourlight.example. https://harbourlight.example</p>"),
+      hiringPost(502, "Quietco | Product Designer | REMOTE (Europe)<p>Design tools for quiet teams. https://quietco.example</p>"),
+      hiringPost(503, "Westcoast | Designer | REMOTE (US only)<p>https://westcoast.example</p>"),
+      hiringPost(504, "Tulipworks | UX Designer | Amsterdam, Netherlands<p>https://tulipworks.example</p>"),
+    ],
+  },
+};
+const SITES: Record<string, Record<string, string>> = {
+  "canalworks.example": {
+    "/robots.txt": "User-agent: *\nDisallow: /admin",
+    "/": "<p>Say hello@canalworks.example</p>",
+    "/careers": '<a href="mailto:jobs@canalworks.example">Apply</a><p>Questions? Ask Lena: lena@canalworks.example</p>',
+    "/team": "<p>Lena Visser, design lead: lena@canalworks.example</p>",
+  },
+  "harbourlight.example": { "/careers": "<p>Write to careers@harbourlight.example</p>" },
+  "quietco.example": { "/careers": "<p>We do not accept unsolicited applications.</p><p>hello@quietco.example</p>" },
+  "tulipworks.example": { "/robots.txt": "User-agent: Dossier\nDisallow: /", "/careers": "<p>jobs@tulipworks.example</p>" },
+};
+/** The startups' pages the app asked for, with its user agent, so a spec can check it was polite. */
+const siteRequests: { url: string; userAgent: string }[] = [];
+
+function startups(path: string, request: IncomingMessage, response: ServerResponse) {
+  const [, host, ...rest] = path.split("/").slice(1);
+  const page = `/${rest.join("/")}`;
+  if (host === "hacker-news.firebaseio.com") return page in HN_API ? send(response, 200, HN_API[page]) : send(response, 404, null);
+  if (host === "hn.algolia.com") return page in ALGOLIA ? send(response, 200, ALGOLIA[page]) : send(response, 404, {});
+  siteRequests.push({ url: `https://${host}${page}`, userAgent: String(request.headers["user-agent"] ?? "") });
+  const body = SITES[host]?.[page];
+  if (body === undefined) return response.writeHead(404, { "content-type": "text/html" }).end("<p>Not found</p>");
+  response.writeHead(200, { "content-type": page === "/robots.txt" ? "text/plain" : "text/html; charset=utf-8" }).end(body);
+}
+
 /** How many JSearch searches were asked for, so a spec can tell a kept search came from the database. */
 let searches = 0;
 /** The usage pings the app sent here (DOSSIER_USAGE_PING_TEST_URL), so a spec can tell whether one went (#172). */
@@ -46,6 +92,8 @@ createServer((request, response) => {
   if (url.pathname === "/health") return send(response, 200, { ok: true });
   if (url.pathname === "/searches") return send(response, 200, { searches });
   if (url.pathname === "/pings") return send(response, 200, { pings });
+  if (url.pathname === "/startup-requests") return send(response, 200, { requests: siteRequests });
+  if (url.pathname.startsWith("/startups/")) return startups(url.pathname, request, response);
   if (url.pathname === "/ping" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk: Buffer) => (body += chunk.toString()));

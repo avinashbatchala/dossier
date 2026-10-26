@@ -55,6 +55,8 @@ export async function agentSetupProblem(query: SearchQuery): Promise<string | nu
   if (!(await isAiConfigured())) return "Choose an AI provider in Settings → AI provider first.";
   const config = await loadJobSearchConfig();
   if (!config.source) return "Choose a job source in Settings → Job search first.";
+  // It searches on its own, which the BA's terms forbid most clearly (#223).
+  if (config.source === "ARBEITSAGENTUR") return "The job agent doesn't search the Bundesagentur für Arbeit. Choose JSearch or Adzuna in Settings → Job search for it.";
   try {
     credentialsFor(config, config.source);
   } catch (error) {

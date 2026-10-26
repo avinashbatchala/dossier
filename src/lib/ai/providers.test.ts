@@ -58,6 +58,14 @@ describe("OllamaProvider", () => {
     });
   });
 
+  it("never lets the model think, and puts the schema in the instructions for JSON", async () => {
+    const requests = stubFetch(() => ollamaChat('{"name":"Jane","years":9}'));
+    const provider = new OllamaProvider("http://ollama:11434", "qwen3.5:4b", 60_000);
+    await provider.complete({ ...ask, schema: Person });
+    expect(requests[0].body).toMatchObject({ think: false, format: { type: "object" } });
+    expect((requests[0].body as { messages: { content: string }[] }).messages[0].content).toMatch(/^Be brief\.\n\nReply with only a JSON object[\s\S]*"years"/);
+  });
+
   it("asks for JSON with the schema and validates the answer", async () => {
     const requests = stubFetch(() => ollamaChat('{"name":"Jane","years":9}'));
     const provider = new OllamaProvider("http://ollama:11434", "qwen2.5:3b", 60_000);

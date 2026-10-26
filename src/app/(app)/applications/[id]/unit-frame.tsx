@@ -29,6 +29,8 @@ export type UnitFrameProps = {
   onSave: (text: string) => void;
   onRegenerate?: () => void;
   onAskAi?: () => void;
+  /** Takes it off a tailored resume (#217). */
+  onLeaveOut?: () => void;
 };
 
 const toolButton =
@@ -37,7 +39,7 @@ const toolButton =
 /**
  * One unit of a tailored document in the preview (APP-5, APP-6). Hovering it
  * or giving it keyboard focus highlights it and shows its toolbar: Edit,
- * Regenerate and Ask AI. Edit swaps in a text box.
+ * Regenerate, Ask AI and, on a resume, Leave out. Edit swaps in a text box.
  */
 export function UnitFrame({
   id,
@@ -54,6 +56,7 @@ export function UnitFrame({
   onSave,
   onRegenerate,
   onAskAi,
+  onLeaveOut,
 }: UnitFrameProps) {
   const frame = useRef<HTMLDivElement>(null);
   const wasEditing = useRef(editing);
@@ -109,6 +112,11 @@ export function UnitFrame({
                 Ask AI
               </button>
             )}
+            {onLeaveOut && (
+              <button type="button" className={toolButton} onClick={onLeaveOut}>
+                Leave out
+              </button>
+            )}
           </div>
         )
       )}
@@ -151,7 +159,7 @@ function UnitEditor({
             onSave(value);
           }
         }}
-        className="max-h-[60vh] w-full resize-y rounded-control border border-primary bg-input px-3 py-2.5 text-[13.5px] leading-[1.55] text-ink [field-sizing:content] focus-visible:outline-offset-0 disabled:opacity-60"
+        className="max-h-[calc(60vh/var(--preview-scale,1))] w-full resize-y rounded-control border border-primary bg-input px-3 py-2.5 text-control leading-[1.55] text-ink [field-sizing:content] focus-visible:outline-offset-0 disabled:opacity-60"
       />
       <div className="flex items-center justify-end gap-1.5">
         {isBulletUnit(unit.id) && (
@@ -159,10 +167,10 @@ function UnitEditor({
             One bullet per line
           </span>
         )}
-        <Button variant="secondary" size="sm" className="bg-input" onClick={onCancel} disabled={saving}>
+        <Button variant="secondary" size="sm" className="min-h-[calc(var(--px)*30)] bg-input" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button size="sm" onClick={() => onSave(value)} disabled={saving}>
+        <Button size="sm" className="min-h-[calc(var(--px)*30)]" onClick={() => onSave(value)} disabled={saving}>
           {saving ? "Saving…" : "Save"}
         </Button>
       </div>

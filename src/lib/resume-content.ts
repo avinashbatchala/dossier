@@ -1,6 +1,7 @@
 import type { Unit } from "@/lib/application-data";
 import { ageLabel, ENGLISH_LABELS, languagesLine, type DocumentLabels } from "@/lib/document-labels";
-import { ageOn, formatDateRange, type Basics, type ProfileData } from "@/lib/profile";
+import { publicationHref, publicationLink } from "@/lib/citation";
+import { ageOn, formatDateRange, resumePublications, type Basics, type ProfileData } from "@/lib/profile";
 
 // What a resume shows, worked out from the profile (the base resume) or from
 // a tailored document's units, so the renderer only has to lay it out.
@@ -8,6 +9,8 @@ import { ageOn, formatDateRange, type Basics, type ProfileData } from "@/lib/pro
 export type ResumeContent = {
   name: string;
   headline: string;
+  /** The profile photo's data URL, or null when the resume has none (#224). */
+  photo: string | null;
   /** Email, phone, "City, Country", website, LinkedIn and "Age N", whichever are filled in. */
   contacts: string[];
   summary: string;
@@ -31,6 +34,16 @@ export type ResumeContent = {
     skills: string[];
   }[];
   education: { id: string; degree: string; school: string; dates: string; notes: string }[];
+  /** Publications (#218), word for word, in the profile's order. */
+  publications: {
+    id: string;
+    /** As written, with **bold** and *italic*. */
+    citation: string;
+    /** "doi.org/10.1038/…", without "https://". */
+    link: string;
+    /** What the link opens, or null when it isn't a web address. */
+    href: string | null;
+  }[];
   /** "Figma · User research · …" */
   skills: string;
   /** "Dutch: Native · English: Fluent (C2)" */
@@ -43,6 +56,8 @@ export type ResumeOptions = {
   units?: Unit[];
   /** Settings → "Include references" (SET-9). */
   includeReferences?: boolean;
+  /** An application's Photo switch (#224); null or left out follows the profile's "Show on resumes". */
+  showPhoto?: boolean | null;
   /** For "Age N"; defaults to now. */
   today?: Date;
 };
@@ -82,7 +97,7 @@ const lines = (text: string) =>
 /** What the resume shows, with its dates and levels in the words of `labels`. */
 export function resumeContent(
   profile: ProfileData,
-  { units, includeReferences = false, today = new Date() }: ResumeOptions = {},
+  { units, includeReferences = false, showPhoto, today = new Date() }: ResumeOptions = {},
   labels: DocumentLabels = ENGLISH_LABELS,
 ): ResumeContent {
   const { basics } = profile;
@@ -105,6 +120,12 @@ export function resumeContent(
     bullets: lines(bullets),
     skills: entry.skillIds.flatMap((id) => skillNames.get(id) ?? []),
   });
+  const publication = (entry: ProfileData["publications"][number], citation: string) => ({
+    id: entry.id,
+    citation: citation.trim(),
+    link: displayLink(publicationLink(entry.link)),
+    href: publicationHref(entry.link),
+  });
   const education = (entry: ProfileData["education"][number], notes: string) => ({
     id: entry.id,
     degree: entry.degree.trim(),
@@ -116,11 +137,13 @@ export function resumeContent(
   const content: ResumeContent = {
     name: basics.name.trim() || "Your name",
     headline: basics.headline.trim(),
+    photo: profile.photo && (showPhoto ?? profile.photo.onResumes) ? profile.photo.src : null,
     contacts: contactItems(basics, today, labels),
     summary: basics.summary.trim(),
     experience: profile.experience.map((entry) => experience(entry, entry.bullets)),
     projects: profile.projects.map((entry) => project(entry, entry.bullets)),
     education: profile.education.map((entry) => education(entry, entry.notes)),
+    publications: resumePublications(profile.publications).map((entry) => publication(entry, entry.citation)),
     skills: profile.skills.map((skill) => skill.name).join(" · "),
     languages: languagesLine(profile.languages, labels),
     references: includeReferences
@@ -135,7 +158,7 @@ export function resumeContent(
 
   if (units) {
     // A tailored resume holds exactly what its units hold, in their order:
-    // a role, project or degree without a unit was left out on purpose.
+    // a role, project, degree or publication without a unit was left out on purpose.
     const text = (id: string) => units.find((unit) => unit.id === id)?.text ?? "";
     const withUnit = <T extends { id: string }>(prefix: string, entries: T[]) =>
       units.flatMap((unit) => {
@@ -153,6 +176,9 @@ export function resumeContent(
     content.projects = withUnit("project:", profile.projects).map(({ entry, text }) => project(entry, text));
     content.education = withUnit("education:", profile.education).map(({ entry, text }) =>
       education(entry, text),
+    );
+    content.publications = withUnit("publication:", profile.publications).flatMap(({ entry, text }) =>
+      text.trim() ? [publication(entry, text)] : [],
     );
   }
 

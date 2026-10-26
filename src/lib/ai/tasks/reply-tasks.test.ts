@@ -40,7 +40,7 @@ describe("classifyReply (E15-4)", () => {
 
 describe("draftReply (E15-4)", () => {
   const profile = demoProfile();
-  const input = { profile, extracted: null, tone: "WARM" as const, email, timeZone: "Europe/Berlin", thread: [], slots: ["Tue 20 Oct, 10:00–10:45 (Europe/Berlin)"], note: "", posting: "" };
+  const input = { profile, extracted: null, tone: "WARM" as const, email, timeZone: "Europe/Berlin", thread: [], slots: ["Tue 20 Oct, 10:00–10:45 (Europe/Berlin)"], note: "", facts: [], posting: "" };
 
   it("writes the answer with the offered times, signed with the profile's name", async () => {
     const provider = new MockProvider({

@@ -5,6 +5,9 @@ import { contentSecurityPolicy, createNonce } from "@/lib/csp";
 import { messages } from "@/lib/messages";
 import { PRINT_TOKEN_HEADER, verifyPrintToken } from "@/lib/pdf/print-token";
 
+/** The Claude connector's endpoint, its sign-in and the metadata that points to them. */
+const CONNECTOR_PATHS = /^\/(?:api\/(?:mcp|oauth)(?:\/|$)|\.well-known\/oauth-(?:authorization-server|protected-resource)(?:\/|$))/;
+
 /**
  * Sends signed-out visitors to /login before a page renders (PRD AUTH-1),
  * and gives every page its Content-Security-Policy (E11-5). The sign-in check
@@ -15,6 +18,9 @@ import { PRINT_TOKEN_HEADER, verifyPrintToken } from "@/lib/pdf/print-token";
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname === "/login") return pass(request);
+  // The Claude connector (#221) brings its own credentials, an OAuth token,
+  // which its routes check; they answer 404 while it's off.
+  if (CONNECTOR_PATHS.test(pathname)) return NextResponse.next();
 
   const session = await decodeSession(
     request.cookies.get(SESSION_COOKIE)?.value,

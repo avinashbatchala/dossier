@@ -15,6 +15,7 @@ export function TailoredResume({
   profile,
   paper,
   followThemeLayout,
+  showPhoto,
   language,
   includeReferences,
   renderUnit,
@@ -24,6 +25,8 @@ export function TailoredResume({
   paper: PaperSize;
   /** The theme's own layout, sidebar included; otherwise its sidebar folds into a single column (APP-4). */
   followThemeLayout: boolean;
+  /** The application's Photo switch (#224); null follows the profile. */
+  showPhoto: boolean | null;
   language: string;
   includeReferences: boolean;
   renderUnit?: UnitRenderer;
@@ -35,6 +38,7 @@ export function TailoredResume({
       paper={paper}
       units={resume.units}
       layout={followThemeLayout ? undefined : withoutSidebar(resume.theme.layout)}
+      showPhoto={showPhoto}
       language={language}
       includeReferences={includeReferences}
       renderUnit={renderUnit}

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { json, refused, stubFetch } from "@/lib/ai/test-http";
-import { jsearchKeyError, jsearchV1Page, jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
+import { jsearchKeyError, jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
 
 import { JobSearchError } from "./errors";
 import { jsearch } from "./jsearch";
@@ -29,11 +29,11 @@ describe("JSearch search", () => {
     });
   });
 
-  it("asks RapidAPI by page, with its own headers", async () => {
-    const requests = stubFetch(() => json(jsearchV1Page));
-    const page = await jsearch.search({ ...query, place: "", remoteOnly: true, postedWithin: "any" }, rapid, "page:3");
+  it("asks RapidAPI's search-v2 with its own headers, and pages by cursor", async () => {
+    const requests = stubFetch(() => json(jsearchV2Page));
+    const page = await jsearch.search({ ...query, place: "", remoteOnly: true, postedWithin: "any" }, rapid, null);
     const [{ url, headers }] = requests;
-    expect(`${url.origin}${url.pathname}`).toBe("https://jsearch.p.rapidapi.com/search");
+    expect(`${url.origin}${url.pathname}`).toBe("https://jsearch.p.rapidapi.com/search-v2");
     expect(headers.get("x-rapidapi-key")).toBe("rapid-test");
     expect(headers.get("x-rapidapi-host")).toBe("jsearch.p.rapidapi.com");
     expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -41,12 +41,9 @@ describe("JSearch search", () => {
       country: "de",
       date_posted: "all",
       work_from_home: "true",
-      page: "3",
-      num_pages: "1",
     });
-    // A full page of ten: there may be more.
-    expect(page.next).toBe("page:4");
-    expect(page.postings).toHaveLength(10);
+    expect(page.next).toBe("cursor:CURSOR-PAGE-2");
+    expect(page.postings).toHaveLength(2);
   });
 
   it("searches the US when no country is chosen, as JSearch would anyway", async () => {
@@ -99,9 +96,19 @@ describe("JSearch search", () => {
     expect(page.next).toBeNull();
   });
 
-  it("stops paging RapidAPI after a short page", async () => {
-    stubFetch(() => json({ data: jsearchV1Page.data.slice(0, 4) }));
-    expect((await jsearch.search(query, rapid, null)).next).toBeNull();
+  it("starts over on a page number from RapidAPI's old search", async () => {
+    const requests = stubFetch(() => json(jsearchV2Page));
+    const page = await jsearch.search(query, rapid, "page:3");
+    expect(["page", "num_pages", "cursor"].filter((name) => requests[0].url.searchParams.has(name))).toEqual([]);
+    expect(page.next).toBe("cursor:CURSOR-PAGE-2");
+  });
+
+  it("says the source changed when it answers with a list, as the old search did", async () => {
+    stubFetch(() => json({ data: [jsearchV2LastPage.data.jobs[0]] }));
+    await expect(jsearch.search(query, rapid, null)).rejects.toMatchObject({
+      problem: "changed",
+      detail: "JSEARCH: /search-v2: unexpected answer",
+    });
   });
 
   it("goes to the fake source's address when one is given", async () => {

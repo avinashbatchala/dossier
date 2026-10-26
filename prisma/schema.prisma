@@ -148,6 +148,20 @@ model Education {
 }
 
 /// Private unless included in a document (PRO-8).
+/// A publication (#218), cited the way its author wants: no citation style is enforced.
+model Publication {
+  id        String   @id @default(cuid())
+  /// The citation as written, with **bold** and *italic* marked like that.
+  citation  String   @default("")
+  /// Where to read it, e.g. its DOI link.
+  link      String   @default("")
+  /// "Show on resumes": off keeps it in the profile but off every resume.
+  onResumes Boolean  @default(true)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Reference {
   id        String   @id @default(cuid())
   name      String   @default("")
@@ -158,6 +172,22 @@ model Reference {
   sort      Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Something the user tells the AI about themselves: one of the profile's
+/// "Facts about me", or one for a single application. Never shown on a
+/// document; given to the AI with the profile when it writes.
+model Fact {
+  id            String       @id @default(cuid())
+  /// The application it's for; null for the profile's own.
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  text          String       @default("")
+  sort          Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([applicationId, sort])
 }
 
 // ─── Themes and settings (E2-2) ──────────────────────────────────────────────
@@ -229,6 +259,23 @@ enum DateStyle {
   TIMELINE
 }
 
+/// The profile photo's shape on a resume (#224). The square shapes show the middle of its 3:4 crop.
+enum PhotoShape {
+  CIRCLE
+  ROUNDED
+  SQUARE
+  PORTRAIT
+}
+
+/// Where a resume shows the profile photo (#224). SIDEBAR needs a sidebar
+/// layout; other layouts put it at the end of the header.
+enum PhotoPosition {
+  HEADER_END
+  HEADER_START
+  ABOVE_NAME
+  SIDEBAR
+}
+
 enum Density {
   COMPACT
   REGULAR
@@ -239,23 +286,25 @@ enum Density {
 /// ("editorial") and are read-only: the app never edits them, the seed keeps
 /// them in sync, and a trigger stops them from being deleted.
 model Theme {
-  id           String       @id @default(cuid())
-  builtIn      Boolean      @default(false)
-  name         String
-  headFont     ThemeFont
-  bodyFont     ThemeFont
+  id            String        @id @default(cuid())
+  builtIn       Boolean       @default(false)
+  name          String
+  headFont      ThemeFont
+  bodyFont      ThemeFont
   /// "#rrggbb"
-  accent       String
-  layout       ThemeLayout  @default(SINGLE)
-  align        ThemeAlign   @default(LEFT)
-  headingStyle HeadingStyle @default(PLAIN)
-  density      Density      @default(REGULAR)
-  headerStyle  HeaderStyle  @default(PLAIN)
-  sidebarStyle SidebarStyle @default(PLAIN)
-  dateStyle    DateStyle    @default(INLINE)
-  documents    Document[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  accent        String
+  layout        ThemeLayout   @default(SINGLE)
+  align         ThemeAlign    @default(LEFT)
+  headingStyle  HeadingStyle  @default(PLAIN)
+  density       Density       @default(REGULAR)
+  headerStyle   HeaderStyle   @default(PLAIN)
+  sidebarStyle  SidebarStyle  @default(PLAIN)
+  dateStyle     DateStyle     @default(INLINE)
+  photoShape    PhotoShape    @default(CIRCLE)
+  photoPosition PhotoPosition @default(HEADER_END)
+  documents     Document[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 enum AiProvider {
@@ -385,13 +434,14 @@ model Application {
   /// When the next interview is, while the application is in Interview (E9-9); shown on the dashboard.
   nextInterviewAt     DateTime?
   tone                Tone              @default(WARM)
-  /// "Anything I should know?" (NEW-6).
-  userNote            String            @default("")
   /// The language the documents were written in, e.g. "English".
   language            String            @default("")
   /// The tailored resume follows its theme's layout, sidebar included; off
   /// means a single column (APP-4, decided in E5-1 #42).
   followThemeLayout   Boolean           @default(false)
+  /// Whether the tailored resume shows the profile photo; null follows the
+  /// profile's "Show on resumes" (#224).
+  showPhoto           Boolean?
   archivedAt          DateTime?
   /// The Gmail thread the application was sent in, when it went out through Gmail (E15-2).
   emailThreadId       String?
@@ -403,12 +453,16 @@ model Application {
   posting             Posting?
   /// The agent candidate it was prepared from (E16).
   agentCandidate      AgentCandidate?
+  /// The startup it was started from on Startups, if any (#222).
+  startup             Startup?
   /// Mail sent and received about it through Gmail (E15-3).
   emails              EmailMessage[]
   events              StatusEvent[]
   documents           Document[]
   messages            ChatMessage[]
   notes               Note[]
+  /// What the user tells the AI for this application; "Anything I should know?" (NEW-6) becomes the first.
+  facts               Fact[]
   /// Its background jobs, deleted with it (their inputs and results hold the posting and the documents).
   jobs                Job[]
   createdAt           DateTime          @default(now())
@@ -578,6 +632,20 @@ model Posting {
   @@index([dismissedAt])
 }
 
+/// A posting pasted into New application and handed to Claude chat (#221):
+/// the Claude connector reads it by its id. It's kept for 14 days, then the
+/// task-data sweep deletes it.
+model ClaudePaste {
+  id        String   @id @default(uuid())
+  text      String
+  /// The posting's link, when one was given; always http(s), or empty.
+  url       String   @default("")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 // ─── Job agent (E16) ─────────────────────────────────────────────────────────
 
 /// A posting the job agent found and scored, and the draft it prepared from
@@ -659,6 +727,80 @@ model PostingSearch {
   updatedAt DateTime      @updatedAt
 
   @@index([createdAt])
+}
+
+// ─── Startups (#222) ─────────────────────────────────────────────────────────
+
+/// Where a startup stands on the Startups screen.
+enum StartupStatus {
+  NEW
+  SAVED
+  CONTACTED
+  DISMISSED
+}
+
+/// A startup that's hiring (#222): a YC startup's job post on Hacker News, or
+/// a post in Hacker News' monthly "Who is hiring?" thread, with the addresses
+/// it publishes for applications and how well it fits the profile. Kept
+/// with what the user did with it; untouched ones go once no refresh finds
+/// them for a while.
+model Startup {
+  id                 String        @id @default(cuid())
+  /// Where it was found: "YC" (YC's job posts) or "HN" ("Who is hiring?").
+  source             String
+  /// The Hacker News item's id.
+  externalId         String
+  company            String
+  /// The company's own site, "" when unknown.
+  website            String        @default("")
+  /// The post's title, or its first line.
+  summary            String        @default("")
+  /// The post's text as published.
+  details            String        @default("")
+  location           String        @default("")
+  remote             Boolean?
+  /// e.g. "YC W24", or the round a post names.
+  stage              String        @default("")
+  /// JSON list of strings: the roles a post names.
+  roles              Json
+  /// JSON list of { email, label, from, onRequest, foundAt }: only addresses
+  /// the startup published, never guessed. People's own addresses are
+  /// looked up only when asked, and dropped after a while unless used.
+  emails             Json
+  /// JSON list of { label, url }.
+  links              Json
+  /// When it was posted.
+  postedAt           DateTime?
+  /// 0–100: how well it fits the profile, with why (JSON list of strings).
+  score              Int           @default(0)
+  reasons            Json
+  /// The matching's version, e.g. "match@1".
+  scoredWith         String        @default("")
+  status             StartupStatus @default(NEW)
+  /// Where its site says it takes no unsolicited applications; "" when it doesn't.
+  noApplicationsFrom String        @default("")
+  /// When its site was last checked for role addresses, and for people's.
+  emailsCheckedAt    DateTime?
+  peopleCheckedAt    DateTime?
+  notes              String        @default("")
+  /// When a refresh last found it.
+  seenAt             DateTime      @default(now())
+  /// The application started from it ("Write to them"); deleting the application keeps the startup.
+  applicationId      String?       @unique
+  application        Application?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([source, externalId])
+  @@index([status, score])
+}
+
+/// A startup removed with "Remove and don't bring back" (#222): only a
+/// SHA-256 hash of its post, its site's domain or its name, so a refresh
+/// leaves it out without keeping anything about it.
+model StartupBlock {
+  hash      String   @id
+  createdAt DateTime @default(now())
 }
 
 // ─── Google: Gmail and Calendar (E15) ────────────────────────────────────────

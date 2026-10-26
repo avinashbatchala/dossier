@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { citationText } from "@/lib/citation";
 import { BASICS_FIELDS, sameName } from "@/lib/profile";
 import type { ImportedProfile, ImportMode } from "@/lib/profile-import";
 import { settingsFromRows } from "@/lib/settings";
@@ -12,8 +13,8 @@ type Tx = Prisma.TransactionClient;
  * Applies an imported profile in one transaction (E4-10). Replace clears the
  * profile first. Merge lets the file win (decided 29 September 2026): its
  * basics overwrite the profile's, and an entry it shares with the profile
- * (the same role and company, project name, degree and school, or reference
- * name) takes
+ * (the same role and company, project name, degree and school, citation, or
+ * reference name) takes
  * what the file says; what the file leaves out is kept. Everything else is
  * added, first in a section ordered by hand, else by date.
  */
@@ -24,6 +25,7 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
         await tx.experience.deleteMany();
         await tx.project.deleteMany();
         await tx.education.deleteMany();
+        await tx.publication.deleteMany();
         await tx.reference.deleteMany();
         await tx.language.deleteMany();
         await tx.skill.deleteMany();
@@ -81,6 +83,16 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
         const match = degrees.find((degree) => sameName(degree.degree, fields.degree) && sameName(degree.school, fields.school));
         if (match) await tx.education.update({ where: { id: match.id }, data: filled(fields) });
         else await tx.education.create({ data: { ...fields, sort: nextEducationSort() } });
+      }
+
+      // Publications are in an order set by hand: the file's go after the ones there, in its order (#218).
+      // One that's already there keeps its citation, which may have bold and italics; the file can give it a link.
+      const publications = await tx.publication.findMany();
+      let publicationSort = ((await tx.publication.aggregate({ _max: { sort: true } }))._max.sort ?? -1) + 1;
+      for (const fields of profile.publications.map(withoutFlags)) {
+        const match = publications.find((publication) => sameName(citationText(publication.citation), citationText(fields.citation)));
+        if (match) await tx.publication.update({ where: { id: match.id }, data: filled({ link: fields.link }) });
+        else await tx.publication.create({ data: { ...fields, sort: publicationSort++ } });
       }
 
       const references = await tx.reference.findMany();

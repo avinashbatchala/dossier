@@ -17,7 +17,7 @@ vi.mock("@/lib/pdf/render", () => ({ renderPdf: vi.fn() }));
 const prisma = () => db.client!;
 const profile = demoProfile();
 const units = demoResumeUnits();
-// The demo roles, oldest first: Studio Brik (e3), Fieldnote (e2), Northwind (e1); and one project (p1).
+// The demo roles, oldest first: Studio Brik (e3), Fieldnote (e2), Northwind (e1); one project (p1) and one publication (u1).
 const resume = async () => (await prisma().document.findFirstOrThrow({ where: { applicationId: "app-1", kind: "RESUME" } }));
 
 beforeEach(async () => {
@@ -40,14 +40,20 @@ describe("nextCut (E10-10)", () => {
     expect(cut.trimmed).toEqual({ kind: "bullets", unitId: "experience:e1", label: "Northwind Logistics role", lines: bullets.slice(-1) });
   });
 
-  it("then leaves out the oldest project, and then has nothing left to cut (PRO-13)", () => {
+  it("then leaves out the oldest project, then the last publication, and then has nothing left to cut (PRO-13, #218)", () => {
     const one = units.filter((unit) => unit.id !== "experience:e2" && unit.id !== "experience:e3");
     const single = { ...one.find((unit) => unit.id === "experience:e1")!, text: one.find((unit) => unit.id === "experience:e1")!.text.split("\n")[0] };
     const shortest = one.map((unit) => (unit.id === single.id ? single : unit));
     const cut = nextCut(shortest, profile)!;
     expect(cut.trimmed).toEqual({ kind: "unit", unit: units.find((unit) => unit.id === "project:p1"), index: shortest.findIndex((unit) => unit.id === "project:p1") });
     expect(describeTrim([cut.trimmed], profile, false, 1)[0]).toBe("Left out the Tidewater design tokens project to fit one page");
-    expect(nextCut(cut.units, profile)).toBeNull();
+
+    const second = { id: "publication:u2", label: "Publication", text: "Doe, J. (2019). *A later one.*" };
+    const withTwo = cut.units.toSpliced(cut.units.findIndex((unit) => unit.id === "publication:u1") + 1, 0, second);
+    const publication = nextCut(withTwo, profile)!;
+    expect(publication.trimmed).toEqual({ kind: "unit", unit: second, index: withTwo.indexOf(second) });
+    expect(describeTrim([publication.trimmed], profile, false, 2)[0]).toBe("Left out the publication “Doe, J. (2019). A later one.” to fit two pages");
+    expect(nextCut(nextCut(publication.units, profile)!.units, profile)).toBeNull();
   });
 });
 
@@ -83,9 +89,10 @@ describe("fitResumeToPages (E10-10)", () => {
   it("gives up after cutting all it can, and says so", async () => {
     const { trimmed, fits } = await fitResumeToPages("app-1", profile, 1, async () => 2);
     expect(fits).toBe(false);
-    expect(trimmed.map((item) => item.kind)).toEqual(["unit", "unit", "bullets", "unit"]);
+    expect(trimmed.map((item) => item.kind)).toEqual(["unit", "unit", "bullets", "unit", "unit"]);
     const lines = describeTrim(trimmed, profile, fits, 1);
     expect(lines[2]).toMatch(/^Shortened the Northwind Logistics role by \d bullets to fit one page$/);
+    expect(lines[4]).toBe("Left out the publication “Doe, J., & Vermeer, K. (2016). Trust in…” to fit one page");
     expect(lines.at(-1)).toBe("It still runs over one page, so shorten it by hand if it has to fit");
   });
 });

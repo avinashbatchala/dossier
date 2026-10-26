@@ -1,5 +1,6 @@
 import type { LanguageLevel } from "@/generated/prisma/enums";
 import type { Unit } from "@/lib/application-data";
+import { publicationLabel } from "@/lib/citation";
 import { LANGUAGE_LEVELS, type DateSpan, type ProfileData } from "@/lib/profile";
 
 import sample from "../../prisma/seed/prototype-sample.json";
@@ -35,7 +36,7 @@ export const LEVELS_BY_LABEL = new Map<string, LanguageLevel>(
 
 /** The sample profile as `loadProfile()` returns it, with the prototype's ids. */
 export function demoProfile(): ProfileData {
-  const { experience, projects, education, skills, languages, references, showAge, ...basics } = sample.profile;
+  const { experience, projects, education, publications, skills, languages, references, facts, showAge, ...basics } = sample.profile;
   const skillId = (name: string) => `skill-${skills.indexOf(name) + 1}`;
   return {
     basics: {
@@ -82,6 +83,7 @@ export function demoProfile(): ProfileData {
       notes: entry.notes,
       ...dateSpan(entry.start, entry.end),
     })),
+    publications: publications.map(({ id, citation, link }) => ({ id, citation, link, onResumes: true })),
     references: references.map(({ id, name, relation, company, email, phone }) => ({
       id,
       name,
@@ -90,19 +92,22 @@ export function demoProfile(): ProfileData {
       email,
       phone,
     })),
+    facts: facts.map((text, index) => ({ id: `fact-${index + 1}`, text })),
+    photo: null,
   };
 }
 
 /**
  * The prototype's tailored resume for Ledgerly, as units in reading order.
- * Pass how to turn the sample's entry ids ("e1", "d1", "p1") into real ones.
+ * Pass how to turn the sample's entry ids ("e1", "d1", "p1", "u1") into real ones.
  */
 export function demoResumeUnits(
   experienceId: (sampleId: string) => string = (id) => id,
   educationId: (sampleId: string) => string = (id) => id,
   projectId: (sampleId: string) => string = (id) => id,
+  publicationId: (sampleId: string) => string = (id) => id,
 ): Unit[] {
-  const { experience, projects, education, skills, languages } = sample.profile;
+  const { experience, projects, education, publications, skills, languages } = sample.profile;
   const { resume, requirements } = sample.ledgerly;
   // Skills the posting asks for come first.
   const asked = requirements.flatMap((requirement) =>
@@ -121,6 +126,11 @@ export function demoResumeUnits(
       id: `education:${educationId(entry.id)}`,
       label: entry.degree,
       text: entry.notes,
+    })),
+    ...publications.map((entry) => ({
+      id: `publication:${publicationId(entry.id)}`,
+      label: publicationLabel(entry.citation),
+      text: entry.citation,
     })),
     {
       id: "languages",

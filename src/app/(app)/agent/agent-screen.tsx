@@ -6,6 +6,7 @@ import { useState, useTransition, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { ScoreBadge } from "@/components/score-badge";
+import { linksAttribution, SourceAttribution } from "@/components/source-attribution";
 import { toast, toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -288,6 +289,8 @@ function CandidateCard({ candidate, children }: { candidate: AgentCandidateView;
           {candidate.company && <p className="text-sm text-ink">{candidate.company}</p>}
           {candidate.facts && <p className="text-meta text-muted">{candidate.facts}</p>}
           {candidate.origin && <p className="text-xs text-muted">{candidate.origin}</p>}
+          {/* As the source's terms ask (E14-2); the origin names the others. */}
+          {linksAttribution(candidate.source) && <SourceAttribution source={candidate.source} url={candidate.url} className="mt-1.5 self-start" />}
         </div>
         <ScoreBadge score={candidate.score} />
       </div>

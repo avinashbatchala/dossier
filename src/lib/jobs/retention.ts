@@ -18,7 +18,7 @@ const HOUR_MS = 60 * 60 * 1000;
 /** How often the sweep runs. */
 const EVERY_MS = 15 * 60 * 1000;
 
-/** Deletes finished jobs older than the retention, and zips nobody downloaded; returns how many jobs went. */
+/** Deletes finished jobs older than the retention, zips nobody downloaded and expired postings pasted for Claude (#221); returns how many jobs went. */
 export async function sweepFinishedJobs(now = new Date(), hours?: number): Promise<number> {
   const keep = hours ?? (await loadSettings()).jobRetentionHours;
   const cutoff = new Date(now.getTime() - keep * HOUR_MS);
@@ -29,6 +29,7 @@ export async function sweepFinishedJobs(now = new Date(), hours?: number): Promi
     },
   });
   await removeOldZips(now.getTime());
+  await prisma.claudePaste.deleteMany({ where: { expiresAt: { lte: now } } });
   return count;
 }
 

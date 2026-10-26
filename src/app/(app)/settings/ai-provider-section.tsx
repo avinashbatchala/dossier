@@ -33,7 +33,7 @@ const looksLikeUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
 
 /** What a hosted model is sent (profileForPrompt and the tasks in src/lib/ai/tasks; PRIVACY.md). */
 const SENT_TO_HOSTED =
-  "your profile without contact details, the postings you add and what you tell it about each one, and, when you refine, the drafts and your chat messages. Importing a resume sends its whole text, contact details included. With Gmail connected, it also gets each reply it reads or answers, with earlier mail in the thread. The notes you keep on an application are never sent.";
+  "your profile without contact details, your facts about you, the postings you add and the facts you give for each one, and, when you refine, the drafts and your chat messages. Importing a resume sends its whole text, contact details included. With Gmail connected, it also gets each reply it reads or answers, with earlier mail in the thread. The notes you keep on an application are never sent.";
 
 /**
  * Settings → AI provider (E6-3, SET-1, SET-2). Each field saves on its own:
