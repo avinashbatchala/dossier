@@ -97,13 +97,24 @@ describe("the search form", () => {
 
   it("starts from the search it's given, and says which source it searches", () => {
     renderScreen();
-    expect(screen.getByText("Search JSearch for postings near you, then start an application from the one you like.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Search JSearch for postings anywhere in a country, or within a radius of a place, then start an application from the one you like.",
+      ),
+    ).toBeInTheDocument();
     const form = screen.getByRole("search", { name: "Search postings" });
     expect(within(form).getByLabelText("What")).toHaveValue("product designer");
     expect(within(form).getByLabelText("Where")).toHaveValue("Hamburg");
     expect(within(form).getByLabelText("Country")).toHaveValue("de");
     expect(within(form).getByLabelText("Within")).toHaveValue("25");
     expect(screen.getByText(/Search for a role, a skill or a company/)).toBeInTheDocument();
+  });
+
+  it("explains that an empty place searches the whole country", () => {
+    renderScreen({ query: { ...query, place: "" } });
+    expect(screen.getByLabelText("Where")).toHaveAccessibleDescription("A city or region. Leave it empty to search all of Germany.");
+    expect(screen.getByLabelText("Within")).toBeDisabled();
+    expect(screen.getByLabelText("Within")).toHaveAccessibleDescription("Not used: the whole country");
   });
 
   it("runs the search, which is kept, and opens it (E14-10)", async () => {
@@ -309,6 +320,12 @@ describe("the results", () => {
   it("says when nothing was found", () => {
     renderScreen({ search: stored([]) });
     expect(screen.getByText("No postings for “product designer” within 25 km of Hamburg. Try a bigger radius or fewer words.")).toBeInTheDocument();
+  });
+
+  it("names the whole country when a search without a place found nothing", () => {
+    const wholeCountry = { ...query, place: "" };
+    renderScreen({ search: { id: "run-1", source: "JSEARCH", query: wholeCountry, ranAt: "today at 14:32", postings: [], next: null } });
+    expect(screen.getByText("No postings for “product designer” anywhere in Germany. Try fewer words, or a longer period.")).toBeInTheDocument();
   });
 
   it("labels each of Adzuna's postings with a link to its site for the posting's country, as its terms ask", () => {

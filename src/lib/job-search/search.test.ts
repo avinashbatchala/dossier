@@ -14,6 +14,7 @@ import {
   postingText,
   queryFromParams,
   safeLink,
+  searchArea,
   searchHref,
   searchQuerySchema,
   viewFromParams,
@@ -107,14 +108,20 @@ describe("postings", () => {
     expect(latestRole([])).toBe("");
   });
 
-  it("starts the first search from the profile", () => {
-    expect(defaultSearch({ role: " Product Designer ", city: "Hamburg", country: "Deutschland" })).toEqual({
+  it("starts the first search from the profile, anywhere in its country", () => {
+    expect(defaultSearch({ role: " Product Designer ", country: "Deutschland" })).toEqual({
       ...EMPTY_QUERY,
       keywords: "Product Designer",
-      place: "Hamburg",
       country: "de",
     });
-    expect(defaultSearch({ role: "", city: "", country: "" })).toEqual(EMPTY_QUERY);
+    expect(defaultSearch({ role: "", country: "" })).toEqual(EMPTY_QUERY);
+  });
+
+  it("says where a search looks", () => {
+    expect(searchArea({ place: "Hamburg", radiusKm: 25 })).toBe("within 25 km of Hamburg");
+    expect(searchArea({ place: " ", radiusKm: 25 }, "Germany")).toBe("anywhere in Germany");
+    expect(searchArea({ place: "", radiusKm: 25 }, "Netherlands")).toBe("anywhere in Netherlands");
+    expect(searchArea({ place: "", radiusKm: 25 })).toBe("anywhere");
   });
 
   it("says how long ago a posting went up", () => {

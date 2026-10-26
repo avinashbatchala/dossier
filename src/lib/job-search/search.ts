@@ -235,9 +235,18 @@ export function latestRole(experience: readonly Role[]): string {
   return latest?.role.trim() ?? "";
 }
 
-/** The first search on Find jobs (E14-6): that role, in the profile's city and country. */
-export function defaultSearch({ role, city, country }: { role: string; city: string; country: string }): SearchQuery {
-  return { ...EMPTY_QUERY, keywords: role.trim().slice(0, 200), place: city.trim().slice(0, 200), country: countryCodeFor(country) };
+/** The first search on Find jobs (E14-6): that role, anywhere in the profile's country. */
+export function defaultSearch({ role, country }: { role: string; country: string }): SearchQuery {
+  return { ...EMPTY_QUERY, keywords: role.trim().slice(0, 200), country: countryCodeFor(country) };
+}
+
+/**
+ * Where a search looks, in words: "within 25 km of Hamburg", or "anywhere in
+ * Germany" when it has no place. Pass the country's name as the server names
+ * it; without one, "anywhere".
+ */
+export function searchArea(query: Pick<SearchQuery, "place" | "radiusKm">, countryName?: string): string {
+  return query.place.trim() ? `within ${query.radiusKm} km of ${query.place.trim()}` : countryName ? `anywhere in ${countryName}` : "anywhere";
 }
 
 /** "Today", "Yesterday", "3 days ago", "2 weeks ago", or the date for older postings; "" without a date. */

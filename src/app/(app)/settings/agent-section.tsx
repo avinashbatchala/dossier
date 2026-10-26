@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import { useAutosave } from "@/hooks/use-autosave";
 import type { Country } from "@/lib/job-search/countries";
-import { searchHref, type JobSource, type SearchQuery } from "@/lib/job-search/search";
+import { searchArea, searchHref, type JobSource, type SearchQuery } from "@/lib/job-search/search";
 
 import { saveAgentSettings } from "../agent/actions";
 import { RemoteOnlyField, SearchFields, type SearchFieldErrors } from "../jobs/search-fields";
@@ -114,7 +114,7 @@ export function AgentSection({
           label="Run the job agent"
           description={
             settings.enabled
-              ? `On. It runs once a day after ${clock(settings.hour)} your time (${timeZone}), and you can run it now and then on the Agent screen.`
+              ? `On. It searches ${searchArea(settings.query, countries.find((country) => country.code === settings.query.country)?.name)} once a day after ${clock(settings.hour)} your time (${timeZone}), and you can run it now and then on the Agent screen.`
               : "Off. Nothing is searched or scored until it's on."
           }
           checked={settings.enabled}

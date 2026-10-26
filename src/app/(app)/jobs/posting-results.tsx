@@ -11,8 +11,9 @@ import { useJob } from "@/hooks/use-job";
 import { openPendingTab, sendPendingTab } from "@/lib/claude-tab";
 import { cn } from "@/lib/cn";
 import { fitBand, type PostingFit } from "@/lib/fit";
+import type { Country } from "@/lib/job-search/countries";
 import type { JobView } from "@/lib/jobs/runner";
-import { postedAgo, postingKey, type FoundPosting, type PostingState, type ShownPosting, type StoredSearch } from "@/lib/job-search/search";
+import { postedAgo, postingKey, searchArea, type FoundPosting, type PostingState, type ShownPosting, type StoredSearch } from "@/lib/job-search/search";
 import { arbeitsagenturPage, SOURCE_INFO } from "@/lib/job-search/sources";
 
 import { dismissFoundPosting, loadFullText, restorePosting, savePostingForLater, showMorePostings, startScoringPosting, unsavePosting } from "./actions";
@@ -23,6 +24,8 @@ const NARROW = "(max-width: 1023px)";
 
 export type PostingResultsProps = {
   today: string;
+  /** Every country by name, named on the server, for "anywhere in Germany". */
+  countries?: readonly Country[];
   /** Score opens a Claude chat, which scores through the connector: it's on, and Dossier has no AI model of its own (#221). */
   scoreInClaude?: boolean;
 } & (
@@ -157,6 +160,10 @@ export function PostingResults(props: PostingResultsProps) {
   };
 
   const searched = props.mode === "search" ? props.search.query : null;
+  // Without a place the whole country is searched, so say which one (E14-6).
+  const area = searched
+    ? searchArea(searched, props.countries?.find((country) => country.code === searched.country)?.name)
+    : "";
   const empty =
     mode === "saved"
       ? "Nothing saved yet. Save a posting from your search results to keep it here."
@@ -164,7 +171,7 @@ export function PostingResults(props: PostingResultsProps) {
         ? "Nothing dismissed. Postings you dismiss stay out of your searches and wait here."
         : postings.length > 0 || !searched
           ? "You've dismissed every posting here."
-          : `No postings for “${searched.keywords}”${searched.place ? ` within ${searched.radiusKm} km of ${searched.place}` : ""}. Try a bigger radius or fewer words.`;
+          : `No postings for “${searched.keywords}”${area ? ` ${area}` : ""}. ${searched.place.trim() ? "Try a bigger radius or fewer words." : "Try fewer words, or a longer period."}`;
 
   return (
     <div className="flex flex-wrap items-start gap-6 px-10 pb-16">

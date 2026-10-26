@@ -37,7 +37,18 @@ describe("Settings → Job agent (E16-7)", () => {
     expect(toggle).toHaveAccessibleDescription("Off. Nothing is searched or scored until it's on.");
     await user.click(toggle);
     expect(saveAgentSettings).toHaveBeenCalledWith({ enabled: true, query: initial.query });
-    expect(toggle).toHaveAccessibleDescription(/^On\. It runs once a day after 07:00 your time \(Europe\/Berlin\)/);
+    expect(toggle).toHaveAccessibleDescription(/^On\. It searches within 25 km of Berlin once a day after 07:00 your time \(Europe\/Berlin\)/);
+  });
+
+  it("says when it searches a whole country rather than around a place", async () => {
+    const user = userEvent.setup();
+    open({ initial: { ...initial, enabled: true, query: { ...initial.query, place: "" } } });
+    const toggle = screen.getByRole("switch", { name: "Run the job agent" });
+    expect(toggle).toHaveAccessibleDescription(/^On\. It searches anywhere in Germany once a day after 07:00 your time/);
+    expect(screen.getByLabelText("Where")).toHaveAccessibleDescription("A city or region. Leave it empty to search all of Germany.");
+    expect(screen.getByLabelText("Within")).toHaveAccessibleDescription("Not used: the whole country");
+    await user.click(toggle);
+    expect(saveAgentSettings).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("needs keywords and a country to turn on", async () => {

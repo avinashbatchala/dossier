@@ -81,7 +81,7 @@ export function JobsScreen({
     <>
       <PageHeader
         title="Find jobs"
-        description={`Search ${source ? SOURCE_INFO[source].name : "job postings"} for postings near you, then start an application from the one you like.`}
+        description={`Search ${source ? SOURCE_INFO[source].name : "job postings"} for postings anywhere in a country, or within a radius of a place, then start an application from the one you like.`}
       />
       <ViewTabs view={view} counts={counts} />
     </>
@@ -151,6 +151,7 @@ export function JobsScreen({
             mode="search"
             search={search}
             today={today}
+            countries={countries}
             scoreInClaude={scoreInClaude}
             onSearchAgain={() => run(search.query)}
             searching={pending}

@@ -37,6 +37,7 @@ export function SearchFields({
   onBlur?: () => void;
 }) {
   const uncovered = uncoveredCountry(source, value, countries);
+  const country = countries.find((entry) => entry.code === value.country)?.name;
   return (
     <>
       <Input
@@ -48,7 +49,15 @@ export function SearchFields({
         onChange={(event) => onChange({ keywords: event.target.value })}
         onBlur={onBlur}
       />
-      <Input label="Where" value={value.place} placeholder="City or region" onChange={(event) => onChange({ place: event.target.value })} onBlur={onBlur} />
+      <Input
+        label="Where"
+        value={value.place}
+        placeholder="City or region"
+        hint={country ? `A city or region. Leave it empty to search all of ${country}.` : "A city or region. Leave it empty to search a whole country."}
+        onChange={(event) => onChange({ place: event.target.value })}
+        onBlur={onBlur}
+      />
+
       <Select label="Country" value={value.country} error={errors.country ?? uncovered} onChange={(event) => onChange({ country: event.target.value })}>
         <option value="">Choose a country</option>
         {countries.map((country) => (
@@ -61,7 +70,7 @@ export function SearchFields({
         label="Within"
         value={String(value.radiusKm)}
         disabled={!value.place.trim()}
-        hint={value.place.trim() ? undefined : "Add a place first"}
+        hint={value.place.trim() ? undefined : "Not used: the whole country"}
         onChange={(event) => onChange({ radiusKm: Number(event.target.value) as RadiusKm })}
       >
         {RADII_KM.map((km) => (
