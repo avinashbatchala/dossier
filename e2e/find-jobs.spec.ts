@@ -11,9 +11,11 @@ test.beforeAll(resetData);
 test("searches, keeps postings, and starts an application from one", async ({ page }) => {
   await page.goto("/jobs");
   const form = page.getByRole("search", { name: "Search postings" });
-  // The first search starts from the current role and the profile's city and country.
+  // The first search starts from the current role and the profile's country: no
+  // city, so the whole country is searched.
   await expect(form.getByLabel("What")).toHaveValue("Senior Product Designer");
-  await expect(form.getByLabel("Where")).toHaveValue("Rotterdam");
+  await expect(form.getByLabel("Where")).toHaveValue("");
+  await expect(form.getByLabel("Where")).toHaveAccessibleDescription("A city or region. Leave it empty to search all of Netherlands.");
   await expect(form.getByLabel("Country")).toHaveValue("nl");
   await form.getByRole("button", { name: "Search" }).click();
 
@@ -33,7 +35,7 @@ test("searches, keeps postings, and starts an application from one", async ({ pa
   const asked = await fakeJobSearches();
   await page.getByRole("link", { name: /^Past searches/ }).click();
   const today = page.getByRole("region", { name: "Today" });
-  await expect(today.getByRole("link")).toHaveText(/Senior Product Designer · Rotterdam, 25 km.*4 postings · JSearch/);
+  await expect(today.getByRole("link")).toHaveText(/Senior Product Designer · Netherlands.*4 postings · JSearch/);
   await today.getByRole("link").click();
   await expect(list.getByRole("listitem")).toHaveCount(4);
   await page.goto("/jobs");
