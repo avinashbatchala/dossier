@@ -84,12 +84,14 @@ export type StartupView = FoundStartup & {
 /** Where to look: anywhere, the profile's city, its country, or remote work open to it. */
 export const STARTUP_PLACES = ["any", "city", "country", "remote"] as const;
 export type StartupPlace = (typeof STARTUP_PLACES)[number];
+/** Where the screen looks unless the filter says otherwise: the profile's country, or anywhere when it has none. */
+export const DEFAULT_STARTUP_PLACE: StartupPlace = "country";
 
 export const STARTUP_SORTS = ["match", "newest"] as const;
 
 export const startupFilterSchema = z.object({
   q: z.string().trim().max(200).default(""),
-  place: z.enum(STARTUP_PLACES).default("any"),
+  place: z.enum(STARTUP_PLACES).default(DEFAULT_STARTUP_PLACE),
   source: z.enum(STARTUP_SOURCES).or(z.literal("")).default(""),
   minScore: z.coerce.number().int().min(0).max(100).default(0),
   withEmail: z.boolean().default(false),
@@ -101,24 +103,27 @@ export type StartupFilter = z.output<typeof startupFilterSchema>;
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
 
 /** The filter in the Startups screen's address. */
-export function startupFilterFromParams(params: Record<string, string | string[] | undefined>): StartupFilter {
+export function startupFilterFromParams(
+  params: Record<string, string | string[] | undefined>,
+  { defaultPlace = DEFAULT_STARTUP_PLACE }: { defaultPlace?: StartupPlace } = {},
+): StartupFilter {
   const parsed = startupFilterSchema.safeParse({
     q: one(params.q),
-    place: one(params.place) || undefined,
+    place: one(params.place) || defaultPlace,
     source: one(params.source).toUpperCase(),
     minScore: one(params.min) || undefined,
     withEmail: one(params.email) === "1",
     status: one(params.view).toUpperCase() || undefined,
     sort: one(params.sort) || undefined,
   });
-  return parsed.success ? parsed.data : startupFilterSchema.parse({});
+  return parsed.success ? parsed.data : startupFilterSchema.parse({ place: defaultPlace });
 }
 
 /** The Startups screen's address for a filter, leaving out the defaults. */
-export function startupFilterHref(filter: StartupFilter): string {
+export function startupFilterHref(filter: StartupFilter, { defaultPlace = DEFAULT_STARTUP_PLACE }: { defaultPlace?: StartupPlace } = {}): string {
   const params = new URLSearchParams();
   if (filter.q) params.set("q", filter.q);
-  if (filter.place !== "any") params.set("place", filter.place);
+  if (filter.place !== defaultPlace) params.set("place", filter.place);
   if (filter.source) params.set("source", filter.source.toLowerCase());
   if (filter.minScore > 0) params.set("min", String(filter.minScore));
   if (filter.withEmail) params.set("email", "1");

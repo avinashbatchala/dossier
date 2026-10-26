@@ -23,6 +23,7 @@ import {
   startupFilterHref,
   type StartupEmail,
   type StartupFilter,
+  type StartupPlace,
   type StartupsRefresh,
   type StartupStatusName,
   type StartupView,
@@ -32,6 +33,8 @@ import { lookUpStartupAddresses, refreshStartupsNow, removeStartupForGood, saveS
 
 export type StartupsScreenProps = {
   filter: StartupFilter;
+  /** What the place filter means when the address doesn't say: the country, or anywhere without one. */
+  defaultPlace: StartupPlace;
   list: { startups: StartupView[]; total: number; counts: Record<StartupStatusName, number> };
   lastRefresh: StartupsRefresh | null;
   refreshJobId: string | null;
@@ -58,7 +61,7 @@ const VIEWS: { status: StartupStatusName; label: string }[] = [
  * the addresses they publish for applications. Dossier sends nothing: the
  * user writes to each one, from New application or their own mail.
  */
-export function StartupsScreen({ filter, list, lastRefresh, refreshJobId, city, country, headline, aiReady, today }: StartupsScreenProps) {
+export function StartupsScreen({ filter, defaultPlace, list, lastRefresh, refreshJobId, city, country, headline, aiReady, today }: StartupsScreenProps) {
   const router = useRouter();
   const [jobId, setJobId] = useState(refreshJobId);
   const [starting, startTransition] = useTransition();
@@ -79,7 +82,7 @@ export function StartupsScreen({ filter, list, lastRefresh, refreshJobId, city, 
       if (result.ok) setJobId(result.data.jobId);
     });
 
-  const go = (change: Partial<StartupFilter>) => router.replace(startupFilterHref({ ...filter, ...change }), { scroll: false });
+  const go = (change: Partial<StartupFilter>) => router.replace(startupFilterHref({ ...filter, ...change }, { defaultPlace }), { scroll: false });
 
   return (
     <>
@@ -93,13 +96,13 @@ export function StartupsScreen({ filter, list, lastRefresh, refreshJobId, city, 
         }
       />
       <div className="flex flex-col gap-6 px-10 pb-20">
-        <RefreshStatus lastRefresh={lastRefresh} refreshing={refreshing} step={job?.step ?? null} today={today} />
+        <RefreshStatus lastRefresh={lastRefresh} refreshing={refreshing} step={job?.step ?? null} today={today} country={country} />
         {lastRefresh && (
           <>
-            <ViewTabs filter={filter} counts={list.counts} />
+            <ViewTabs filter={filter} defaultPlace={defaultPlace} counts={list.counts} />
             <Filters filter={filter} city={city} country={country} onChange={go} />
             {list.startups.length === 0 ? (
-              <Empty filter={filter} />
+              <Empty filter={filter} defaultPlace={defaultPlace} />
             ) : (
               <>
                 <p className="text-meta text-muted">
@@ -122,7 +125,7 @@ export function StartupsScreen({ filter, list, lastRefresh, refreshJobId, city, 
   );
 }
 
-function RefreshStatus({ lastRefresh, refreshing, step, today }: { lastRefresh: StartupsRefresh | null; refreshing: boolean; step: string | null; today: string }) {
+function RefreshStatus({ lastRefresh, refreshing, step, today, country }: { lastRefresh: StartupsRefresh | null; refreshing: boolean; step: string | null; today: string; country: string }) {
   if (refreshing) {
     return (
       <p role="status" className="rounded-card border border-line-card bg-card px-4 py-3 text-meta text-muted">
@@ -135,8 +138,8 @@ function RefreshStatus({ lastRefresh, refreshing, step, today }: { lastRefresh: 
       <div role="note" className="flex flex-col gap-2 rounded-panel border border-line-card bg-card px-6 py-5 text-sm text-pretty">
         <p>
           Press <strong>Refresh</strong> to look for startups. Dossier reads YC startups&apos; job posts and this month&apos;s “Who is hiring?” thread on
-          Hacker News, keeps the ones that hire where you live or remotely, and looks on the best matches&apos; own sites for the address they publish for
-          applications, following their robots.txt.
+          Hacker News, keeps the ones that hire {country ? `anywhere in ${country} or remotely, open to it` : "where you could take the job"}, and looks on
+          the best matches&apos; own sites for the address they publish for applications, following their robots.txt.
         </p>
         <p className="text-muted">
           After that it refreshes once a day while you use this screen. Nothing is sent to anyone: you decide whom to write to.
@@ -164,13 +167,13 @@ function RefreshStatus({ lastRefresh, refreshing, step, today }: { lastRefresh: 
   );
 }
 
-function ViewTabs({ filter, counts }: { filter: StartupFilter; counts: Record<StartupStatusName, number> }) {
+function ViewTabs({ filter, defaultPlace, counts }: { filter: StartupFilter; defaultPlace: StartupPlace; counts: Record<StartupStatusName, number> }) {
   return (
     <nav aria-label="Startups views" className="flex flex-wrap gap-1.5">
       {VIEWS.map((view) => (
         <Link
           key={view.status}
-          href={startupFilterHref({ ...filter, status: view.status })}
+          href={startupFilterHref({ ...filter, status: view.status }, { defaultPlace })}
           aria-current={view.status === filter.status ? "page" : undefined}
           className={cn(
             "flex items-baseline gap-1.5 rounded-control border px-3 py-2 text-control",
@@ -202,10 +205,10 @@ function Filters({ filter, city, country, onChange }: { filter: StartupFilter; c
     >
       <Input label="Search" value={q} placeholder="e.g. android, fintech, Berlin" onChange={(event) => setQ(event.target.value)} onBlur={() => q.trim() !== filter.q && onChange({ q: q.trim() })} />
       <Select label="Where" value={filter.place} onChange={(event) => onChange({ place: event.target.value as StartupFilter["place"] })}>
-        <option value="any">Anywhere</option>
+        {country && <option value="country">Anywhere in {country}</option>}
         {city && <option value="city">{city}</option>}
-        {country && <option value="country">{country}</option>}
         <option value="remote">Remote{country ? `, open to ${country}` : ""}</option>
+        <option value="any">Anywhere in the world</option>
       </Select>
       <Select label="Source" value={filter.source} onChange={(event) => onChange({ source: event.target.value as StartupFilter["source"] })}>
         <option value="">Both sources</option>
@@ -232,8 +235,8 @@ function Filters({ filter, city, country, onChange }: { filter: StartupFilter; c
   );
 }
 
-function Empty({ filter }: { filter: StartupFilter }) {
-  const filtered = filter.q || filter.place !== "any" || filter.source || filter.minScore > 0 || filter.withEmail;
+function Empty({ filter, defaultPlace }: { filter: StartupFilter; defaultPlace: StartupPlace }) {
+  const filtered = filter.q || filter.place !== defaultPlace || filter.source || filter.minScore > 0 || filter.withEmail;
   return (
     <p className="rounded-panel border border-dashed border-line-strong px-7 py-10 text-center text-sm text-muted">
       {filtered ? "None match these filters. Try fewer." : filter.status === "NEW" ? "Nothing new to look at. The next refresh may bring more." : "None here yet."}

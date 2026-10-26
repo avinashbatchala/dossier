@@ -125,19 +125,20 @@ describe("keeping startups (#222)", () => {
       now,
     );
     const names = async (change: object) => (await listStartups(filter(change), berlin)).startups.map((entry) => entry.company);
-    expect(await names({})).toEqual(["Acme", "Munich Co", "Remote Co", "Faraway"]);
-    expect(await names({ sort: "newest" })).toEqual(["Remote Co", "Acme", "Munich Co", "Faraway"]);
+    expect(await names({})).toEqual(["Acme", "Munich Co", "Remote Co"]);
+    expect(await names({ sort: "newest" })).toEqual(["Remote Co", "Acme", "Munich Co"]);
+    expect(await names({ place: "any" })).toEqual(["Acme", "Munich Co", "Remote Co", "Faraway"]);
     expect(await names({ place: "city" })).toEqual(["Acme"]);
-    expect(await names({ place: "country" })).toEqual(["Acme", "Munich Co"]);
+    expect(await names({ place: "country" })).toEqual(["Acme", "Munich Co", "Remote Co"]);
     expect(await names({ place: "remote" })).toEqual(["Remote Co"]);
-    expect(await names({ source: "YC" })).toEqual(["Faraway"]);
+    expect(await names({ source: "YC", place: "any" })).toEqual(["Faraway"]);
     expect(await names({ withEmail: true })).toEqual(["Munich Co"]);
     expect(await names({ q: "remote co" })).toEqual(["Remote Co"]);
     expect(await names({ minScore: 70 })).toEqual(["Acme"]);
 
-    const [faraway] = (await listStartups(filter({ source: "YC" }), berlin)).startups;
+    const [faraway] = (await listStartups(filter({ source: "YC", place: "any" }), berlin)).startups;
     await updateStartup(faraway.id, { status: "DISMISSED", notes: "Too far" });
-    const list = await listStartups(filter({ status: "DISMISSED" }), berlin, { limit: 1 });
+    const list = await listStartups(filter({ status: "DISMISSED", place: "any" }), berlin, { limit: 1 });
     expect(list).toMatchObject({ total: 1, counts: { NEW: 3, SAVED: 0, CONTACTED: 0, DISMISSED: 1 } });
     expect(list.startups[0].notes).toBe("Too far");
     expect(await updateStartup("missing", { status: "SAVED" })).toBeNull();

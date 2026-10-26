@@ -7,7 +7,7 @@ import { loadSettings, saveSettings } from "@/lib/settings-data";
 import { placeOf } from "@/lib/startups/place";
 import { STARTUPS_JOB_KEY } from "@/lib/startups/refresh";
 import { listStartups } from "@/lib/startups/store";
-import { startupFilterFromParams } from "@/lib/startups/types";
+import { DEFAULT_STARTUP_PLACE, startupFilterFromParams, type StartupPlace } from "@/lib/startups/types";
 
 import { StartupsScreen } from "./startups-screen";
 
@@ -22,9 +22,11 @@ const VIEW_MARK_MS = 60 * 60 * 1000;
  * publish for applications.
  */
 export default async function StartupsPage({ searchParams }: PageProps<"/startups">) {
-  const filter = startupFilterFromParams(await searchParams);
   const [profile, settings, aiReady, [running]] = await Promise.all([loadProfile(), loadSettings(), isAiConfigured(), findUnfinishedJobs(STARTUPS_JOB_KEY)]);
   const place = placeOf(profile.basics);
+  // The screen looks at the whole country by default; anywhere without one.
+  const defaultPlace: StartupPlace = place.country ? DEFAULT_STARTUP_PLACE : "any";
+  const filter = startupFilterFromParams(await searchParams, { defaultPlace });
   const now = new Date();
   if (!settings.startupsViewedAt || now.getTime() - Date.parse(settings.startupsViewedAt) > VIEW_MARK_MS) {
     await saveSettings({ startupsViewedAt: now.toISOString() });
@@ -32,6 +34,7 @@ export default async function StartupsPage({ searchParams }: PageProps<"/startup
   return (
     <StartupsScreen
       filter={filter}
+      defaultPlace={defaultPlace}
       list={await listStartups(filter, place)}
       lastRefresh={settings.startupsLastRefresh}
       refreshJobId={running?.id ?? null}

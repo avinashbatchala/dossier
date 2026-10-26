@@ -20,8 +20,18 @@ describe("the Startups screen's filter in its address (#222)", () => {
   it("writes it back, leaving out the defaults", () => {
     expect(startupFilterHref(startupFilterSchema.parse({}))).toBe("/startups");
     const filter = startupFilterSchema.parse({ q: "fintech", place: "country", source: "HN", minScore: 50, withEmail: true, status: "DISMISSED", sort: "newest" });
-    expect(startupFilterHref(filter)).toBe("/startups?q=fintech&place=country&source=hn&min=50&email=1&view=dismissed&sort=newest");
+    expect(startupFilterHref(filter)).toBe("/startups?q=fintech&source=hn&min=50&email=1&view=dismissed&sort=newest");
     expect(startupFilterFromParams(Object.fromEntries(new URL(`https://x${startupFilterHref(filter)}`).searchParams))).toEqual(filter);
+    // Anywhere in the world isn't the default, so it stays in the address.
+    const anywhere = startupFilterSchema.parse({ place: "any" });
+    expect(startupFilterHref(anywhere)).toBe("/startups?place=any");
+    expect(startupFilterFromParams({ place: "any" })).toEqual(anywhere);
+  });
+
+  it("looks anywhere when the profile has no country", () => {
+    expect(startupFilterFromParams({}, { defaultPlace: "any" }).place).toBe("any");
+    expect(startupFilterHref(startupFilterSchema.parse({ place: "any" }), { defaultPlace: "any" })).toBe("/startups");
+    expect(startupFilterFromParams({ place: "mars" }, { defaultPlace: "any" }).place).toBe("any");
   });
 });
 

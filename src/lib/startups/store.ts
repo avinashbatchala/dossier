@@ -187,7 +187,8 @@ function inPlace(startup: StartupView, filter: StartupFilter["place"], place: Pl
   const where = reach(whereText(startup), place);
   if (filter === "remote") return where.remote && where.remoteOpen !== false;
   if (filter === "city") return where.here === "city";
-  return where.here !== null;
+  // The whole country: there or its cities, and remote work anyone there could take.
+  return where.here !== null || (where.remote && where.remoteOpen === true);
 }
 
 /** The startups a filter asks for, best match or newest first, at most `limit`. */

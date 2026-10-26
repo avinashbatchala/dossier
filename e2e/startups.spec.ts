@@ -22,10 +22,12 @@ test("finds hiring startups with the addresses they publish, and leaves alone wh
   await expect(page.getByText("Found 5 new startups.")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Last refreshed .*: Y Combinator 2 · Hacker News 3\./)).toBeVisible();
 
-  // Remote work only for the US doesn't suit someone in Rotterdam.
+  // The whole country by default: on-site work in Austin, Texas isn't a maybe
+  // for someone in Rotterdam, and neither is remote work only for the US.
   const cards = page.getByRole("article");
-  await expect(cards).toHaveCount(5);
+  await expect(cards).toHaveCount(4);
   await expect(page.getByRole("article", { name: "Westcoast" })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Faraway" })).toHaveCount(0);
 
   // Role addresses from the startup's own pages; a person's only when asked.
   const canal = page.getByRole("article", { name: "Canalworks" });
@@ -52,14 +54,18 @@ test("finds hiring startups with the addresses they publish, and leaves alone wh
 
   await expectAccessible(page);
 
-  // Filters: remote work open to the Netherlands, then Rotterdam itself.
+  // Filters: remote work open to the Netherlands, then Rotterdam itself, then
+  // the whole country, and finally anywhere in the world.
   await page.getByLabel("Where").selectOption("remote");
   await expect(cards).toHaveCount(2);
   await page.getByLabel("Where").selectOption("city");
   await expect(cards).toHaveCount(1);
   await expect(page.getByRole("article", { name: "Harbourlight" })).toBeVisible();
+  await page.getByLabel("Where").selectOption("country");
+  await expect(cards).toHaveCount(4);
   await page.getByLabel("Where").selectOption("any");
   await expect(cards).toHaveCount(5);
+  await expect(page.getByRole("article", { name: "Faraway" })).toBeVisible();
 
   // Dismiss, and Undo.
   const faraway = page.getByRole("article", { name: "Faraway" });
@@ -93,5 +99,5 @@ test("finds hiring startups with the addresses they publish, and leaves alone wh
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("No new startups this time.")).toBeVisible({ timeout: 30_000 });
   await expect(harbour).toHaveCount(0);
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(3);
 });
