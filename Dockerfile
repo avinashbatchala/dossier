@@ -38,6 +38,10 @@ RUN yarn install --immutable
 
 FROM deps AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+# V8 sizes its heap from the machine's RAM, which on a 2 GB instance stops the
+# type check around 1 GB. The build machines keep swap for it (see
+# INFRASTRUCTURE.md); this lets Node use it rather than die.
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 COPY . .
 RUN yarn prisma generate && yarn build
 # Prisma's CLI for `migrate deploy`, at the version in yarn.lock, with the
