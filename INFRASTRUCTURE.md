@@ -15,9 +15,9 @@ How this Dossier deployment is hosted on AWS, and how to operate it: SSH access,
 | OS | Ubuntu 24.04 LTS |
 | Static IP | Lightsail static IP named `dossier-ip` (actual address intentionally omitted) |
 | Hostname | `dossier.<STATIC_IP>.sslip.io` |
-| App image | `dossier:deepseek-fix` — local build from this fork at `v1.9.1-deepseek.4` (upstream `v1.9.1`, the DeepSeek thinking fix, and cover-letter signatures) |
+| App image | `dossier:deepseek-fix` — local build from this fork at `v1.11.0-deepseek.1` (upstream `v1.11.0`, the DeepSeek output budget, country-wide job search and Startups, and cover-letter signatures) |
 | Rollback image | `dossier:deepseek-fix-20261026c` |
-| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.9.1-deepseek.4`) |
+| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.11.0-deepseek.1`) |
 | Runtime | Docker Compose project `dossier` |
 | App directory | `/home/ubuntu/dossier` |
 | Compose file | `/home/ubuntu/dossier/compose.yml` |
@@ -265,7 +265,7 @@ Do not prune volumes unless you intend to delete data. Never run `docker compose
 
 ## Updating Dossier
 
-This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.9.1-deepseek.4` tag: upstream `v1.9.1`, the DeepSeek thinking fix, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
+This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.11.0-deepseek.1` tag: upstream `v1.11.0`, a larger DeepSeek output budget, country-wide job search and Startups, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
 
 ### 1. Back up first
 
@@ -292,7 +292,7 @@ cd /home/ubuntu/dossier-src
 
 git status --short        # should be empty
 git fetch origin --tags
-git checkout v1.9.1-deepseek.4   # the fork tag you want
+git checkout v1.11.0-deepseek.1   # the fork tag you want
 
 sudo docker build --target production -t dossier:deepseek-fix .
 ```
@@ -330,21 +330,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' "https://${DOSSIER_HOST}/login"
 
 Also sign in and press **Test connection** in **Settings → AI provider**.
 
-### The DeepSeek thinking patch
+### The DeepSeek output budget
 
 DeepSeek's V4 models enable thinking by default, and the reasoning tokens count towards `max_tokens`. Dossier's default budget of 4,096 was therefore exhausted before the answer was written, producing:
 
 > The model's answer was cut off before it was finished.
 
-The patch in `src/lib/ai/providers/openai-compatible.ts`:
+Upstream `v1.10.0` fixed that: the `DeepSeek` entry in `src/lib/ai/providers/servers.ts` recognises any address at `deepseek.com` and sends `thinking: { "type": "disabled" }`.
 
-- detects `api.deepseek.com`
-- sends `thinking: { "type": "disabled" }`
-- raises the DeepSeek output budget to 8,192 tokens
+This fork also raises DeepSeek's output budget to 8,192 tokens, even when a task asks for less, for the longer resumes, letters and emails. It is `DEEPSEEK_MAX_TOKENS` in `src/lib/ai/providers/openai-compatible.ts`, keyed by the same server entry, with a regression test in `src/lib/ai/providers.test.ts`. Upstream does not have the larger budget, so keep it when merging a new release.
 
-The same change is committed in this fork's `src/lib/ai/providers/openai-compatible.ts`, with a regression test in `src/lib/ai/providers.test.ts`. Upstream does not have it, so keep it when merging a new release.
-
-When merging an upstream release, resolve conflicts in that file by keeping the DeepSeek detection, the `thinking` body field and the larger token budget, then run `docker/bin/yarn test src/lib/ai/providers.test.ts` in the Docker dev environment.
+When merging an upstream release, keep the `DeepSeek` entry in `servers.ts` and the budget in `openai-compatible.ts`, then run `docker/bin/yarn test src/lib/ai/providers.test.ts` in the Docker dev environment.
 
 ### 4. If the release changes `compose.yml`
 
@@ -370,6 +366,10 @@ diff -u compose.yml compose.yml.new
 `v1.9.1-deepseek.3` makes Find jobs and the job agent search a whole country by default: the first search no longer starts in the profile's city, and a place is optional. Typing a city or region still searches around it, within the radius chosen; leaving it empty searches everywhere in the country. This deployment's saved agent search was changed from 200 km around Berlin to all of Germany at the same time.
 
 `v1.9.1-deepseek.4` gives Startups the same lens: the Where filter now opens on the whole country rather than the whole world, including remote work open to it, with the city, remote-only and "Anywhere in the world" one choice away. No migration; an address that names `place=any` still shows every country.
+
+`v1.11.0-deepseek.1` merges upstream `v1.9.2`, `v1.10.0` and `v1.11.0`: FreeHire as a keyless job source, an "About the company or role" line on each experience, skill groups on resumes, Jev by TypeSafe as a second scorer, the MCP connector (Settings → Claude connector renamed, with other apps such as n8n), OpenRouter and OpenCode through OpenAI-compatible, and fixes for the Gmail inbox check, Ollama's cloud, summaries losing their paragraphs and postings far below your level scoring as a fit. Three migrations (`experience_descriptor`, `freehire_source`, `skill_group`) apply on the first start; skills start ungrouped, and scoring stays with the AI model until you choose Jev in Settings → Scoring.
+
+`v1.10.0` also defaults `TZ` to `UTC` in `compose.production.yml` and passes on `DOSSIER_FREEHIRE_URL`, `DOSSIER_JOBS_ARBEITSAGENTUR`, `DOSSIER_SCORER` and `DOSSIER_TYPESAFE_KEY`. This deployment takes the new compose file, which also moves the optional Ollama service to 0.40.10; no `.env` change is needed.
 
 If the diff is correct:
 
@@ -427,7 +427,8 @@ The image stays cached locally after it is pulled.
 The current image is tagged twice:
 
 - `dossier:deepseek-fix` — the image in use
-- `dossier:deepseek-fix-20261026c` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261103` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261026c` — the previous build (upstream v1.9.1 with country-wide Startups)
 - `dossier:deepseek-fix-20261026b` — the previous build (country-wide job search)
 - `dossier:deepseek-fix-20261026` — the upstream v1.9.1 build, before country-wide search
 - `dossier:deepseek-fix-20261020c` — the upstream v1.8.0 build with signatures
@@ -449,7 +450,7 @@ sudo docker compose stop app
 sudo docker compose exec -T db pg_restore --clean --if-exists \
   -U dossier -d dossier < "$HOME/dossier-YYYY-MM-DD.dump"
 
-# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261026c (or 20261026b for the previous release)
+# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261026c (or 20261026b for the release before it)
 sudo docker compose up -d
 ```
 
@@ -918,7 +919,7 @@ This is the condensed disaster-recovery path.
 9. Build the patched image:
 
    ```bash
-   git clone --depth 1 --branch v1.9.1-deepseek.4 \
+   git clone --depth 1 --branch v1.11.0-deepseek.1 \
      https://github.com/avinashbatchala/dossier.git /home/ubuntu/dossier-src
    cd /home/ubuntu/dossier-src
    # The DeepSeek fix is already committed on this tag.
