@@ -30,8 +30,8 @@ import { syncInbox } from "./sync";
 const prisma = () => db.client!;
 const b64 = (text: string) => Buffer.from(text).toString("base64url");
 
-/** `history`: when Gmail added it; before the mailbox's 200 unless given. */
-type Mail = { id: string; threadId: string; from: string; subject: string; text: string; labels?: string[]; date?: string; history?: number };
+/** `history`: when Gmail added it; before the mailbox's 200 unless given. `deleted`: listed, but gone when fetched. */
+type Mail = { id: string; threadId: string; from: string; subject: string; text: string; labels?: string[]; date?: string; history?: number; deleted?: boolean };
 const gmailMessage = ({ id, threadId, from, subject, text, labels = ["INBOX"], date = "2026-10-17T13:02:00Z" }: Mail) => ({
   id,
   threadId,
@@ -70,7 +70,7 @@ function fakeGoogle(url: string, init?: RequestInit): Response {
   }
   const id = /messages\/([^/?]+)/.exec(path)?.[1];
   const mail = mailbox.find((entry) => entry.id === id);
-  if (mail) return json(gmailMessage(mail));
+  if (mail && !mail.deleted) return json(gmailMessage(mail));
   return new Response("not found", { status: 404 });
 }
 
@@ -147,6 +147,17 @@ describe("the inbox check (E15-3)", () => {
     mailbox.push({ id: "m6", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Wednesday 14:00 works.", history: 250 });
     expect(await syncInbox()).toEqual({ fetched: 1, kept: 1, read: 1 });
     expect((await prisma().googleAccount.findUniqueOrThrow({ where: { id: "google" } })).historyId).toBe("300");
+  });
+
+  it("skips mail deleted since Gmail listed it, and carries on from the history", async () => {
+    await sendApplicationEmail("nw");
+    await syncInbox();
+    mailbox = [
+      { id: "spam", threadId: "t8", from: "Spam <win@prize.example>", subject: "You won", text: "Click", labels: ["SPAM"], history: 250, deleted: true },
+      { id: "m7", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Thursday?", history: 250 },
+    ];
+    expect(await syncInbox()).toEqual({ fetched: 2, kept: 1, read: 1 });
+    expect(await prisma().googleAccount.findUniqueOrThrow({ where: { id: "google" } })).toMatchObject({ historyId: "300", syncProblem: null });
   });
 
   it("keeps unmatched inbox mail for a look when set to read everything", async () => {

@@ -15,8 +15,8 @@ export function parseRobots(text: string, token: string): RobotsRules {
   let current: { agents: string[]; rules: Rule[] } | null = null;
   let lastWasAgent = false;
   for (const raw of text.split(/\r\n|\r|\n/)) {
-    const line = raw.replace(/#.*$/, "").trim();
-    const match = /^([a-z-]+)\s*:\s*(.*)$/i.exec(line);
+    const line = raw.split("#", 1)[0].trim();
+    const match = /^([a-z-]+)\s*:(.*)$/i.exec(line);
     if (!match) continue;
     const key = match[1].toLowerCase();
     const value = match[2].trim();

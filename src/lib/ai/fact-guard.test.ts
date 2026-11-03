@@ -74,6 +74,14 @@ describe("the fact guard (E6-6)", () => {
   });
 });
 
+describe("the fact guard on runaway output", () => {
+  it("reads text ending in thousands of blank lines quickly", () => {
+    const started = performance.now();
+    expect(check(`Led the redesign at Northwind Logistics.${"\n".repeat(100_000)}`)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
 describe("guardUnits", () => {
   it("notes what couldn't be backed on each unit, skipping units built from the profile", () => {
     const units = guardUnits(

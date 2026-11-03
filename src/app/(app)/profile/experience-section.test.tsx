@@ -36,6 +36,7 @@ const northwind: ExperienceItem = {
   role: "Senior Product Designer",
   company: "Northwind Logistics",
   location: "Rotterdam",
+  descriptor: "",
   bullets: "Led the redesign",
   startYear: 2021,
   startMonth: 3,
@@ -51,8 +52,8 @@ function Harness({ order = "date" }: { order?: EntryOrder }) {
   const [state, setState] = useState<ProfileData>({
     basics: {} as ProfileData["basics"],
     skills: [
-      { id: "s1", name: "Design systems" },
-      { id: "s2", name: "Figma" },
+      { id: "s1", name: "Design systems", group: "" },
+      { id: "s2", name: "Figma", group: "" },
     ],
     languages: [],
     experience: [northwind, fieldnote],
@@ -199,7 +200,7 @@ describe("skills used in a role", () => {
 
   it("adds a new skill to the profile and attaches it in one step", async () => {
     const user = userEvent.setup();
-    vi.mocked(attachNewSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility" } } });
+    vi.mocked(attachNewSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility", group: "" } } });
     render(<Harness />);
     await user.click(header(/Senior Product Designer/));
     await user.type(screen.getByLabelText("Add a new skill to this role"), "Accessibility{Enter}");

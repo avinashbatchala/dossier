@@ -22,7 +22,8 @@ export const importedProfileSchema = z.object({
   skills: z.array(z.object({ name: z.string(), found: z.boolean() })),
   languages: z.array(z.object({ name: z.string(), level: z.enum(LanguageLevel), levelGiven: z.boolean() })),
   experience: z.array(
-    z.object({ role: z.string(), company: z.string(), location: z.string(), bullets: z.string(), skills: z.array(z.string()), ...span, unverified }),
+    // descriptor: absent in readings from before #257.
+    z.object({ role: z.string(), company: z.string(), location: z.string(), descriptor: z.string().default(""), bullets: z.string(), skills: z.array(z.string()), ...span, unverified }),
   ),
   /** Absent in readings made before projects (PRO-13). */
   projects: z

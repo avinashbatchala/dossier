@@ -13,6 +13,7 @@ export type SourceCredentials = {
   JSEARCH: { key: string; host: JSearchHost };
   ADZUNA: { appId: string; key: string };
   ARBEITSAGENTUR: Record<string, never>;
+  FREEHIRE: Record<string, never>;
 };
 
 export type RequestContext = {

@@ -7,6 +7,7 @@ import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
 import type { ProfileData } from "@/lib/profile";
 import { resumeContent, type ResumeContent, type ResumeOptions } from "@/lib/resume-content";
+import { skillLine } from "@/lib/skill-groups";
 import { PHOTO_SHAPES, resolveTheme, type ThemeData } from "@/lib/themes";
 
 import { Contact, ContactLine, DocumentPage, DocumentSection, plainUnit, type UnitRenderer } from "./document-page";
@@ -66,7 +67,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
     ),
     content.skills && (
       <DocumentSection key="skills" title={labels.skills}>
-        {renderUnit({ id: "skills", children: <p>{content.skills}</p> })}
+        {renderUnit({ id: "skills", children: <SkillLines text={content.skills} /> })}
       </DocumentSection>
     ),
     content.languages && (
@@ -92,6 +93,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
               head: <EntryHead title={role.role} at={role.company} dates={role.dates} timeline={resolved.timeline} />,
               children: (
                 <>
+                  {role.descriptor && <p className={styles.descriptor}>{role.descriptor}</p>}
                   {role.bullets.length > 0 && (
                     <ul className={styles.bullets}>
                       {role.bullets.map((bullet, index) => (
@@ -300,4 +302,21 @@ function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNod
       {!timeline && datesSpan}
     </div>
   );
+}
+
+/** The Skills section: a line per group, led by the group's name (#280). */
+function SkillLines({ text }: { text: string }) {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const { label, text: skills } = skillLine(line);
+      return (
+        <p key={index} className={styles.skillLine}>
+          {label && <strong className={styles.skillLabel}>{label}: </strong>}
+          {skills}
+        </p>
+      );
+    });
 }

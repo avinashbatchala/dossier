@@ -23,3 +23,8 @@ export function logServerError(where: string, error: unknown): void {
     `[${where}] ${error.name}${code}: ${message}${frames ? `\n${frames}` : ""}`,
   );
 }
+
+/** Logs something worth knowing that isn't an error, such as an AI answer that didn't fit. `message` must hold no user data. */
+export function logServerWarning(where: string, message: string): void {
+  console.warn(`[${where}] ${message}`);
+}

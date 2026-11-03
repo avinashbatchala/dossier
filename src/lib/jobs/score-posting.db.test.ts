@@ -14,6 +14,9 @@ vi.mock("@/lib/prisma", async () => {
   db.client = createTestClient();
   return { prisma: db.client };
 });
+// Settings → Scoring reads DOSSIER_SCORER, and the AI model scores until Jev is chosen (#274).
+vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
+vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
   return { loadProfile: async () => demoProfile() };
@@ -65,7 +68,7 @@ describe("Score in Find jobs (#208)", () => {
     expect(run.steps).toEqual(["Getting the whole posting", "Scoring it against your profile"]);
     expect(fake.sent[0]).toContain("The whole posting: design our freight tools.");
 
-    expect(await prisma().postingScore.findUniqueOrThrow({ where: { source_externalId: { source: "ADZUNA", externalId: "az-1" } } })).toMatchObject({ score: 78, scoredWith: "score-posting@1" });
+    expect(await prisma().postingScore.findUniqueOrThrow({ where: { source_externalId: { source: "ADZUNA", externalId: "az-1" } } })).toMatchObject({ score: 78, scoredWith: "score-posting@2" });
     expect((await postingStates([posting])).get("ADZUNA:az-1")?.score).toEqual({ score: 78, reasons: ["Built a design system at Northwind."], redFlags: ["Dutch is required."] });
   });
 

@@ -43,6 +43,7 @@ const profile: ImportedProfile = {
       role: "Design Lead",
       company: "Acme Payments",
       location: "Utrecht",
+      descriptor: "Payouts for online marketplaces",
       bullets: "Led the redesign\nSet up the design system",
       skills: ["Figma"],
       startYear: 2021,
@@ -107,6 +108,7 @@ describe("ProfileImport (E4-10)", () => {
     expect(screen.getByText("John Doe")).toBeInTheDocument();
     expect(screen.getByText("Service design")).toHaveTextContent("Service design check: not in the file");
     expect(screen.getByText("Design Lead · Acme Payments")).toHaveTextContent("check: “Acme Payments” not in the file");
+    expect(screen.getByText("Payouts for online marketplaces")).toBeInTheDocument();
     expect(screen.getByText(/^German/)).toHaveTextContent("(no level given; change it any time)");
 
     await user.click(screen.getByRole("button", { name: "Merge into my profile" }));

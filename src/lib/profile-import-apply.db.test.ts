@@ -29,8 +29,8 @@ const imported: ImportedProfile = {
     { name: "German", level: LanguageLevel.B2, levelGiven: false },
   ],
   experience: [
-    { role: "Design Lead", company: "Acme Payments", location: "", bullets: "Led the payout redesign", skills: ["User research"], startYear: 2021, startMonth: 3, endYear: null, endMonth: null, current: true, unverified: [] },
-    { role: "Product designer", company: "fieldnote", location: "Amsterdam", bullets: "", skills: ["figma"], ...noDates, unverified: [] },
+    { role: "Design Lead", company: "Acme Payments", location: "", descriptor: "Payouts for marketplaces", bullets: "Led the payout redesign", skills: ["User research"], startYear: 2021, startMonth: 3, endYear: null, endMonth: null, current: true, unverified: [] },
+    { role: "Product designer", company: "fieldnote", location: "Amsterdam", descriptor: "", bullets: "", skills: ["figma"], ...noDates, unverified: [] },
   ],
   projects: [
     { name: "payout simulator", link: "github.com/john/payout-sim", bullets: "", skills: ["User research"], ...noDates, unverified: [] },

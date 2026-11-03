@@ -26,7 +26,7 @@ export type TaskResult<T> = { data: T; promptVersion: string };
 export type Task<I, O> = (provider: AIProvider, input: I, options: TaskOptions) => Promise<TaskResult<O>>;
 
 /** Postings longer than this are cut: nothing useful is that long, and prompts must fit local models. */
-const MAX_POSTING_CHARACTERS = 20_000;
+export const MAX_POSTING_CHARACTERS = 20_000;
 
 /**
  * The profile as the model sees it. Only what writing needs: no email,
@@ -53,6 +53,8 @@ export function profileForPrompt(profile: ProfileData, { includeReferences = fal
         role: entry.role,
         company: entry.company,
         location: entry.location,
+        // As written: a fact about the employer, like its name (#257).
+        ...(entry.descriptor.trim() ? { about: entry.descriptor.trim() } : {}),
         dates: formatDateRange(entry),
         bullets: entry.bullets.split("\n").map((line) => line.trim()).filter(Boolean),
         skillsUsed: entry.skillIds.flatMap((id) => skillNames.get(id) ?? []),

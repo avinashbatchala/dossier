@@ -8,6 +8,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 const port = Number(process.env.FAKE_JOBS_PORT ?? 3998);
 /** The JSearch key the app is given in e2e/support.ts. */
 const JSEARCH_KEY = "e2e-jsearch-key";
+/** The TypeSafe key a spec saves in Settings → Scoring (#274). */
+const TYPESAFE_KEY = "e2e-typesafe-key";
 
 const job = (id: string, title: string, company: string, extra: Record<string, unknown> = {}) => ({
   job_id: id,
@@ -103,6 +105,35 @@ createServer((request, response) => {
     });
     return;
   }
+  // Jev (DOSSIER_TYPESAFE_TEST_BASE_URL, #274): each question answered from
+  // its id and line, so a spec knows the score: every Score at its top level
+  // but past work one below, a line with "years", "skills" or "experience"
+  // required, and shown when it's about product design or Figma.
+  if (url.pathname === "/typesafe/v1/systemone" && request.method === "POST") {
+    if (request.headers.authorization !== `Bearer ${TYPESAFE_KEY}`) return send(response, 401, { detail: "Invalid API key" });
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      const { questions } = JSON.parse(body) as { questions: Record<string, { type: string; criteria?: unknown[]; instructions: unknown }> };
+      const lineOf = (question: { instructions: unknown }) => String((question.instructions as { line?: string }).line ?? "");
+      const answers = Object.fromEntries(
+        Object.entries(questions).map(([id, question]) => {
+          if (question.type === "score") {
+            const top = (question.criteria?.length ?? 1) - 1;
+            return [id, { type: "score", score: id === "work" ? top - 1 : top, confidence: 0.9, legend: {}, probabilities: {} }];
+          }
+          if (question.type === "choice") {
+            const required = /years|skills|experience/i.test(lineOf(question));
+            return [id, { type: "choice", choice: required ? "required" : "other", confidence: 0.9, probabilities: {} }];
+          }
+          const shown = id.endsWith("Shown") && /product design|figma/i.test(lineOf(question));
+          return [id, { type: "noul", noul: shown ? 0.9 : 0.05 }];
+        }),
+      );
+      send(response, 200, { model: "jev-1.14.0", answers, usage: { input_tokens: 1000, output_tokens: 10 } });
+    });
+    return;
+  }
   // The update check (DOSSIER_UPDATES_TEST_BASE_URL): no release is out, so
   // what a test stores as the latest release stays as it is.
   if (url.pathname === "/github/repos/AienTech/dossier/releases/latest") return send(response, 404, { message: "Not Found" });
@@ -122,6 +153,26 @@ createServer((request, response) => {
 
   if (url.pathname === "/arbeitsagentur/pc/v6/jobs") {
     return send(response, 200, { ergebnisliste: [{ referenznummer: "e2e-ba", stellenangebotsTitel: "Produktdesigner (m/w/d)", firma: "Hafenlogik GmbH" }], maxErgebnisse: 1 });
+  }
+
+  if (url.pathname === "/freehire/api/v1/agent/jobs/search") {
+    return send(response, 200, {
+      data: [
+        {
+          public_slug: "e2e-ledgerly-designer",
+          source: "greenhouse",
+          title: "Senior Product Designer, Payments",
+          company: "Ledgerly",
+          location: "Rotterdam",
+          url: "https://jobs.example/e2e-ledgerly",
+          work_mode: "onsite",
+          posted_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+          description: "Ledgerly is hiring a Senior Product Designer for its payments team.",
+          enrichment: { salary_min: 75000, salary_max: 90000, salary_currency: "EUR", salary_period: "year" },
+        },
+      ],
+      meta: { total: 1, limit: 20, offset: 0 },
+    });
   }
 
   send(response, 404, { error: "not found" });

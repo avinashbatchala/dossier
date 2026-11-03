@@ -37,11 +37,13 @@ export async function connectorSince(): Promise<string | null> {
 }
 
 /**
- * Whether Claude may be sent back to `uri`: Claude's own callback, or a
- * loopback address on any port (Claude's command-line app signs in through one).
+ * Whether an app may be sent back to `uri` after sign-in: Claude's own
+ * callback, a loopback address on any port (Claude's command-line app signs
+ * in through one), or another app's address added in Settings → MCP
+ * connector, exactly as added (#281).
  */
-export function allowedRedirect(uri: string): boolean {
-  if (HOSTED_CALLBACKS.has(uri)) return true;
+export function allowedRedirect(uri: string, added: readonly string[] = []): boolean {
+  if (HOSTED_CALLBACKS.has(uri) || added.includes(uri)) return true;
   try {
     const url = new URL(uri);
     return url.protocol === "http:" && isLoopback(url) && url.pathname === "/callback";
@@ -51,6 +53,41 @@ export function allowedRedirect(uri: string): boolean {
 }
 
 const isLoopback = (url: URL) => url.hostname === "localhost" || url.hostname === "127.0.0.1";
+
+/** Whether `redirectUri` is one of Claude's, which then needs no other name. */
+export function isClaudeRedirect(redirectUri: string): boolean {
+  return allowedRedirect(redirectUri);
+}
+
+/** Other apps' callback addresses, added in Settings → MCP connector (#281). */
+export async function addedRedirects(): Promise<string[]> {
+  return (await loadSettings()).connectorRedirects;
+}
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/;
+
+/** This computer, or an address on a home or office network: a private IPv4 range, a name without a dot, or .local, .lan, .internal, .home.arpa. */
+function isPrivateHost(hostname: string): boolean {
+  const ip = IPV4.exec(hostname);
+  if (ip) {
+    const [a, b] = [Number(ip[1]), Number(ip[2])];
+    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+  }
+  return hostname === "[::1]" || !hostname.includes(".") || /\.(local|lan|internal|home\.arpa)$/.test(hostname);
+}
+
+/**
+ * Why `uri` can't be another app's callback, or null (#281): https, or http
+ * only on this computer or a private network, without a fragment or a
+ * user name in it.
+ */
+export function redirectProblem(uri: string): string | null {
+  const url = URL.canParse(uri) ? new URL(uri) : null;
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) return "That isn't a web address. Copy it from the app, starting with https://.";
+  if (url.hash || url.username || url.password) return "A callback address can't have a # part or a user name in it.";
+  if (url.protocol === "http:" && !isPrivateHost(url.hostname)) return "Use an https:// address, or http:// only for an app on this computer or your own network.";
+  return null;
+}
 
 /** The same redirect, ignoring a loopback address's port, which changes each time. */
 function sameRedirect(registered: string, given: string): boolean {
@@ -122,7 +159,7 @@ export class OAuthError extends Error {
 /** The one-time code handed back once the user allows Claude in, valid for five minutes. */
 export async function issueCode(grant: { clientId: string; redirectUri: string; codeChallenge: string; resource: string }): Promise<string> {
   const current = await stamp();
-  if (!current) throw new OAuthError("invalid_request", "The Claude connector is off.");
+  if (!current) throw new OAuthError("invalid_request", "The MCP connector is off.");
   return sign("code", { cid: grant.clientId, uri: grant.redirectUri, chl: grant.codeChallenge, res: grant.resource, ...current }, CODE_SECONDS);
 }
 

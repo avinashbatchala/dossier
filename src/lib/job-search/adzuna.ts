@@ -53,7 +53,7 @@ function salaryOf(result: Result, country: string): string {
 }
 
 export function postingFromResult(result: Result, country: string): FoundPosting {
-  const created = result.created ? Date.parse(result.created) : NaN;
+  const created = result.created ? Date.parse(result.created) : Number.NaN;
   return {
     source: "ADZUNA",
     externalId: result.id.slice(0, 500),

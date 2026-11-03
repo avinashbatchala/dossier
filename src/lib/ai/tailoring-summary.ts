@@ -2,6 +2,7 @@ import type { Tone } from "@/generated/prisma/enums";
 import type { Match, Unit } from "@/lib/application-data";
 import { isParagraph } from "@/lib/letter-frame";
 import { sameName, type ProfileData } from "@/lib/profile";
+import { inEditorOrder, skillNamesIn } from "@/lib/skill-groups";
 import { TONES } from "@/lib/tones";
 
 // The first message on a new application: what was tailored (E7-6, SET-5).
@@ -77,8 +78,8 @@ export function tailoringSummary({
   const publications = resume.filter((entry) => entry.id.startsWith("publication:")).length;
   if (publications > 0) list.push(`Kept your ${publications === 1 ? "publication" : `${publications} publications`} word for word`);
 
-  const skills = (unit("skills")?.text ?? "").split(" · ").filter(Boolean);
-  const profileSkills = profile.skills.map((skill) => skill.name);
+  const skills = skillNamesIn(unit("skills")?.text ?? "");
+  const profileSkills = inEditorOrder(profile.skills).map((skill) => skill.name);
   const kept = profileSkills.filter((name) => skills.some((skill) => sameName(skill, name)));
   if (skills.length > 1 && !skills.every((skill, index) => kept[index] && sameName(skill, kept[index]))) {
     list.push(`Ordered your skills by what ${where} asks for`);

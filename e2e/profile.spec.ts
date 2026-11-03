@@ -26,6 +26,7 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
   await expect(page.getByLabel("Role", { exact: true })).toBeFocused();
   await page.getByLabel("Role", { exact: true }).fill("Design Lead");
   await page.getByLabel("Company", { exact: true }).fill("Acme Payments");
+  await page.getByLabel("About the company or role").fill("Payouts for online marketplaces, 60 people");
   await page.getByLabel("What you did").fill("Led the redesign of the payout flow\nSet up the design system");
   await page.getByRole("group", { name: "Skills you used here" }).getByRole("button", { name: "Accessibility" }).click();
   await page.getByLabel("What you did").blur();
@@ -40,7 +41,30 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
   const resume = page.getByRole("article", { name: "Resume" });
   await expect(resume).toContainText("John Doe");
   await expect(resume).toContainText("Acme Payments");
+  // The line about the company, in italics under the role's title (#257).
+  await expect(resume.getByText("Payouts for online marketplaces, 60 people")).toHaveCSS("font-style", "italic");
   await expect(resume).toContainText("Led the redesign of the payout flow");
+});
+
+test("puts skills in groups and prints a line per group on the base resume (#280)", async ({ page }) => {
+  await page.goto("/profile?section=skills");
+  await page.getByRole("button", { name: "+ New group" }).click();
+  await page.getByLabel("Name of the new group").fill("Tools");
+  await page.getByLabel("Name of the new group").press("Enter");
+  await page.getByLabel("Add to Tools").fill("Ahrefs");
+  await page.getByLabel("Add to Tools").press("Enter");
+  await expect(page.getByRole("list", { name: "Skills in Tools" })).toContainText("Ahrefs");
+  await page.getByRole("button", { name: "Figma (change its group)" }).click();
+  await page.getByRole("menuitemradio", { name: "Tools" }).click();
+  await expect(page.getByRole("list", { name: "Skills in Tools" })).toContainText("Figma");
+  await expect(page.getByText("Saved just now")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Skills in Tools" })).toContainText("Figma");
+  await page.goto("/resume");
+  const skills = page.getByRole("article", { name: "Resume" }).locator('[data-unit="skills"] p');
+  await expect(skills.last()).toHaveText("Tools: Figma · Ahrefs");
+  await expect(skills.last().locator("strong")).toHaveText("Tools:");
 });
 
 test("adds a project with its skills and shows it on the base resume (PRO-13)", async ({ page }) => {

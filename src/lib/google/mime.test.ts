@@ -42,6 +42,7 @@ describe("buildMessage", () => {
   it("never lets a header carry a line break", () => {
     expect(encodeHeader("Hi\r\nBcc: x@y.z")).toBe("Hi Bcc: x@y.z");
     expect(encodeAddress("x@y.z\r\nBcc: a@b.c")).toBe("x@y.z Bcc: a@b.c");
+    expect(encodeAddress("Jane <x@y.z\r\nBcc: a@b.c>")).toBe("Jane <x@y.z Bcc: a@b.c>");
   });
 });
 
@@ -49,6 +50,7 @@ describe("reading mail", () => {
   it("parses and decodes addresses and headers", () => {
     expect(parseAddress('"Anna Keller" <A.Keller@Northwind.example>')).toEqual({ name: "Anna Keller", address: "a.keller@northwind.example" });
     expect(parseAddress("jobs@acme.example")).toEqual({ name: "", address: "jobs@acme.example" });
+    expect(parseAddress('Anna "AK" Keller <ak@northwind.example>')).toEqual({ name: 'Anna "AK" Keller', address: "ak@northwind.example" });
     expect(decodeHeader("=?UTF-8?B?QW5uYSBNw7xsbGVy?=")).toBe("Anna Müller");
     expect(decodeHeader("=?ISO-8859-1?Q?J=F6rg_Schmidt?=")).toBe("Jörg Schmidt");
   });
@@ -61,5 +63,12 @@ describe("reading mail", () => {
 
   it("turns HTML into text", () => {
     expect(htmlToText("<p>Hi&nbsp;Jane,</p><p>Could we talk?<br>Anna</p><style>p{}</style>")).toBe("Hi Jane,\nCould we talk?\nAnna");
+  });
+
+  it("reads long, broken mail quickly", () => {
+    const started = performance.now();
+    htmlToText(`${"<".repeat(100_000)}${" ".repeat(100_000)}x`);
+    parseAddress(`a${" ".repeat(100_000)}b`);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

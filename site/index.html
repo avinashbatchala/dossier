@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dossier · Your job search, on your own server</title>
+  <meta name="description" content="Dossier is a free, self-hosted job search app. One profile, a tailored resume and cover letter for every job, written only from facts in your profile, and every application tracked from draft to offer.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eeebe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://dossier.aien.me/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Dossier">
+  <meta property="og:title" content="Dossier · Your job search, on your own server">
+  <meta property="og:description" content="A free, self-hosted job search app: one profile, a tailored resume and cover letter for every job, and every application tracked from draft to offer.">
+  <meta property="og:url" content="https://dossier.aien.me/">
+  <meta property="og:image" content="https://dossier.aien.me/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Dossier: your job search, on your own server">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="apple-icon.png">
+  <link rel="preload" href="fonts/Newsreader-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Before the first paint, so a chosen theme doesn't flash.
+    try {
+      const theme = localStorage.getItem("theme");
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch {}
+    document.documentElement.classList.add("js");
+  </script>
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="14.08" style="fill:var(--mark-bg)"/><path style="fill:var(--mark-fg)" transform="matrix(0.02844 0 0 -0.02844 10.214 51.200)" d="M1179.8 691.9Q1179.8 974 1032.5 1107.7Q885.3 1241.3 625.7 1241.3H354.9L338.3 1350H674.8Q936.6 1350 1111 1279.8Q1285.4 1209.6 1372.4 1068.2Q1459.5 926.8 1459.5 714.2Q1459.5 486.8 1357.2 327.4Q1254.8 168 1077.9 84Q900.9 0 678.3 0H338.3L354.9 108.7H646.1Q807.3 108.7 927.1 168.3Q1047 227.8 1113.4 356.5Q1179.8 485.1 1179.8 691.9ZM72.3 0V41L223.4 95.9V1254.2L72.3 1308.9V1350H489.4V0Z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol>
+      <symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+      <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/></symbol>
+      <symbol id="i-languages" viewBox="0 0 24 24"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+      <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+      <symbol id="i-out" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M11.53 2.3a.53.53 0 0 1 .94 0l2.31 4.68a2.12 2.12 0 0 0 1.6 1.16l5.16.76a.53.53 0 0 1 .3.9l-3.74 3.64a2.12 2.12 0 0 0-.61 1.88l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a2.12 2.12 0 0 0-1.97 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.13a2.12 2.12 0 0 0-.61-1.88L2.16 9.8a.53.53 0 0 1 .29-.9l5.17-.76a2.12 2.12 0 0 0 1.6-1.16z"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></symbol>
+      <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+      <symbol id="i-cpu" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></symbol>
+      <symbol id="i-toggle" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6"/><circle cx="8" cy="12" r="2"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path stroke="none" fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></symbol>
+    </defs>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" data-nav>
+    <div class="nav__inner wrap">
+      <a class="brand" href="#top" aria-label="Dossier, back to the top">
+        <svg class="mark" width="30" height="30" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span>Dossier</span>
+      </a>
+      <nav class="nav__links" aria-label="Sections">
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/AienTech/dossier/wiki">Docs</a>
+      </nav>
+      <div class="nav__end">
+        <button class="icon-button" type="button" data-theme-toggle aria-label="Switch to dark mode">
+          <svg class="icon icon--moon" aria-hidden="true"><use href="#i-moon"/></svg>
+          <svg class="icon icon--sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        </button>
+        <a class="button button--ghost button--small" href="https://github.com/AienTech/dossier">
+          <svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>
+          <span>GitHub</span>
+          <span class="count" data-stars hidden></span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="wrap hero__text">
+        <a class="release" href="https://github.com/AienTech/dossier/releases/latest" data-release>
+          <span class="release__dot" aria-hidden="true"></span>
+          <span data-release-text>Free and open source</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <h1 class="display">Your job search, <em>on your own server.</em></h1>
+        <p class="lede">
+          One profile, a tailored resume and cover letter for every job, written only from facts in your profile, and every application tracked from draft to offer. With the AI model you choose, and your data in your own database.
+        </p>
+        <div class="actions">
+          <a class="button button--primary" href="#install">
+            Install Dossier
+            <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </a>
+          <a class="button button--secondary" href="#tour">See it in use</a>
+        </div>
+        <p class="fineprint">Free software under the AGPL-3.0. Runs with Docker on Linux, macOS and Windows.</p>
+      </div>
+
+      <div class="wrap hero__stage">
+        <div class="window window--hero" data-parallax-root>
+          <div class="window__bar" aria-hidden="true">
+            <span class="window__dots"><i></i><i></i><i></i></span>
+            <span class="window__url">dossier.example.com</span>
+          </div>
+          <img src="images/application.png" width="2880" height="1800" alt="An application in Dossier: the tailored resume for a Senior Product Designer job, with a chat beside it to refine it" fetchpriority="high">
+        </div>
+
+        <div class="float float--funnel" data-parallax="-0.06" aria-hidden="true">
+          <p class="float__label">Your funnel</p>
+          <div class="stats">
+            <div><b>7</b><span>sent</span></div>
+            <div><b>71%</b><span>heard back</span></div>
+            <div><b>3</b><span>interviews</span></div>
+          </div>
+          <div class="flow">
+            <i style="--w:30; --c:var(--status-sent)"></i>
+            <i style="--w:24; --c:var(--status-screening)"></i>
+            <i style="--w:18; --c:var(--status-interview)"></i>
+            <i style="--w:12; --c:var(--status-offer)"></i>
+          </div>
+        </div>
+
+        <div class="float float--pdf" data-parallax="0.05" aria-hidden="true">
+          <span class="pdf__icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span>
+          <span class="pdf__text">
+            <b>Jane Doe · Resume · Ledgerly.pdf</b>
+            <span>A4 · 1 page · Editorial theme</span>
+          </span>
+          <span class="pdf__get"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+        </div>
+      </div>
+
+      <div class="wrap models">
+        <p>Writes with the model you choose</p>
+        <ul>
+          <li>Ollama</li>
+          <li>LM Studio</li>
+          <li>OpenAI-compatible APIs</li>
+          <li>Anthropic</li>
+          <li>Mistral</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">How it works</p>
+          <h2 class="display" id="how-title">From a pasted posting to a sent application.</h2>
+        </header>
+
+        <div class="steps">
+          <ol class="steps__list">
+            <li class="step is-active" data-step="0">
+              <span class="step__no">01</span>
+              <h3>Write your profile once.</h3>
+              <p>Basics, skills and languages, experience, projects, education, publications and references, in the order you choose. Start it from an existing resume (PDF, Word or Markdown) if you like. A strength meter counts only what a profile needs.</p>
+              <img class="step__image" src="images/profile.png" width="2880" height="1800" loading="lazy" alt="The profile editor, with its sections and strength meter">
+            </li>
+            <li class="step" data-step="1">
+              <span class="step__no">02</span>
+              <h3>Paste a posting.</h3>
+              <p>Dossier pulls out the details and requirements and matches them against your profile. What you have is ticked off, with where it comes from. What you don't have is shown as a gap.</p>
+              <img class="step__image" src="images/new-application.png" width="2880" height="1800" loading="lazy" alt="A new application, showing how the profile matches the posting's requirements">
+            </li>
+            <li class="step" data-step="2">
+              <span class="step__no">03</span>
+              <h3>Get a tailored resume and cover letter.</h3>
+              <p>In the tone you pick, set in one of twelve themes and printed to PDF on your server. Ask for changes in a chat, edit or regenerate any part, undo what the AI changed or go back to any earlier version.</p>
+              <img class="step__image" src="images/application.png" width="2880" height="1800" loading="lazy" alt="An application with its tailored resume and the chat that refines it">
+            </li>
+            <li class="step" data-step="3">
+              <span class="step__no">04</span>
+              <h3>Track it to an offer.</h3>
+              <p>A board and a table of every application, and a dashboard with your funnel, a week-by-week chart and what's worth a look next, upcoming interviews included.</p>
+              <img class="step__image" src="images/dashboard.png" width="2880" height="1800" loading="lazy" alt="The dashboard: your funnel, a week-by-week chart and what's worth a look next">
+            </li>
+          </ol>
+
+          <div class="steps__stage" aria-hidden="true">
+            <div class="window">
+              <div class="window__bar">
+                <span class="window__dots"><i></i><i></i><i></i></span>
+                <span class="window__url">dossier.example.com</span>
+              </div>
+              <div class="window__frames">
+                <img class="is-active" data-frame="0" src="images/profile.png" width="2880" height="1800" loading="lazy" alt="">
+                <img data-frame="1" src="images/new-application.png" width="2880" height="1800" loading="lazy" alt="">
+                <img data-frame="2" src="images/application.png" width="2880" height="1800" loading="lazy" alt="">
+                <img data-frame="3" src="images/dashboard.png" width="2880" height="1800" loading="lazy" alt="">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" aria-labelledby="honest-title">
+      <div class="wrap band__grid">
+        <div class="reveal">
+          <p class="eyebrow eyebrow--band">Honest by design</p>
+          <h2 class="display" id="honest-title">It never invents experience.</h2>
+          <p class="band__lede">Drafts only use facts from your profile. When a posting asks for something your profile doesn't have, Dossier shows you the gap instead of papering over it, and you decide what to do about it.</p>
+          <ul class="checks">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Every AI change can be undone, and every document keeps its history.</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nothing is sent, applied for or deleted without you.</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Gaps you fill go into your profile, for every application after.</li>
+          </ul>
+        </div>
+
+        <figure class="match reveal" aria-label="Example: how a profile matches a posting">
+          <div class="match__head">
+            <span>How you match</span>
+            <span class="match__count">4 of 5 covered by your profile</span>
+          </div>
+          <ul class="match__rows">
+            <li><span class="tick"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>5+ years of product design</b><small>3 roles in your profile, since Sep 2015</small></span></li>
+            <li><span class="tick"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>Built or maintained a design system</b><small>Used at Northwind Logistics</small></span></li>
+            <li><span class="tick"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>Strong prototyping skills in Figma</b><small>Used at Fieldnote</small></span></li>
+            <li class="is-gap"><span class="tick"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></span><span><b>Experience with Kubernetes</b><small>Not in your profile yet</small></span><span class="chip">+ Add to profile</span></li>
+            <li><span class="tick"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span><span><b>Dutch is a plus</b><small>Dutch: Native</small></span></li>
+          </ul>
+          <figcaption>Gaps aren't dealbreakers. I'll never invent experience. The important ones get addressed honestly in your cover letter.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">Features</p>
+          <h2 class="display" id="features-title">Everything between “I'm looking” and “I accept”.</h2>
+        </header>
+
+        <div class="bento">
+          <article class="tile tile--wide tile--shot reveal">
+            <div class="tile__text">
+              <svg class="icon tile__icon" aria-hidden="true"><use href="#i-search"/></svg>
+              <h3>Find jobs</h3>
+              <p>Search postings near your city, or anywhere you choose, through JSearch (LinkedIn, Indeed and more) or Adzuna. Score any of them against your profile and start an application with one click.</p>
+            </div>
+            <div class="tile__shot"><img src="images/find-jobs.png" width="2880" height="1800" loading="lazy" alt="Find jobs: postings near the profile's city, with one open"></div>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-rocket"/></svg>
+            <h3>Startups</h3>
+            <p>Startups that are hiring, from YC startups' job posts and Hacker News' monthly “Who is hiring?” thread, kept to the ones that hire where you live or remotely from your country, and ranked against your profile.</p>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-bot"/></svg>
+            <h3>Job agent</h3>
+            <p>Once a day it runs a search for you, skips what you've seen and keeps the best new postings, with its reasons. It can prepare drafts for your review. It never sends or applies.</p>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-palette"/></svg>
+            <h3>Twelve resume themes</h3>
+            <p>And a theme builder, previewed live and printed to PDF on your server. Duplicate themes, or share them as files.</p>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-languages"/></svg>
+            <h3>Documents in 21 languages</h3>
+            <p>Resumes and cover letters in any of 21 built-in languages, with headings, dates and language levels to match.</p>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-send"/></svg>
+            <h3>Ready to send</h3>
+            <p>An email to go with each application, to whoever the posting names, with the resume and cover letter PDFs to attach.</p>
+          </article>
+
+          <article class="tile tile--wide tile--shot reveal">
+            <div class="tile__text">
+              <svg class="icon tile__icon" aria-hidden="true"><use href="#i-mail"/></svg>
+              <h3>Gmail and Calendar</h3>
+              <p>Send from your own address, see employers' replies next to each application, have answers drafted from your profile, and keep interviews in step with Google Calendar. Optional, and nothing goes out without your confirmation.</p>
+            </div>
+            <div class="tile__shot"><img src="images/inbox.png" width="2880" height="1800" loading="lazy" alt="The inbox: employers' replies from Gmail, what each one asks, and mail to link to an application"></div>
+          </article>
+
+          <article class="tile reveal">
+            <svg class="icon tile__icon" aria-hidden="true"><use href="#i-chat"/></svg>
+            <h3>Claude connector</h3>
+            <p>Use Dossier from Claude, on your own Claude plan: search jobs, score them, and save the resume and letter Claude writes as a draft, checked like Dossier's own. Optional.</p>
+          </article>
+
+          <article class="tile tile--wide tile--data reveal">
+            <div>
+              <svg class="icon tile__icon" aria-hidden="true"><use href="#i-database"/></svg>
+              <h3>Your data, all of it</h3>
+              <p>Everything lives in your own PostgreSQL database, and leaves it on your terms.</p>
+            </div>
+            <ul class="data-list">
+              <li><b>Export and import</b><span>Everything, as one file.</span></li>
+              <li><b>Nightly backups</b><span>Kept on your server.</span></li>
+              <li><b>Delete everything</b><span>One button, and it's gone.</span></li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--alt" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap privacy">
+        <header class="privacy__head reveal">
+          <p class="eyebrow">Privacy</p>
+          <h2 class="display" id="privacy-title">Your profile lives with you.</h2>
+          <p>Dossier is for one person on a small server: one password, your data in your own PostgreSQL database, and an AI model of your choice.</p>
+          <a class="link" href="https://github.com/AienTech/dossier/wiki/Privacy">What goes where <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </header>
+        <div class="privacy__grid">
+          <div class="point reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>
+            <h3>On your server</h3>
+            <p>No accounts and no service in between. Run it on your laptop, or on a small server with your own domain.</p>
+          </div>
+          <div class="point reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg>
+            <h3>A local model, if you like</h3>
+            <p>With Ollama or LM Studio, your profile, postings and documents never leave your hardware. A hosted model receives what it writes from.</p>
+          </div>
+          <div class="point reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-toggle"/></svg>
+            <h3>Asked, not assumed</h3>
+            <p>Dossier asks once whether it may send a daily usage ping, a random ID and the version number, and sends nothing until you agree.</p>
+          </div>
+          <div class="point reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>
+            <h3>Open to read</h3>
+            <p>Every line is on GitHub under the AGPL-3.0, so you can check what it does, change it and share it.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="tour" aria-labelledby="tour-title">
+      <div class="wrap">
+        <header class="section__head section__head--center reveal">
+          <p class="eyebrow">A look around</p>
+          <h2 class="display" id="tour-title">Calm screens for a stressful search.</h2>
+        </header>
+
+        <div class="gallery reveal" data-tabs>
+          <div class="segmented" role="tablist" aria-label="Screens">
+            <button type="button" role="tab" id="tab-tour" aria-controls="panel-tour" aria-selected="true">Tour</button>
+            <button type="button" role="tab" id="tab-board" aria-controls="panel-board" aria-selected="false" tabindex="-1">Board</button>
+            <button type="button" role="tab" id="tab-resume" aria-controls="panel-resume" aria-selected="false" tabindex="-1">Resume</button>
+            <button type="button" role="tab" id="tab-jobs" aria-controls="panel-jobs" aria-selected="false" tabindex="-1">Find jobs</button>
+            <button type="button" role="tab" id="tab-inbox" aria-controls="panel-inbox" aria-selected="false" tabindex="-1">Inbox</button>
+            <button type="button" role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1">Calendar</button>
+          </div>
+
+          <div class="window window--gallery">
+            <div class="window__bar" aria-hidden="true">
+              <span class="window__dots"><i></i><i></i><i></i></span>
+              <span class="window__url">dossier.example.com</span>
+            </div>
+            <figure role="tabpanel" id="panel-tour" aria-labelledby="tab-tour">
+              <img src="images/demo.gif" width="1280" height="800" loading="lazy" alt="Dossier in use: the dashboard, dragging a card on the board, a new application from a pasted posting, refining the tailored resume in the chat, the cover letter, and switching resume themes">
+              <figcaption>The dashboard, the board, a new application from a pasted posting, refining it in the chat, and switching themes. Played at 1.2× speed with a stand-in AI that answers at once.</figcaption>
+            </figure>
+            <figure role="tabpanel" id="panel-board" aria-labelledby="tab-board" hidden>
+              <img src="images/applications.png" width="3360" height="1800" loading="lazy" alt="The applications board, with columns from draft to offer">
+              <figcaption>Every application on a board, from draft to offer.</figcaption>
+            </figure>
+            <figure role="tabpanel" id="panel-resume" aria-labelledby="tab-resume" hidden>
+              <img src="images/resume.png" width="2880" height="1800" loading="lazy" alt="The base resume next to its themes">
+              <figcaption>The base resume, with twelve themes and a theme builder.</figcaption>
+            </figure>
+            <figure role="tabpanel" id="panel-jobs" aria-labelledby="tab-jobs" hidden>
+              <img src="images/find-jobs.png" width="2880" height="1800" loading="lazy" alt="Find jobs: postings near the profile's city, with one open">
+              <figcaption>Find jobs, and start an application from a posting.</figcaption>
+            </figure>
+            <figure role="tabpanel" id="panel-inbox" aria-labelledby="tab-inbox" hidden>
+              <img src="images/inbox.png" width="2880" height="1800" loading="lazy" alt="The inbox: employers' replies from Gmail, what each one asks, and mail to link to an application">
+              <figcaption>Replies from Gmail, read by the AI, with answers it drafts.</figcaption>
+            </figure>
+            <figure role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+              <img src="images/calendar.png" width="2880" height="1800" loading="lazy" alt="The dashboard on a wide window, with the calendar beside the cards: the month, and the week ahead with an interview among the Google Calendar's events">
+              <figcaption>Your interviews and Google Calendar on the dashboard, kept in step.</figcaption>
+            </figure>
+          </div>
+          <p class="gallery__note">The screens show the demo data: Jane Doe is made up.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--alt" id="install" aria-labelledby="install-title">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">Install</p>
+          <h2 class="display" id="install-title">Running in three steps.</h2>
+          <p class="section__lede">All you need is <a href="https://docs.docker.com/desktop/">Docker Desktop</a> on macOS or Windows, or Docker Engine with its Compose plugin on Linux, and about 2 GB of free memory.</p>
+        </header>
+
+        <div class="install reveal" data-tabs>
+          <div class="segmented" role="tablist" aria-label="Where to run it">
+            <button type="button" role="tab" id="tab-local" aria-controls="panel-local" aria-selected="true">On your computer</button>
+            <button type="button" role="tab" id="tab-server" aria-controls="panel-server" aria-selected="false" tabindex="-1">On a server</button>
+          </div>
+
+          <div role="tabpanel" id="panel-local" aria-labelledby="tab-local" class="install__steps">
+            <ol class="timeline">
+              <li>
+                <h3>Fetch the Compose file, and make the secrets Dossier needs.</h3>
+                <div class="code" data-code>
+                  <pre><code><span class="c-mute">$</span> mkdir ~/dossier &amp;&amp; cd ~/dossier
+<span class="c-mute">$</span> curl -fsSL -o compose.yml https://raw.githubusercontent.com/AienTech/dossier/main/compose.production.yml
+<span class="c-mute">$</span> echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" &gt; .env
+<span class="c-mute">$</span> echo "DOSSIER_SECRET=$(openssl rand -base64 32)" &gt;&gt; .env</code></pre>
+                  <button class="copy" type="button" data-copy><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+                </div>
+                <p class="note">On an Apple Silicon Mac, also run <code>printf 'services:\n  app:\n    platform: linux/amd64\n' &gt; compose.override.yml</code>: the image is built for Intel and AMD processors, and Docker Desktop runs it under emulation.</p>
+              </li>
+              <li>
+                <h3>Choose your password.</h3>
+                <div class="code" data-code>
+                  <pre><code><span class="c-mute">$</span> docker run --rm -it --platform linux/amd64 ghcr.io/aientech/dossier hash-password</code></pre>
+                  <button class="copy" type="button" data-copy><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+                </div>
+                <p class="note">It asks for the password twice and prints a line that starts with <code>argon2id:</code>. Add it to <code>.env</code> as <code>DOSSIER_PASSWORD=argon2id:…</code>. Dossier only keeps the hash, never the password.</p>
+              </li>
+              <li>
+                <h3>Start it.</h3>
+                <div class="code" data-code>
+                  <pre><code><span class="c-mute">$</span> docker compose up -d</code></pre>
+                  <button class="copy" type="button" data-copy><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button>
+                </div>
+                <p class="note">Open <code>http://localhost:3000</code>, sign in, and pick an AI model in <b>Settings → AI provider</b>. The first start downloads the image (about 1.7 GB). <a href="https://github.com/AienTech/dossier/wiki/Choosing-an-AI-provider">Choosing an AI provider</a></p>
+              </li>
+            </ol>
+          </div>
+
+          <div role="tabpanel" id="panel-server" aria-labelledby="tab-server" class="install__server" hidden>
+            <p class="install__intro">Put Dossier on a server, on your own domain with HTTPS. Give it at least 2 vCPUs and 2 GB of memory. The installation guide walks through each way, step by step.</p>
+            <div class="guides">
+              <a class="guide" href="https://github.com/AienTech/dossier/wiki/Self-host-on-an-Ubuntu-server">
+                <b>Ubuntu server</b><span>Docker Compose with Caddy for HTTPS, or Node.js without Docker.</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-out"/></svg>
+              </a>
+              <a class="guide" href="https://github.com/AienTech/dossier/wiki/Self-host-with-Coolify">
+                <b>Coolify</b><span>The app and PostgreSQL in one resource, with the secrets made for you.</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-out"/></svg>
+              </a>
+              <a class="guide" href="https://github.com/AienTech/dossier/wiki/Self-host-with-Dokploy">
+                <b>Dokploy</b><span>The published image and a Dokploy database. Updates take over once healthy.</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-out"/></svg>
+              </a>
+              <a class="guide" href="https://github.com/AienTech/dossier/wiki/Self-host-with-CapRover">
+                <b>CapRover</b><span>The published image, next to CapRover's PostgreSQL one-click app.</span>
+                <svg class="icon" aria-hidden="true"><use href="#i-out"/></svg>
+              </a>
+            </div>
+            <p class="install__more">On your own computer, you can also run it with <a href="https://github.com/AienTech/dossier/wiki/Run-locally-with-Docker">plain Docker</a> or <a href="https://github.com/AienTech/dossier/wiki/Run-locally-with-Node.js">Node.js</a>.</p>
+          </div>
+        </div>
+
+        <div class="limits reveal">
+          <h3>Good to know</h3>
+          <ul>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span><b>Desktop only.</b> Made for a laptop or desktop browser, not for phones.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg><span><b>Single user.</b> One password and one profile; there are no accounts.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-languages"/></svg><span><b>English interface.</b> The documents it writes can be in other languages.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg><span><b>One instance.</b> Run a single copy of the app per database.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="finale" aria-labelledby="finale-title">
+      <div class="wrap finale__inner reveal">
+        <svg class="mark mark--large" width="64" height="64" aria-hidden="true"><use href="#i-mark"/></svg>
+        <h2 class="display" id="finale-title">Your next application starts here.</h2>
+        <p>Free, open source, and yours to run.</p>
+        <div class="actions">
+          <a class="button button--primary" href="#install">
+            Install Dossier
+            <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </a>
+          <a class="button button--secondary" href="https://github.com/AienTech/dossier">
+            <svg class="icon" aria-hidden="true"><use href="#i-star"/></svg>
+            Star on GitHub
+          </a>
+          <a class="button button--secondary" href="https://github.com/sponsors/AienTech">
+            <svg class="icon icon--heart" aria-hidden="true"><use href="#i-heart"/></svg>
+            Sponsor
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer__grid">
+      <div class="footer__brand">
+        <a class="brand" href="#top">
+          <svg class="mark" width="26" height="26" aria-hidden="true"><use href="#i-mark"/></svg>
+          <span>Dossier</span>
+        </a>
+        <p>Your job search, on your own server. Free software under the <a href="https://github.com/AienTech/dossier/blob/main/LICENSE">GNU AGPL-3.0</a>.</p>
+      </div>
+      <nav aria-label="Project">
+        <h2>Project</h2>
+        <ul>
+          <li><a href="https://github.com/AienTech/dossier">Source code</a></li>
+          <li><a href="https://github.com/AienTech/dossier/releases">Releases</a></li>
+          <li><a href="https://github.com/AienTech/dossier/issues/new/choose">Report a bug</a></li>
+          <li><a href="https://github.com/sponsors/AienTech">Sponsor</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Documentation">
+        <h2>Documentation</h2>
+        <ul>
+          <li><a href="https://github.com/AienTech/dossier/wiki">Installation guide</a></li>
+          <li><a href="https://github.com/AienTech/dossier/wiki/Choosing-an-AI-provider">Choosing an AI provider</a></li>
+          <li><a href="https://github.com/AienTech/dossier/wiki/Upgrading">Upgrading</a></li>
+          <li><a href="https://github.com/AienTech/dossier/wiki/Troubleshooting">Troubleshooting</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Policies">
+        <h2>Trust</h2>
+        <ul>
+          <li><a href="https://github.com/AienTech/dossier/blob/main/PRIVACY.md">Privacy</a></li>
+          <li><a href="https://github.com/AienTech/dossier/blob/main/SECURITY.md">Security</a></li>
+          <li><a href="https://github.com/AienTech/dossier/blob/main/DEVELOPMENT.md">Development</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="wrap footer__base">
+      <p>This page sets no cookies and loads no fonts or scripts from other sites.</p>
+    </div>
+  </footer>
+</body>
+</html>

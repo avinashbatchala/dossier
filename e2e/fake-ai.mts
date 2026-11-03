@@ -156,6 +156,7 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
         role: "Design Lead",
         company: "Acme Payments",
         location: "Utrecht",
+        descriptor: "Payouts for online marketplaces, 60 people",
         startYear: 2021,
         startMonth: 3,
         endYear: null,

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { decryptApiKey, encryptApiKey } from "@/lib/ai/api-key";
-import { decryptSecret, encryptSecret, JOB_SOURCE_KEY } from "@/lib/secrets";
+import { decryptSecret, encryptSecret, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 import { createTestClient, resetDatabase } from "@/test/db";
 
 import { seedBuiltIns } from "../../prisma/seed/built-ins";
@@ -73,6 +73,20 @@ describe("importExport (E10-6)", () => {
     if (!parsed.ok) throw new Error(parsed.error);
     await importExport(prisma(), parsed.data);
     expect(await prisma().application.findFirstOrThrow({ where: { company: "Northstar Health" } })).toMatchObject({ nextInterviewAt: null });
+  });
+
+  it("keeps skill groups, and reads files from before them as having none (#280)", async () => {
+    await prisma().skill.updateMany({ where: { name: "Figma" }, data: { group: "Tools" } });
+    const file = await asFile();
+    expect(file.profile.skills.find((skill) => skill.name === "Figma")).toMatchObject({ group: "Tools" });
+    await importExport(prisma(), file);
+    expect(await prisma().skill.findFirstOrThrow({ where: { name: "Figma" } })).toMatchObject({ group: "Tools" });
+
+    const older = { ...file, schemaVersion: 6, profile: { ...file.profile, skills: file.profile.skills.map((skill) => Object.fromEntries(Object.entries(skill).filter(([key]) => key !== "group"))) } };
+    const parsed = parseExport(JSON.stringify(older));
+    if (!parsed.ok) throw new Error(parsed.error);
+    await importExport(prisma(), parsed.data);
+    expect(await prisma().skill.findFirstOrThrow({ where: { name: "Figma" } })).toMatchObject({ group: "" });
   });
 
   it("deletes every background job, since their inputs and results hold the data it replaces", async () => {
@@ -267,6 +281,22 @@ describe("importExport (E10-6)", () => {
     expect(await prisma().publication.count()).toBe(0);
   });
 
+  it("restores the line about each role's company, and reads files from before it with none (#257)", async () => {
+    const file = JSON.parse(JSON.stringify(await buildExport(prisma(), { now })));
+    const lines = async () => (await prisma().experience.findMany({ orderBy: { sort: "asc" } })).map((entry) => entry.descriptor);
+    const before = await lines();
+    expect(before).toContain("Freight platform for European carriers, 300 people");
+    await importExport(prisma(), exportSchema.parse(file));
+    expect(await lines()).toEqual(before);
+
+    // undefined: left out of the JSON, as in a file from before it.
+    const experience = file.profile.experience.map((entry: object) => ({ ...entry, descriptor: undefined }));
+    const parsed = parseExport(JSON.stringify({ ...file, schemaVersion: 5, profile: { ...file.profile, experience } }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    await importExport(prisma(), parsed.data);
+    expect(await lines()).toEqual(before.map(() => ""));
+  });
+
   it("restores the photo, the themes' photo options and each application's Photo switch, and reads older files with the defaults (#224)", async () => {
     const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
     await prisma().profileField.createMany({ data: [{ key: "photo", value: png }, { key: "photoOnResumes", value: "false" }] });
@@ -331,6 +361,25 @@ describe("importExport (E10-6)", () => {
     expect(await value("jsearchKeyEnc")).toBe("ak-from-file");
     expect(await value("adzunaKeyEnc")).toBe("adz-current");
     expect(decryptApiKey((await prisma().setting.findUniqueOrThrow({ where: { key: "apiKeyEnc" } })).value, secret)).toBe("sk-current");
+  });
+
+  it("never exports the TypeSafe key, and keeps this server's on import (#274)", async () => {
+    await prisma().setting.createMany({
+      data: [
+        { key: "typesafeKeyEnc", value: encryptSecret(TYPESAFE_KEY, "ts-current", secret) },
+        { key: "scorer", value: "JEV" },
+      ],
+    });
+    // Not even with the keys asked for: the TypeSafe key belongs to this server.
+    const file = await asFile({ includeApiKey: true });
+    expect(file.settings.map((setting) => setting.key)).not.toContain("typesafeKeyEnc");
+    expect(file.settings).toContainEqual({ key: "scorer", value: "JEV" });
+    expect(JSON.stringify(file)).not.toContain("ts-current");
+
+    await importExport(prisma(), { ...file, settings: file.settings.filter((setting) => setting.key !== "scorer") });
+    const kept = await prisma().setting.findUniqueOrThrow({ where: { key: "typesafeKeyEnc" } });
+    expect(decryptSecret(TYPESAFE_KEY, kept.value, secret)).toBe("ts-current");
+    expect(await prisma().setting.findUnique({ where: { key: "scorer" } })).toBeNull();
   });
 
   it("points documents at the base theme when their theme isn't in the file", async () => {

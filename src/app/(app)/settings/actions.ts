@@ -18,10 +18,14 @@ import { credentialsFor, jobSearchView, loadJobSearchConfig, requestContext } fr
 import { JOB_SOURCES, JSEARCH_HOSTS } from "@/lib/job-search/search";
 import { cancelJob, startJob } from "@/lib/jobs/runner";
 import { checkForUpdate } from "@/lib/update-check";
+import { redirectProblem } from "@/lib/connector/oauth";
 import { countTailoredDocuments, deleteAllDownloads, zipPdfsJob } from "@/lib/jobs/zip-pdfs";
 import { disconnectGoogle } from "@/lib/google/account";
 import { prisma } from "@/lib/prisma";
-import { applySecretChange, JOB_SOURCE_KEY } from "@/lib/secrets";
+import { jevKey, loadScoringConfig, scoringView } from "@/lib/scoring/config";
+import { SCORERS } from "@/lib/scoring/scorers";
+import { askJev } from "@/lib/scoring/typesafe";
+import { applySecretChange, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 import { isJobRetention } from "@/lib/settings";
@@ -171,6 +175,48 @@ export const testJobSource = action(z.object({}), async () => {
   }
 });
 
+// Settings → Scoring (#274). Each returns what the section shows, never the key.
+
+const loadScoringView = async () => scoringView(await loadScoringConfig());
+
+/** What scores postings: the AI model, or Jev. */
+export const saveScorer = action(z.object({ scorer: z.enum(SCORERS) }), async ({ scorer }) => {
+  await saveSettings({ scorer });
+  return loadScoringView();
+});
+
+/** Saves the TypeSafe key, encrypted for it only, or removes it. */
+export const saveTypesafeKey = action(
+  z.object({
+    change: z.discriminatedUnion("action", [
+      z.object({ action: z.literal("set"), value: z.string().trim().min(1).max(1000) }),
+      z.object({ action: z.literal("clear") }),
+    ]),
+  }),
+  async ({ change }) => {
+    const current = await loadSettings();
+    await saveSettings({ typesafeKeyEnc: applySecretChange(TYPESAFE_KEY, current.typesafeKeyEnc, change) });
+    return loadScoringView();
+  },
+);
+
+/** "Test connection": one yes-or-no question to Jev about a sentence, timed. It costs a few dozen tokens. */
+export const testJev = action(z.object({}), async () => {
+  const jev = jevKey(await loadScoringConfig());
+  if (jev.problem !== null) return { connected: false as const, message: jev.problem };
+  const started = performance.now();
+  try {
+    const { model } = await askJev(
+      { state: "Dossier is checking that it can reach Jev.", questions: { check: { type: "noul", instructions: "Is this text about checking a connection?" } } },
+      { key: jev.key, timeoutMs: TEST_TIMEOUT_MS, retryDelaysMs: [] },
+    );
+    return { connected: true as const, model, seconds: Math.round((performance.now() - started) / 100) / 10 };
+  } catch (error) {
+    if (error instanceof AiError) return { connected: false as const, message: error.message };
+    throw error;
+  }
+});
+
 /**
  * Saves the settings that are a plain choice or switch, each as it changes
  * (E10-2, E10-3). Only the fields given are touched.
@@ -287,19 +333,43 @@ export const checkUpdates = action(z.object({}), async () => {
   return result.status === "newer" ? result : { status: result.status };
 });
 
-// Settings → Claude connector (#221). Every connector token carries
-// connectorEnabledAt, so a new value signs Claude out.
+// Settings → MCP connector (#221, #281). Every connector token carries
+// connectorEnabledAt, so a new value signs every app out.
 
-/** Turns the Claude connector on, or off, which closes its addresses and signs Claude out. */
+/** Turns the MCP connector on, or off, which closes its addresses and signs every app out. */
 export const setConnector = action(z.object({ on: z.boolean() }), async ({ on }) => {
   await saveSettings({ connectorEnabledAt: on ? new Date().toISOString() : null });
   return { on };
 });
 
-/** "Disconnect Claude": the connector stays on, but Claude has to connect again. */
-export const disconnectClaude = action(z.object({}), async (_input, { toast }) => {
-  if (!(await loadSettings()).connectorEnabledAt) throw new ActionError("The Claude connector is off already.");
+/** "Disconnect all apps": the connector stays on, but Claude and every other app have to connect again. */
+export const disconnectApps = action(z.object({}), async (_input, { toast }) => {
+  if (!(await loadSettings()).connectorEnabledAt) throw new ActionError("The MCP connector is off already.");
   await saveSettings({ connectorEnabledAt: new Date().toISOString() });
-  toast("Claude is disconnected. Connect it again from Claude to use Dossier there.");
+  toast("Every app is disconnected. Connect again from an app to use Dossier there.");
   return null;
+});
+
+const MAX_REDIRECTS = 10;
+
+/** Lets another MCP app sign in, by the address it comes back to (#281). */
+export const addConnectorRedirect = action(
+  z.object({ uri: z.string().trim().min(1, "Paste the app's callback address first.").max(2000) }),
+  async ({ uri }) => {
+    const problem = redirectProblem(uri);
+    if (problem) throw new ActionError(problem);
+    const { connectorRedirects } = await loadSettings();
+    if (connectorRedirects.includes(uri)) return { redirects: connectorRedirects };
+    if (connectorRedirects.length >= MAX_REDIRECTS) throw new ActionError(`That's ${MAX_REDIRECTS} apps already. Remove one first.`);
+    const redirects = [...connectorRedirects, uri];
+    await saveSettings({ connectorRedirects: redirects });
+    return { redirects };
+  },
+);
+
+/** Stops an app signing in again by that address. One signed in already keeps its tokens until Disconnect all apps. */
+export const removeConnectorRedirect = action(z.object({ uri: z.string().max(2000) }), async ({ uri }) => {
+  const redirects = (await loadSettings()).connectorRedirects.filter((entry) => entry !== uri);
+  await saveSettings({ connectorRedirects: redirects });
+  return { redirects };
 });

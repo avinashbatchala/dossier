@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { googleFetch } from "./account";
 import { googleUrl } from "./endpoints";
+import { isGone } from "./errors";
 import { buildMessage, decodeHeader, htmlToText, toBase64Url, type OutgoingMail } from "./mime";
 
 // The parts of the Gmail API Dossier uses (E15-2, E15-3).
@@ -99,8 +100,14 @@ export function readMessage(json: unknown): ReadMail {
   };
 }
 
-export async function getMessage(id: string, signal?: AbortSignal): Promise<ReadMail> {
-  return readMessage(await googleFetch("read", api(`/messages/${encodeURIComponent(id)}?format=full`), { signal }));
+/** One message, or null when it was deleted after Gmail listed it. */
+export async function getMessage(id: string, signal?: AbortSignal): Promise<ReadMail | null> {
+  try {
+    return readMessage(await googleFetch("read", api(`/messages/${encodeURIComponent(id)}?format=full`), { signal }));
+  } catch (error) {
+    if (isGone(error)) return null;
+    throw error;
+  }
 }
 
 /** Where the mailbox is now, to check from next time. */

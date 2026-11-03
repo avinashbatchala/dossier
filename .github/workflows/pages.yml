@@ -1,0 +1,50 @@
+name: Pages
+
+# Publishes the website in site/ to GitHub Pages when it, or the
+# screenshots, icons and fonts it takes from the app, change on main.
+# Settings → Pages → Source must be "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/images/**"
+      - "src/app/icon.svg"
+      - "src/app/favicon.ico"
+      - "src/app/apple-icon.png"
+      - "src/fonts/newsreader/**"
+      - "src/fonts/geist/**"
+      - "src/fonts/jetbrains-mono/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish the website
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build
+        run: site/build.sh _site
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

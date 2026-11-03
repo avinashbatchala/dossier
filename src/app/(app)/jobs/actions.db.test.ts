@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { json, stubFetch } from "@/lib/ai/test-http";
 import { clearJobSearchCache } from "@/lib/job-search/cache";
 import { EMPTY_QUERY, type FoundPosting } from "@/lib/job-search/search";
-import { encryptSecret, JOB_SOURCE_KEY } from "@/lib/secrets";
+import { encryptSecret, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 import { saveSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase } from "@/test/db";
 import { jsearchV2LastPage } from "@/test/job-search-fixtures";
@@ -143,5 +143,16 @@ describe("Score (#208)", () => {
     const stored = await prisma().posting.findFirstOrThrow({ where: { externalId: "job-1" } });
     expect(result).toMatchObject({ ok: true, data: { handoff: expect.stringMatching(/^https:\/\/claude\.ai\/new\?q=/) } });
     expect(decodeURIComponent((result as { data: { handoff: string } }).data.handoff)).toContain(`posting_id "${stored.id}"`);
+  });
+
+  it("scores with Jev once Settings → Scoring chose it, never handing off to Claude (#274)", async () => {
+    const { startJob } = await import("@/lib/jobs/runner");
+    ai.ready = false;
+    await saveSettings({ scorer: "JEV", connectorEnabledAt: "2026-10-23T09:00:00.000Z" });
+    expect(await startScoringPosting({ posting })).toEqual({ ok: false, error: "Enter your TypeSafe key in Settings → Scoring first." });
+
+    await saveSettings({ typesafeKeyEnc: encryptSecret(TYPESAFE_KEY, "ts_secret") });
+    expect(await startScoringPosting({ posting })).toEqual({ ok: true, data: { jobId: "score-job" } });
+    expect(startJob).toHaveBeenLastCalledWith(expect.objectContaining({ type: "posting-score" }), { posting }, { key: "posting-score:JSEARCH:job-1" });
   });
 });

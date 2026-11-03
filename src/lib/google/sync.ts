@@ -107,7 +107,10 @@ async function runSync(historyId: string | null, ownAddress: string, scope: "kno
   const kept: string[] = [];
   // Oldest first, so a thread's first mail links it for the ones after.
   const mails: ReadMail[] = [];
-  for (const id of fresh) mails.push(await getMessage(id, signal));
+  for (const id of fresh) {
+    const mail = await getMessage(id, signal);
+    if (mail) mails.push(mail);
+  }
   mails.sort((a, b) => a.date.getTime() - b.date.getTime());
 
   for (const mail of mails) {

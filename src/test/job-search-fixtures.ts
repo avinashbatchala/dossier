@@ -162,3 +162,67 @@ export const arbeitsagenturDetails = {
   stellenangebotsBeschreibung: "**Wer wir sind**\r\nHafenlogik baut Software für den Hafen.\r\n\r\n\r\n**Was du machst**\n- APIs bauen\n- Tests schreiben",
   referenznummer: "10001-1003486534-S",
 };
+
+/** FreeHire's agent search: full plain-text descriptions in the list. */
+export const freehirePage = {
+  data: [
+    {
+      public_slug: "senior-go-engineer-acme-1a2b",
+      source: "greenhouse",
+      title: "Senior Go Engineer",
+      company: "Acme",
+      location: "Remote — EU",
+      url: "https://boards.greenhouse.io/acme/jobs/123",
+      work_mode: "remote",
+      posted_at: "2026-06-18T00:00:00Z",
+      description: "Acme is hiring a Senior Go Engineer.\n\nYou'll build APIs.",
+      enrichment: {
+        salary_min: 90000,
+        salary_max: 130000,
+        salary_currency: "EUR",
+        salary_period: "year",
+      },
+    },
+    {
+      public_slug: "ux-researcher-northwind",
+      source: "lever",
+      title: "UX Researcher",
+      company: "Northwind Studio",
+      location: "Berlin",
+      url: "javascript:alert(1)",
+      work_mode: "onsite",
+      posted_at: "not a date",
+      description: null,
+      enrichment: null,
+    },
+    // Repeated slug: kept once.
+    {
+      public_slug: "senior-go-engineer-acme-1a2b",
+      title: "Duplicate",
+      company: "Acme",
+      url: "https://boards.greenhouse.io/acme/jobs/123",
+    },
+    // Without a slug: skipped.
+    { title: "No slug" },
+  ],
+  meta: { total: 45, limit: 20, offset: 0 },
+};
+
+/** FreeHire's last page: fewer than a full page of results. */
+export const freehireLastPage = {
+  data: [
+    {
+      public_slug: "design-systems-canal",
+      source: "ashby",
+      title: "Design Systems Designer",
+      company: "Canal Software",
+      location: "Amsterdam",
+      url: "https://jobs.ashbyhq.com/canal/abc",
+      work_mode: "hybrid",
+      posted_at: "2026-09-01T12:00:00Z",
+      description: "Canal Software needs a design-systems designer.",
+      enrichment: { salary_min: 52000, salary_max: 52000, salary_currency: "EUR", salary_period: "year" },
+    },
+  ],
+  meta: { total: 21, limit: 20, offset: 20 },
+};

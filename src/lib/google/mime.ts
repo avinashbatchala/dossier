@@ -25,12 +25,19 @@ export function encodeHeader(value: string): string {
   return `=?UTF-8?B?${Buffer.from(clean, "utf8").toString("base64")}?=`;
 }
 
+/** "Jane Doe <jane@example.com>", the name maybe in quotes, in its parts; null for an address alone. */
+function addressParts(value: string): { name: string; address: string } | null {
+  const match = /^([^<]*)<([^<>]+)>\s*$/.exec(value);
+  if (!match) return null;
+  return { name: match[1].trim().replace(/^"|"$/g, "").trim(), address: match[2].trim() };
+}
+
 /** "Name <a@b>" with the name encoded, or the address alone. */
 export function encodeAddress(value: string): string {
-  const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(value);
-  if (!match) return value.replace(/[\r\n]+/g, " ").trim();
-  const [, name, address] = match;
-  return name.trim() ? `${encodeHeader(name.trim())} <${address.trim()}>` : address.trim();
+  const clean = value.replace(/[\r\n]+/g, " ");
+  const parts = addressParts(clean);
+  if (!parts) return clean.trim();
+  return parts.name ? `${encodeHeader(parts.name)} <${parts.address}>` : parts.address;
 }
 
 /** Base64 in lines of 76, as MIME wants. */
@@ -87,8 +94,8 @@ export const toBase64Url = (text: string) => Buffer.from(text, "utf8").toString(
 
 /** "Jane Doe <jane@example.com>" → its parts. */
 export function parseAddress(value: string): { name: string; address: string } {
-  const match = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(value);
-  if (match) return { name: decodeHeader(match[1].trim()), address: match[2].trim().toLowerCase() };
+  const parts = addressParts(value);
+  if (parts) return { name: decodeHeader(parts.name), address: parts.address.toLowerCase() };
   return { name: "", address: value.trim().toLowerCase() };
 }
 
@@ -99,7 +106,7 @@ export function decodeHeader(value: string): string {
       const bytes =
         encoding.toLowerCase() === "b"
           ? Buffer.from(text, "base64")
-          : Buffer.from(text.replace(/_/g, " ").replace(/=([0-9a-f]{2})/gi, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16))), "latin1");
+          : Buffer.from(text.replace(/_/g, " ").replace(/=([0-9a-f]{2})/gi, (_m, hex: string) => String.fromCharCode(Number.parseInt(hex, 16))), "latin1");
       return new TextDecoder(charset).decode(bytes);
     } catch {
       return text;
@@ -140,14 +147,16 @@ export function htmlToText(html: string): string {
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|tr|h\d)>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^<>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/[ \t]+\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

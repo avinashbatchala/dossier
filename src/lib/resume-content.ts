@@ -2,6 +2,7 @@ import type { Unit } from "@/lib/application-data";
 import { ageLabel, ENGLISH_LABELS, languagesLine, type DocumentLabels } from "@/lib/document-labels";
 import { publicationHref, publicationLink } from "@/lib/citation";
 import { ageOn, formatDateRange, resumePublications, type Basics, type ProfileData } from "@/lib/profile";
+import { inEditorOrder, skillsText } from "@/lib/skill-groups";
 
 // What a resume shows, worked out from the profile (the base resume) or from
 // a tailored document's units, so the renderer only has to lay it out.
@@ -18,6 +19,8 @@ export type ResumeContent = {
     id: string;
     role: string;
     company: string;
+    /** A line about the company or the role (#257), as written; never tailored. */
+    descriptor: string;
     dates: string;
     bullets: string[];
     /** The skills used in the role (RES-6). */
@@ -108,6 +111,7 @@ export function resumeContent(
     id: entry.id,
     role: entry.role.trim(),
     company: entry.company.trim(),
+    descriptor: entry.descriptor.trim(),
     dates: formatDateRange(entry, dates),
     bullets: lines(bullets),
     skills: entry.skillIds.flatMap((id) => skillNames.get(id) ?? []),
@@ -144,7 +148,8 @@ export function resumeContent(
     projects: profile.projects.map((entry) => project(entry, entry.bullets)),
     education: profile.education.map((entry) => education(entry, entry.notes)),
     publications: resumePublications(profile.publications).map((entry) => publication(entry, entry.citation)),
-    skills: profile.skills.map((skill) => skill.name).join(" · "),
+    // A line per group, as Profile → Skills shows them (#280).
+    skills: skillsText(inEditorOrder(profile.skills)),
     languages: languagesLine(profile.languages, labels),
     references: includeReferences
       ? profile.references.map((reference) => ({

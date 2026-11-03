@@ -15,3 +15,6 @@ export class GoogleError extends Error {
     super(message);
   }
 }
+
+/** Whether a failure means the thing is gone: deleted, or never there. */
+export const isGone = (error: unknown) => error instanceof GoogleError && (error.status === 404 || error.status === 410);

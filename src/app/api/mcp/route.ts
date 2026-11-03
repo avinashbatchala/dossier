@@ -14,7 +14,7 @@ import { logServerError } from "@/lib/log";
 
 // The address links in answers point to comes along with the token's details.
 const handler = createMcpHandler(({ authInfo }) => createDossierServer(typeof authInfo?.extra?.origin === "string" ? authInfo.extra.origin : ""), {
-  onerror: (error) => logServerError("Claude connector", error),
+  onerror: (error) => logServerError("MCP connector", error),
 });
 
 /** "Sign in first", with where Claude finds out how (RFC 9728). */
@@ -28,13 +28,13 @@ function unauthorized(origin: string): Response {
 async function handle(request: Request): Promise<Response> {
   if (!(await connectorSince())) return new Response(null, { status: 404 });
   const origin = publicOrigin(request);
-  const token = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
+  const token = /^Bearer\s+(\S.*)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
   const access = await verifyAccessToken(token);
   if (!access) return unauthorized(origin);
   try {
     return await handler.fetch(request, { authInfo: { token: token!, clientId: access.clientId, scopes: [SCOPE], extra: { origin } } });
   } catch (error) {
-    logServerError(`Claude connector ${mcpUrl(origin)}`, error);
+    logServerError(`MCP connector ${mcpUrl(origin)}`, error);
     return Response.json({ jsonrpc: "2.0", error: { code: -32603, message: "Dossier couldn't answer that." }, id: null }, { status: 500 });
   }
 }

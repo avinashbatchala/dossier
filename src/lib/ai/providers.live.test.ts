@@ -7,17 +7,20 @@ import { LocalProvider } from "./providers/local";
 import { MistralProvider } from "./providers/mistral";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import type { AIProvider } from "./provider";
-import { liveLmStudio, liveMistral } from "./test-live";
+import { extractProfile } from "./tasks";
+import { liveAnthropic, liveLmStudio, liveMistral } from "./test-live";
 
 // Checks against real models, skipped unless asked for:
 //
 //   docker compose up -d ollama   # with qwen2.5:3b pulled (see compose.yml)
 //   AI_LIVE=ollama docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
-//   AI_LIVE=anthropic ANTHROPIC_TEST_KEY=… docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
+//   AI_LIVE=anthropic docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
 //   AI_LIVE=mistral docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
 //
-// Mistral's key is DOSSIER_AI_KEY when that's set, or else the one saved in
-// Settings → AI provider with Mistral chosen.
+// Anthropic's and Mistral's keys are DOSSIER_AI_KEY when that's set, or else
+// the one saved in Settings → AI provider with that provider chosen.
+// DOSSIER_AI_MODEL goes with DOSSIER_AI_KEY; Anthropic's checks use
+// claude-haiku-4-5 when no model is given.
 //
 //   AI_LIVE=lmstudio docker/bin/yarn vitest run src/lib/ai/providers.live.test.ts
 //
@@ -38,6 +41,21 @@ const Posting = z.object({
   city: z.string(),
 });
 const posting = "Ledgerly is hiring a Senior Product Designer for its payments team in Amsterdam.";
+const resume = `John Doe
+Senior Product Designer · Utrecht, Netherlands · john.doe@example.com · example.com
+
+Experience
+Design Lead, Acme Payments, Utrecht | Mar 2021 to present
+- Led the redesign of the payout flow
+- Set up the design system in Figma
+Product Designer, Fieldnote | 2017 – 2021
+- Designed the mobile app's onboarding
+
+Education
+MSc Interaction Design, TU Delft, 2015 – 2017
+
+Skills: Figma, Design systems, User research
+Languages: Dutch (native), English (fluent)`;
 
 function checks(name: string, make: () => AIProvider, model: string) {
   // The first call may have to load the model into memory.
@@ -79,12 +97,24 @@ describe.runIf(live.has("ollama"))("live: Ollama", () => {
   });
 });
 
-describe.runIf(live.has("anthropic") && Boolean(process.env.ANTHROPIC_TEST_KEY))("live: Anthropic", () => {
-  const model = process.env.ANTHROPIC_TEST_MODEL ?? "claude-haiku-4-5";
-  checks("Messages API", () => new AnthropicProvider("https://api.anthropic.com", process.env.ANTHROPIC_TEST_KEY!, model, 120_000), model);
+const anthropic = live.has("anthropic") ? await liveAnthropic() : null;
+
+describe.runIf(anthropic)("live: Anthropic", () => {
+  const { key, model } = anthropic ?? { key: "", model: "" };
+  const make = (apiKey = key) => new AnthropicProvider("https://api.anthropic.com", apiKey, model, 120_000);
+  checks("Messages API", () => make(), model);
+
+  // The profile's schema is more than structured output takes, so it goes in the prompt (#230).
+  it("imports a profile from a resume", { timeout: 300_000 }, async () => {
+    const { data } = await extractProfile(make(), { resume }, { creativity: "FAITHFUL", strict: true, language: null });
+    expect(data.basics).toMatchObject({ name: "John Doe", email: "john.doe@example.com", city: "Utrecht" });
+    expect(data.experience.map((entry) => entry.company)).toEqual(["Acme Payments", "Fieldnote"]);
+    expect(data.education).toHaveLength(1);
+    expect(data.skills.length).toBeGreaterThanOrEqual(3);
+  });
 
   it("refuses a wrong key in plain words", async () => {
-    await expect(new AnthropicProvider("https://api.anthropic.com", "sk-ant-wrong", model, 60_000).test()).rejects.toMatchObject({ kind: "auth" });
+    await expect(make("sk-ant-wrong").test()).rejects.toMatchObject({ kind: "auth" });
   });
 });
 

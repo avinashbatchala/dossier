@@ -274,6 +274,7 @@ function Preview({ profile }: { profile: ImportedProfile }) {
               meta={[entry.location, formatDateRange(entry)].filter(Boolean).join(" · ")}
               unverified={entry.unverified}
             >
+              {entry.descriptor && <p className="text-muted italic">{entry.descriptor}</p>}
               {entry.bullets && (
                 <ul className="list-disc pl-5">
                   {entry.bullets.split("\n").map((line, lineIndex) => (

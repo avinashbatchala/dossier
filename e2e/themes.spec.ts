@@ -59,15 +59,15 @@ test("changes an application's theme from its Resume tab", async ({ page }) => {
   expect(await pdf()).not.toContain("Garamond");
 
   await page.goto(`/applications/${ledgerly.id}`);
-  await page.getByRole("button", { name: "Theme: Editorial" }).click();
+  await page.getByRole("button", { name: "Editorial theme" }).click();
   await page.getByRole("menuitemradio", { name: "Classic" }).click();
-  await expect(page.getByRole("button", { name: "Theme: Classic" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Classic theme" })).toBeVisible();
   const name = page.getByRole("article", { name: "Resume" }).getByRole("heading", { level: 1 });
   await expect(name).toHaveCSS("font-family", /Garamond/);
 
   await page.reload();
   await page.getByRole("tab", { name: "Cover letter" }).click();
-  await expect(page.getByRole("button", { name: "Theme: Classic" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Classic theme" })).toBeVisible();
   const documents = await sql(`SELECT kind, "themeId" FROM "Document" WHERE "applicationId" = $1 AND kind <> 'EMAIL' ORDER BY kind`, [ledgerly.id]);
   expect(documents).toEqual([
     { kind: "RESUME", themeId: "classic" },

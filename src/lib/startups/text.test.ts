@@ -68,6 +68,15 @@ describe("reading startups' text (#222)", () => {
     expect(clean).toContain("Ask about our stack at the meetup.");
   });
 
+  it("reads long, broken pages quickly", () => {
+    const page = `${"<".repeat(50_000)}${"a.".repeat(50_000)}`;
+    const started = performance.now();
+    htmlToText(page);
+    findEmails(page);
+    withoutAddresses(page);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it("notices a page that takes no unsolicited applications, but not one about recruiters", () => {
     expect(noApplicationsSentence("Join us!\nWe do not accept unsolicited applications. Thanks.")).toBe("We do not accept unsolicited applications.");
     expect(noApplicationsSentence("Bitte keine Initiativbewerbungen.")).toBe("Bitte keine Initiativbewerbungen.");

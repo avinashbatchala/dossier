@@ -36,10 +36,10 @@ function ExperienceForm({
 }) {
   const track = useTrackSave();
   // Autosave the text and dates only; skill links save on their own when toggled.
-  const { id, role, company, location, bullets, startYear, startMonth, endYear, endMonth, current } = entry;
+  const { id, role, company, location, descriptor, bullets, startYear, startMonth, endYear, endMonth, current } = entry;
   const fields = useMemo(
-    () => ({ id, role, company, location, bullets, startYear, startMonth, endYear, endMonth, current }),
-    [id, role, company, location, bullets, startYear, startMonth, endYear, endMonth, current],
+    () => ({ id, role, company, location, descriptor, bullets, startYear, startMonth, endYear, endMonth, current }),
+    [id, role, company, location, descriptor, bullets, startYear, startMonth, endYear, endMonth, current],
   );
   const { flush } = useAutosave(fields, (value) => track(saveExperience(value)));
   const set = (change: Partial<ExperienceItem>) => onChange({ ...entry, ...change });
@@ -65,6 +65,15 @@ function ExperienceForm({
         placeholder="Springfield"
         value={entry.location}
         onChange={(event) => set({ location: event.target.value })}
+      />
+      <Input
+        className="col-span-2"
+        label="About the company or role"
+        placeholder="A 40-person fintech, building card payments"
+        hint="Optional. One line, in italics under the role on your resume."
+        maxLength={300}
+        value={entry.descriptor}
+        onChange={(event) => set({ descriptor: event.target.value })}
       />
       <MonthYearField
         label="Started"

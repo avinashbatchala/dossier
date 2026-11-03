@@ -104,7 +104,7 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
   const query = settings.agentQuery;
   const source: JobSource | null = config.source;
   const search = query.keywords.trim()
-    ? `${describeSearch(query, countryName(query.country) || query.country.toUpperCase())}${source ? ` · via ${SOURCE_INFO[source].name}` : ""}`
+    ? `${describeSearch(query, countryName(query.country) || query.country.toUpperCase(), source)}${source ? ` · via ${SOURCE_INFO[source].name}` : ""}`
     : null;
   const setupProblem = await agentSetupProblem(query);
 

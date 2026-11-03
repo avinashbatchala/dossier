@@ -40,15 +40,15 @@ import { appVersion } from "@/lib/version";
 // behind: they belong to the server or the mailbox, not the user's data.
 
 export const EXPORT_FORMAT = "dossier-export";
-/** Bump when the file's shape changes; imports refuse versions they don't know. 2 added Find jobs' postings and keys (E14-9), 3 projects (PRO-13) and the job agent (E16), 4 facts (PRO-14, APP-15), 5 publications (#218), the profile photo's theme and application options (#224) and Startups (#222). */
-export const EXPORT_SCHEMA_VERSION = 5;
+/** Bump when the file's shape changes; imports refuse versions they don't know. 2 added Find jobs' postings and keys (E14-9), 3 projects (PRO-13) and the job agent (E16), 4 facts (PRO-14, APP-15), 5 publications (#218), the profile photo's theme and application options (#224) and Startups (#222), 6 the line about a role's company (#257), 7 skill groups (#280). */
+export const EXPORT_SCHEMA_VERSION = 7;
 /** The versions imports can read. */
-export const EXPORT_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
+export const EXPORT_SCHEMA_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
 
 /** The setting that holds the encrypted API key, which only this server can read. */
 const API_KEY_SETTING = "apiKeyEnc";
 /** The settings that hold encrypted keys, which only this server can read: never exported as they are. */
-export const SECRET_SETTINGS: readonly string[] = [API_KEY_SETTING, "jsearchKeyEnc", "adzunaKeyEnc"];
+export const SECRET_SETTINGS: readonly string[] = [API_KEY_SETTING, "jsearchKeyEnc", "adzunaKeyEnc", "typesafeKeyEnc"];
 /** The settings that belong to this install rather than its data (the usage ping's and its consent, the update check's, the Google client and the browser's time zone): never exported, and kept by an import. */
 export const INSTALL_SETTINGS: readonly string[] = [
   "usagePingId",
@@ -68,8 +68,9 @@ export const INSTALL_SETTINGS: readonly string[] = [
   "googleClientId",
   "googleClientSecretEnc",
   "browserTimeZone",
-  // An import must never open the Claude connector's addresses on this server (#221).
+  // An import must never open the MCP connector's addresses on this server (#221), or let another app sign in (#281).
   "connectorEnabledAt",
+  "connectorRedirects",
 ];
 
 const date = z.iso.datetime().transform((value) => new Date(value));
@@ -77,7 +78,8 @@ const optionalDate = date.nullable();
 const int = z.number().int();
 const text = z.string();
 
-const skill = z.object({ id: text, name: text, sort: int, createdAt: date });
+// Groups came in version 7 (#280); older files have none.
+const skill = z.object({ id: text, name: text, sort: int, group: text.default(""), createdAt: date });
 const language = z.object({ id: text, name: text, level: z.enum(LanguageLevel), sort: int, createdAt: date });
 const span = {
   startYear: int.nullable(),
@@ -91,6 +93,8 @@ const experience = z.object({
   role: text,
   company: text,
   location: text,
+  /** Absent in files before version 6. */
+  descriptor: text.optional(),
   ...span,
   bullets: text,
   sort: int,
@@ -320,7 +324,7 @@ const postingSearch = z.object({
 /** An export file as read back (E10-6). */
 export const exportSchema = z.object({
   format: z.literal(EXPORT_FORMAT),
-  schemaVersion: z.literal([1, 2, 3, 4, 5]),
+  schemaVersion: z.literal([1, 2, 3, 4, 5, 6, 7]),
   appVersion: text,
   exportedAt: date,
   profile: z.object({
@@ -397,7 +401,7 @@ export async function buildExport(
       signature,
     ] = await Promise.all([
       tx.profileField.findMany({ select: { key: true, value: true }, orderBy: { key: "asc" } }),
-      tx.skill.findMany({ select: { id: true, name: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
+      tx.skill.findMany({ select: { id: true, name: true, sort: true, group: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
       tx.language.findMany({ select: { id: true, name: true, level: true, sort: true, createdAt: true }, orderBy: { createdAt: "asc" } }),
       tx.experience.findMany({ include: { skills: { select: { skillId: true } } }, orderBy: { createdAt: "asc" } }),
       tx.project.findMany({ include: { skills: { select: { skillId: true } } }, orderBy: { createdAt: "asc" } }),

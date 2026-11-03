@@ -50,6 +50,6 @@ export class OllamaProvider extends BaseProvider {
 
   protected async fetchModels(signal: AbortSignal): Promise<string[]> {
     const { models } = await this.client(signal).list();
-    return models.map((model) => model.name).sort();
+    return models.map((model) => model.name).sort((a, b) => a.localeCompare(b));
   }
 }

@@ -2,13 +2,11 @@ import "server-only";
 
 import { z } from "zod";
 
-import { getAiProvider } from "@/lib/ai";
-import { loadTaskOptions } from "@/lib/ai/task-options";
-import { scorePosting } from "@/lib/ai/tasks";
 import { fullText } from "@/lib/job-search/find";
-import { foundPostingSchema, postingKey, postingText, type FoundPosting } from "@/lib/job-search/search";
+import { foundPostingSchema, postingKey, type FoundPosting } from "@/lib/job-search/search";
 import { saveScore } from "@/lib/posting-scores";
 import { loadProfile } from "@/lib/profile-data";
+import { loadPostingScorer } from "@/lib/scoring";
 
 import { defineJob } from "./runner";
 
@@ -17,8 +15,9 @@ export const scoreJobKey = (posting: Pick<FoundPosting, "source" | "externalId">
 
 /**
  * Score in Find jobs (#208): how well one posting fits the profile, as the
- * job agent scores them (score-posting). A source that sent only the start
- * of it is asked for the rest first. The score is kept with the posting.
+ * job agent scores them, with the scorer Settings → Scoring chose (#274). A
+ * source that sent only the start of it is asked for the rest first. The
+ * score is kept with the posting.
  */
 export const scorePostingJob = defineJob({
   type: "posting-score",
@@ -31,13 +30,9 @@ export const scorePostingJob = defineJob({
       description = (await fullText(posting)) ?? posting.description;
     }
     await step("Scoring it against your profile");
-    const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
-    const { data, promptVersion } = await scorePosting(
-      provider,
-      { posting: postingText({ ...posting, description }), title: posting.title, company: posting.company, place: posting.place, remote: posting.remote, salary: posting.salary, profile },
-      { ...options, signal },
-    );
-    await saveScore(posting, data, promptVersion);
+    const [score, profile] = await Promise.all([loadPostingScorer(), loadProfile()]);
+    const { data, scoredWith } = await score({ ...posting, description }, profile, signal);
+    await saveScore(posting, data, scoredWith);
     return data;
   },
 });

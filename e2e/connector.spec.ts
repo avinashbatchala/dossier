@@ -5,18 +5,19 @@ import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
 import { resetData, sql } from "./support";
 
-// The Claude connector (#221): off until it's turned on in Settings; then
+// The MCP connector (#221, #281): off until it's turned on in Settings; then
 // Claude registers, the user signs in and allows it on the consent page,
 // Claude trades the code for tokens and uses Dossier's tools at /api/mcp,
-// until Disconnect Claude or the switch goes off. The "Claude" here is a
-// request context without Dossier's cookie, and claude.ai's callback is
-// answered by the test.
+// until Disconnect all apps or the switch goes off. Another app registers
+// only once its callback address is added. The "Claude" here is a request
+// context without Dossier's cookie, and claude.ai's callback is answered by
+// the test.
 
 const CALLBACK = "https://claude.ai/api/mcp/auth_callback";
 
 test.beforeAll(resetData);
 // Other specs see the connector off.
-test.afterAll(() => sql(`DELETE FROM "Setting" WHERE key = 'connectorEnabledAt'`));
+test.afterAll(() => sql(`DELETE FROM "Setting" WHERE key IN ('connectorEnabledAt', 'connectorRedirects')`));
 
 /** No serious axe findings, in the light scheme and then the dark one. */
 async function expectAccessible(page: Page) {
@@ -45,9 +46,10 @@ test("connects Claude through Settings and the consent page, serves its tools, a
   expect((await claude.get("/.well-known/oauth-authorization-server")).status()).toBe(404);
   expect((await claude.post("/api/oauth/register", { data: { redirect_uris: [CALLBACK] } })).status()).toBe(404);
 
+  // Its old name still finds the section.
   await page.goto("/settings?section=claude");
-  await expect(page.getByRole("heading", { name: "Claude connector" })).toBeVisible();
-  await page.getByRole("switch", { name: "Let Claude connect" }).click();
+  await expect(page.getByRole("heading", { name: "MCP connector" })).toBeVisible();
+  await page.getByRole("switch", { name: "Let apps connect" }).click();
   await expect(page.getByText(address, { exact: true })).toBeVisible();
   // A local address works for Claude's command-line app only, and the section says so.
   await expect(page.getByRole("note")).toContainText("This is a local address.");
@@ -61,6 +63,18 @@ test("connects Claude through Settings and the consent page, serves its tools, a
   const metadata = await (await claude.get("/.well-known/oauth-authorization-server")).json();
   expect(metadata).toMatchObject({ authorization_endpoint: `${baseURL}/oauth/authorize`, code_challenge_methods_supported: ["S256"] });
   expect((await claude.post("/api/oauth/register", { data: { redirect_uris: ["https://evil.example/callback"] } })).status()).toBe(400);
+  // Another app, once its callback address is added (#281).
+  const n8n = "https://n8n.example/rest/oauth2-credential/callback";
+  expect((await claude.post("/api/oauth/register", { data: { redirect_uris: [n8n], client_name: "n8n" } })).status()).toBe(400);
+  await page.getByLabel("Callback address").fill(n8n);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Apps' callback addresses" })).toContainText(n8n);
+  const registered = await claude.post("/api/oauth/register", { data: { redirect_uris: [n8n], client_name: "n8n" } });
+  expect(registered.status()).toBe(201);
+  const n8nQuery = new URLSearchParams({ response_type: "code", client_id: (await registered.json()).client_id, redirect_uri: n8n, code_challenge: "a".repeat(43), code_challenge_method: "S256", state: "s" });
+  await page.goto(`/oauth/authorize?${n8nQuery}`);
+  await expect(page.getByRole("heading", { name: "Connect n8n to Dossier" })).toBeVisible();
+
   const { client_id: clientId } = await (await claude.post("/api/oauth/register", { data: { redirect_uris: [CALLBACK], client_name: "Claude" } })).json();
 
   // The user allows it, signed in, and goes back to Claude with a code.
@@ -70,6 +84,7 @@ test("connects Claude through Settings and the consent page, serves its tools, a
   const query = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: CALLBACK, code_challenge: challenge, code_challenge_method: "S256", state: "xyz", resource: address });
   await page.goto(`/oauth/authorize?${query}`);
   await expect(page.getByRole("heading", { name: "Connect Claude to Dossier" })).toBeVisible();
+  await expect(page.getByText("Once you allow it, it can:", { exact: false })).toBeVisible();
   await expect(page.getByText("It can never send an application or an email, or delete anything.", { exact: false })).toBeVisible();
   await expectAccessible(page);
   await page.getByRole("button", { name: "Allow" }).click();
@@ -95,13 +110,13 @@ test("connects Claude through Settings and the consent page, serves its tools, a
   const profile = await rpc(await mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_profile", arguments: {} } }));
   expect(JSON.parse(profile.result.content![0].text)).toMatchObject({ name: "Jane Doe" });
 
-  // Disconnect Claude signs it out; off closes the addresses.
-  await page.goto("/settings?section=claude");
-  await page.getByRole("button", { name: "Disconnect Claude" }).click();
-  await expect(page.getByText("Claude is disconnected.", { exact: false })).toBeVisible();
+  // Disconnect all apps signs Claude out; off closes the addresses.
+  await page.goto("/settings?section=connector");
+  await page.getByRole("button", { name: "Disconnect all apps" }).click();
+  await expect(page.getByText("Every app is disconnected.", { exact: false })).toBeVisible();
   expect((await mcp({ jsonrpc: "2.0", id: 4, method: "tools/list" })).status()).toBe(401);
-  await page.getByRole("switch", { name: "Let Claude connect" }).click();
-  await expect(page.getByRole("switch", { name: "Let Claude connect" })).toHaveAttribute("aria-checked", "false");
+  await page.getByRole("switch", { name: "Let apps connect" }).click();
+  await expect(page.getByRole("switch", { name: "Let apps connect" })).toHaveAttribute("aria-checked", "false");
   await expect.poll(async () => (await mcp({ jsonrpc: "2.0", id: 5, method: "tools/list" })).status()).toBe(404);
   await claude.dispose();
 });

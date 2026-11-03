@@ -24,7 +24,7 @@ const countries = [
   { code: "nl", name: "Netherlands" },
 ];
 const open = (props: Partial<Parameters<typeof AgentSection>[0]> = {}) =>
-  render(<AgentSection initial={initial} source="JSEARCH" aiReady countries={countries} timeZone="Europe/Berlin" {...props} />);
+  render(<AgentSection initial={initial} source="JSEARCH" scoring={{ scorer: "AI", ready: true }} countries={countries} timeZone="Europe/Berlin" {...props} />);
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -97,13 +97,20 @@ describe("Settings → Job agent (E16-7)", () => {
     expect(screen.getByRole("note")).toHaveTextContent("The agent searches the source you choose in Settings → Job search, which is off. Choose one first.");
     expect(screen.getByRole("link", { name: "Settings → Job search" })).toHaveAttribute("href", "/settings?section=jobs");
     unmount();
-    open({ aiReady: false });
+    open({ scoring: { scorer: "AI", ready: false } });
+    expect(screen.getByRole("note")).toHaveTextContent("The agent scores postings with the AI provider in Settings → AI provider, which isn't set up yet. Choose one first.");
     expect(screen.getByRole("link", { name: "Settings → AI provider" })).toHaveAttribute("href", "/settings?section=ai");
+  });
+
+  it("asks for the TypeSafe key when Jev scores without one (#274)", () => {
+    open({ scoring: { scorer: "JEV", ready: false } });
+    expect(screen.getByRole("note")).toHaveTextContent("The agent scores postings with Jev, which needs your TypeSafe key in Settings → Scoring.");
+    expect(screen.getByRole("link", { name: "Settings → Scoring" })).toHaveAttribute("href", "/settings?section=scoring");
   });
 
   it("says it doesn't search the Bundesagentur für Arbeit (#223)", () => {
     open({ source: "ARBEITSAGENTUR" });
-    expect(screen.getByRole("note")).toHaveTextContent("The agent doesn't search the Bundesagentur für Arbeit. Choose JSearch or Adzuna in Settings → Job search for it.");
+    expect(screen.getByRole("note")).toHaveTextContent("The agent doesn't search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire in Settings → Job search for it.");
     expect(screen.getByRole("link", { name: "Settings → Job search" })).toHaveAttribute("href", "/settings?section=jobs");
   });
 

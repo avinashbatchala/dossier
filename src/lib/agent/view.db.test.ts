@@ -11,6 +11,8 @@ vi.mock("@/lib/prisma", async () => {
   db.client = createTestClient();
   return { prisma: db.client };
 });
+// Settings → Scoring reads DOSSIER_SCORER (#274).
+vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/time-zone", () => ({ lastKnownTimeZone: async () => "Europe/Berlin" }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
 vi.mock("@/lib/job-search/config", () => ({

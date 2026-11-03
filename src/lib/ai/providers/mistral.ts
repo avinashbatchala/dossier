@@ -82,7 +82,8 @@ export function mistralModelNames(cards: MistralModel[]): string[] {
     const names = [card.id, ...(card.aliases ?? [])];
     for (const name of names) named.add(name);
     const latest = names.filter((name) => name.endsWith("-latest"));
-    chosen.add((latest.length > 0 ? latest : names).reduce((shortest, name) => (name.length < shortest.length ? name : shortest)));
+    const pool = latest.length > 0 ? latest : names;
+    chosen.add(pool.reduce((shortest, name) => (name.length < shortest.length ? name : shortest), pool[0]));
   }
-  return [...chosen].sort();
+  return [...chosen].sort((a, b) => a.localeCompare(b));
 }

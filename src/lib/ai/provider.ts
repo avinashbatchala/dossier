@@ -2,6 +2,8 @@ import { prettifyError, toJSONSchema, type z } from "zod";
 
 import type { AiProvider as AiProviderKind, Creativity } from "@/generated/prisma/enums";
 
+import { logServerWarning } from "@/lib/log";
+
 import { AiError, toAiError } from "./errors";
 
 // One interface for every AI provider (E6-1): a local model through Ollama or
@@ -99,6 +101,7 @@ export abstract class BaseProvider implements AIProvider {
   async complete<T>(request: CompletionRequest | JsonCompletionRequest<T>): Promise<string | T> {
     const model = this.requireModel();
     const schema = "schema" in request ? request.schema : undefined;
+    const schemaName = ("schemaName" in request && request.schemaName) || "result";
     const call = (messages: ChatMessage[]) =>
       this.guard(model, request.signal, (signal) =>
         this.chat({
@@ -107,7 +110,7 @@ export abstract class BaseProvider implements AIProvider {
           messages,
           temperature: request.creativity && this.acceptsTemperature() ? TEMPERATURES[request.creativity] : undefined,
           effort: request.effort,
-          json: schema ? { schema, name: ("schemaName" in request && request.schemaName) || "result" } : undefined,
+          json: schema ? { schema, name: schemaName } : undefined,
           maxTokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
           signal,
         }),
@@ -118,7 +121,8 @@ export abstract class BaseProvider implements AIProvider {
     // Half a JSON answer can't be valid, and asking again only gets cut off again.
     if (answer.cutOff) throw AiError.of("cut-off");
 
-    // E6-4: an answer that doesn't fit gets one more try, told what was wrong.
+    // E6-4: an answer that doesn't fit gets one more try, told what was wrong
+    // and shown the schema, which a server that ignores it never passed on (#276).
     const first = validateJson(answer.text, schema);
     if (first.ok) return first.data;
     const retry = await call([
@@ -126,12 +130,14 @@ export abstract class BaseProvider implements AIProvider {
       { role: "assistant", content: answer.text },
       {
         role: "user",
-        content: `That answer didn't match the required JSON format:\n${first.problem}\nReply again with only the corrected JSON, nothing else.`,
+        content: `That answer didn't match the required JSON format:\n${first.problem}\nReply again with only the corrected JSON, nothing else, matching this JSON schema:\n${JSON.stringify(toJSONSchema(schema))}`,
       },
     ]);
     if (retry.cutOff) throw AiError.of("cut-off");
     const second = validateJson(retry.text, schema);
     if (second.ok) return second.data;
+    // What didn't fit, for the server log: the schema's paths, never the answer (#276).
+    logServerWarning("AI", `${model}'s answer didn't match the ${schemaName} schema twice: ${second.where}`);
     throw AiError.of("invalid-output", second.problem.split("\n", 1)[0]);
   }
 
@@ -180,7 +186,7 @@ export function extractJson(text: string): unknown {
   } catch {
     // Look further.
   }
-  const fenced = /```(?:json)?\s*\n?([\s\S]*?)```/i.exec(trimmed);
+  const fenced = /```(?:json)?([\s\S]*?)```/i.exec(trimmed);
   if (fenced) {
     try {
       return JSON.parse(fenced[1]);
@@ -217,6 +223,17 @@ function matchingBracket(text: string, start: number): number {
   return -1;
 }
 
+/**
+ * A refusal of a schema for structured output as too complex. Anthropic's API
+ * caps union-typed and optional parameters and the compiled grammar's size, so
+ * a whole profile's schema can be too much, there and on gateways in front of
+ * it (#230). The refusals seen ("The compiled grammar is too large", "too many
+ * parameters with union types") and documented ("Schema is too complex for
+ * compilation"), and the documented limit on optional parameters, whose
+ * wording we haven't seen.
+ */
+export const SCHEMA_REFUSED = /grammar is too large|parameters with union types|optional parameters|schema is too complex/i;
+
 /** `system` with the answer's JSON schema spelled out, for a model that can't be sent it or does better seeing it. */
 export function withJsonSchema(system: string, schema: z.ZodType): string {
   return `${system}\n\nReply with only a JSON object, no other text, that matches this JSON schema:\n${JSON.stringify(toJSONSchema(schema))}`;
@@ -224,15 +241,23 @@ export function withJsonSchema(system: string, schema: z.ZodType): string {
 
 const MAX_PROBLEM_LENGTH = 1_000;
 
-/** Parses and validates an answer; `problem` says what's wrong, in words a model can fix. */
-export function validateJson<T>(text: string, schema: z.ZodType<T>): { ok: true; data: T } | { ok: false; problem: string } {
+/**
+ * Parses and validates an answer; `problem` says what's wrong, in words a
+ * model can fix, and `where` which parts of the schema, without any of the
+ * answer, for the server log.
+ */
+export function validateJson<T>(text: string, schema: z.ZodType<T>): { ok: true; data: T } | { ok: false; problem: string; where: string } {
   let value: unknown;
   try {
     value = extractJson(text);
   } catch {
-    return { ok: false, problem: "The answer wasn't valid JSON." };
+    return { ok: false, problem: "The answer wasn't valid JSON.", where: "not JSON" };
   }
   const result = schema.safeParse(value);
   if (result.success) return { ok: true, data: result.data };
-  return { ok: false, problem: prettifyError(result.error).slice(0, MAX_PROBLEM_LENGTH) };
+  const where = result.error.issues
+    .slice(0, 5)
+    .map((issue) => `${issue.code} at ${issue.path.join(".") || "the top"}`)
+    .join(", ");
+  return { ok: false, problem: prettifyError(result.error).slice(0, MAX_PROBLEM_LENGTH), where };
 }

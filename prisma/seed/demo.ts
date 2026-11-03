@@ -133,6 +133,7 @@ export async function seedDemo(
             role: entry.role,
             company: entry.company,
             location: entry.location,
+            descriptor: entry.descriptor,
             bullets: entry.bullets,
             sort,
             ...dateSpan(entry.start, entry.end),

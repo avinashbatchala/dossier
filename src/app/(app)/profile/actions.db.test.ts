@@ -19,6 +19,7 @@ import {
   removeExperience,
   removeProject,
   removePublication,
+  renameSkillGroup,
   reorderPublications,
   restorePublication,
   savePublication,
@@ -26,6 +27,7 @@ import {
   restoreProject,
   saveProject,
   setProjectSkill,
+  setSkillGroup,
   saveExperience,
   saveReference,
   removeLanguage,
@@ -93,6 +95,28 @@ describe("profile actions", () => {
     expect(await addSkill({ name: "   " })).toMatchObject({ ok: false, fieldErrors: { name: ["Type a skill first."] } });
   });
 
+  it("puts skills in groups, moves them, and renames a group with its skills (#280)", async () => {
+    const figma = await addSkill({ name: "Figma", group: "Tools" });
+    expect(figma).toMatchObject({ ok: true, data: { added: true, skill: { name: "Figma", group: "Tools" } } });
+    // One that's there already moves to the group it's added to.
+    expect(await addSkill({ name: "figma", group: "Design" })).toMatchObject({ ok: true, data: { added: false, skill: { name: "Figma", group: "Design" } } });
+    await addSkill({ name: "Prototyping", group: "Design" });
+    await addSkill({ name: "User research" });
+
+    const id = (await prisma().skill.findFirstOrThrow({ where: { name: "User research" } })).id;
+    expect(await setSkillGroup({ id, group: " Research " })).toEqual({ ok: true, data: null });
+    expect(await renameSkillGroup({ from: "Design", to: "Interface" })).toEqual({ ok: true, data: null });
+    const groups = await prisma().skill.findMany({ orderBy: { sort: "asc" }, select: { name: true, group: true } });
+    expect(groups).toEqual([
+      { name: "Figma", group: "Interface" },
+      { name: "Prototyping", group: "Interface" },
+      { name: "User research", group: "Research" },
+    ]);
+
+    expect(await addSkill({ name: "Ahrefs", group: "Tools: SEO" })).toMatchObject({ ok: false, fieldErrors: { group: ["A group's name can't have “:” or “·” in it."] } });
+    expect(await renameSkillGroup({ from: "Interface", to: " " })).toMatchObject({ ok: false, fieldErrors: { to: ["Give the group a name."] } });
+  });
+
   it("detaches a removed skill from every role", async () => {
     const skill = await prisma().skill.create({ data: { name: "Figma" } });
     await prisma().experience.create({ data: { role: "Designer", skills: { create: { skillId: skill.id } } } });
@@ -128,7 +152,8 @@ describe("profile actions", () => {
     if (!created.ok) throw new Error(created.error);
     expect(created.data).toMatchObject({ role: "", current: false, skillIds: [] });
 
-    const entry = { ...created.data, role: "Product Designer", company: "Fieldnote", startYear: 2018, startMonth: 6, endYear: 2021, endMonth: 2 };
+    expect(created.data.descriptor).toBe("");
+    const entry = { ...created.data, role: "Product Designer", company: "Fieldnote", descriptor: "Note-taking app, 20 people", startYear: 2018, startMonth: 6, endYear: 2021, endMonth: 2 };
     await saveExperience(entry);
     await prisma().experienceSkill.createMany({ data: [{ experienceId: entry.id, skillId: figma.id }, { experienceId: entry.id, skillId: research.id }] });
 
@@ -142,7 +167,12 @@ describe("profile actions", () => {
     await prisma().skill.delete({ where: { id: research.id } });
     const restored = await restoreExperience({ ...entry, skillIds: [figma.id, research.id] });
     expect(restored).toMatchObject({ ok: true, data: { id: entry.id, role: "Product Designer", skillIds: [figma.id] } });
-    expect(await prisma().experience.findUniqueOrThrow({ where: { id: entry.id } })).toMatchObject({ company: "Fieldnote", startYear: 2018, endMonth: 2 });
+    expect(await prisma().experience.findUniqueOrThrow({ where: { id: entry.id } })).toMatchObject({
+      company: "Fieldnote",
+      descriptor: "Note-taking app, 20 people",
+      startYear: 2018,
+      endMonth: 2,
+    });
   });
 
   it("rejects impossible dates", async () => {

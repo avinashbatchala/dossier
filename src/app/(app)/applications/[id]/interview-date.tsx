@@ -61,7 +61,7 @@ export function InterviewDate({
       >
         {shown ? (
           <>
-            <span className="text-muted">Interview</span>
+            <span className="text-muted">Interview</span>{" "}
             <span className="font-medium">{formatDateTime(shown, zone)}</span>
           </>
         ) : (

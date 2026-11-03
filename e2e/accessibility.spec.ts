@@ -48,6 +48,7 @@ const SCREENS = [
   "/?date=2026-11-01",
   "/settings?section=ai",
   "/settings?section=jobs",
+  "/settings?section=scoring",
   "/settings?section=agent",
   "/settings?section=documents",
   "/settings?section=google",

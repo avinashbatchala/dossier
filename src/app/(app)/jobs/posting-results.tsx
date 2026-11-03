@@ -164,6 +164,7 @@ export function PostingResults(props: PostingResultsProps) {
   const area = searched
     ? searchArea(searched, props.countries?.find((country) => country.code === searched.country)?.name)
     : "";
+  const radius = props.mode === "search" && SOURCE_INFO[props.search.source].radius;
   const empty =
     mode === "saved"
       ? "Nothing saved yet. Save a posting from your search results to keep it here."
@@ -171,7 +172,9 @@ export function PostingResults(props: PostingResultsProps) {
         ? "Nothing dismissed. Postings you dismiss stay out of your searches and wait here."
         : postings.length > 0 || !searched
           ? "You've dismissed every posting here."
-          : `No postings for “${searched.keywords}”${area ? ` ${area}` : ""}. ${searched.place.trim() ? "Try a bigger radius or fewer words." : "Try fewer words, or a longer period."}`;
+          : radius
+            ? `No postings for “${searched.keywords}”${area ? ` ${area}` : ""}. ${searched.place.trim() ? "Try a bigger radius or fewer words." : "Try fewer words, or a longer period."}`
+            : `No postings for “${searched.keywords}”${searched.place ? ` in ${searched.place}` : ""}. Try fewer words.`;
 
   return (
     <div className="flex flex-wrap items-start gap-6 px-10 pb-16">

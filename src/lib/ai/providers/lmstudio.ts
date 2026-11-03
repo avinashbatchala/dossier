@@ -65,6 +65,11 @@ export class LmStudioProvider extends OpenAICompatibleProvider {
     return call.effort === "low" ? "none" : undefined;
   }
 
+  /** The room for thinking is made in chat(), to fit the context models are loaded with. */
+  protected override thinkingRoom(): number {
+    return 0;
+  }
+
   protected override async fetchModels(signal: AbortSignal): Promise<string[]> {
     try {
       const models = await this.models(signal);
@@ -73,7 +78,7 @@ export class LmStudioProvider extends OpenAICompatibleProvider {
       return models
         .filter((model) => model.type === "llm")
         .map((model) => model.key)
-        .sort();
+        .sort((a, b) => a.localeCompare(b));
     } catch (error) {
       throw this.plainly(error, this.model ?? "");
     }

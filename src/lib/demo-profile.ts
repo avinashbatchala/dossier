@@ -53,7 +53,7 @@ export function demoProfile(): ProfileData {
       summary: basics.summary,
       showAge,
     },
-    skills: skills.map((name) => ({ id: skillId(name), name })),
+    skills: skills.map((name) => ({ id: skillId(name), name, group: "" })),
     languages: languages.map(({ name, level }, index) => ({
       id: `language-${index + 1}`,
       name,
@@ -64,6 +64,7 @@ export function demoProfile(): ProfileData {
       role: entry.role,
       company: entry.company,
       location: entry.location,
+      descriptor: entry.descriptor,
       bullets: entry.bullets,
       ...dateSpan(entry.start, entry.end),
       skillIds: entry.skills.map(skillId),

@@ -126,7 +126,7 @@ const INK = "#1d1c1a";
 /** Relative luminance of a "#rrggbb" colour (WCAG 2). */
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((start) => {
-    const channel = parseInt(hex.slice(start, start + 2), 16) / 255;
+    const channel = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
     return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;

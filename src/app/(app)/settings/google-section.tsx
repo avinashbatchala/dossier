@@ -95,7 +95,7 @@ export function GoogleSection({
   };
 
   const toggleDay = (day: number) =>
-    change({ workDays: settings.workDays.includes(day) ? settings.workDays.filter((entry) => entry !== day) : [...settings.workDays, day].sort() });
+    change({ workDays: settings.workDays.includes(day) ? settings.workDays.filter((entry) => entry !== day) : [...settings.workDays, day].sort((a, b) => a - b) });
 
   const disconnect = async () => {
     if (toastResult(await disconnectGoogleAccount({})).ok) router.refresh();

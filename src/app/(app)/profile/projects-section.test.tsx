@@ -40,8 +40,8 @@ function Harness() {
   const [state, setState] = useState<ProfileData>({
     basics: {} as ProfileData["basics"],
     skills: [
-      { id: "s1", name: "Python" },
-      { id: "s2", name: "SQL" },
+      { id: "s1", name: "Python", group: "" },
+      { id: "s2", name: "SQL", group: "" },
     ],
     languages: [],
     experience: [],
@@ -101,7 +101,7 @@ describe("ProjectsSection (PRO-13)", () => {
 
   it("attaches skills, and adds a new one to the profile in one step", async () => {
     const user = userEvent.setup();
-    vi.mocked(attachNewProjectSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "pandas" } } });
+    vi.mocked(attachNewProjectSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "pandas", group: "" } } });
     render(<Harness />);
     await user.click(header(/Churn predictor/));
     expect(screen.getByRole("group", { name: "Skills you used here" })).toHaveTextContent("1 of 2 attached");

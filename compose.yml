@@ -64,7 +64,7 @@ services:
   # http://ollama:11434; models are kept in the ollama volume.
   ollama:
     profiles: [ai]
-    image: ollama/ollama:0.40.6
+    image: ollama/ollama:0.40.10
     volumes:
       - ollama:/root/.ollama
 

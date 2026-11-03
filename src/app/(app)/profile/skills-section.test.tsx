@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import type { ProfileData } from "@/lib/profile";
 
-import { addLanguage, addSkill, removeLanguage, removeSkill, setLanguageLevel } from "./actions";
+import { addLanguage, addSkill, removeLanguage, removeSkill, renameSkillGroup, setLanguageLevel, setSkillGroup } from "./actions";
 import { SkillsSection } from "./skills-section";
 
 vi.mock("./actions", () => ({
   addSkill: vi.fn(),
   removeSkill: vi.fn(),
+  setSkillGroup: vi.fn(),
+  renameSkillGroup: vi.fn(),
   addLanguage: vi.fn(),
   setLanguageLevel: vi.fn(),
   removeLanguage: vi.fn(),
@@ -22,13 +24,13 @@ const span = { startYear: null, startMonth: null, endYear: null, endMonth: null,
 const profile = (): ProfileData => ({
   basics: {} as ProfileData["basics"],
   skills: [
-    { id: "s1", name: "Figma" },
-    { id: "s2", name: "User research" },
+    { id: "s1", name: "Figma", group: "" },
+    { id: "s2", name: "User research", group: "" },
   ],
   languages: [{ id: "l1", name: "Dutch", level: "NATIVE" }],
   experience: [
-    { id: "e1", role: "A", company: "", location: "", bullets: "", skillIds: ["s1", "s2"], ...span },
-    { id: "e2", role: "B", company: "", location: "", bullets: "", skillIds: ["s1"], ...span },
+    { id: "e1", role: "A", company: "", location: "", descriptor: "", bullets: "", skillIds: ["s1", "s2"], ...span },
+    { id: "e2", role: "B", company: "", location: "", descriptor: "", bullets: "", skillIds: ["s1"], ...span },
   ],
   projects: [],
   education: [],
@@ -63,10 +65,10 @@ describe("Skills", () => {
 
   it("adds a skill with Enter", async () => {
     const user = userEvent.setup();
-    vi.mocked(addSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility" } } });
+    vi.mocked(addSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility", group: "" } } });
     render(<Harness />);
     await user.type(screen.getByLabelText("Add a skill"), "Accessibility{Enter}");
-    expect(addSkill).toHaveBeenCalledWith({ name: "Accessibility" });
+    expect(addSkill).toHaveBeenCalledWith({ name: "Accessibility", group: "" });
     expect(await screen.findByText("Accessibility")).toBeInTheDocument();
     expect(screen.getByLabelText("Add a skill")).toHaveValue("");
     // No roles use it yet, so no count.
@@ -98,6 +100,71 @@ describe("Skills", () => {
     await user.click(screen.getByRole("button", { name: "Remove Figma" }));
     await waitFor(() => expect(screen.getByText("Figma")).toBeInTheDocument());
     expect(toast).toHaveBeenCalledWith("Something went wrong on the server. Please try again.");
+  });
+});
+
+describe("Skill groups (#280)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(addSkill).mockImplementation(async ({ name, group = "" }) => ({ ok: true, data: { added: true, skill: { id: `new-${name}`, name, group } } }));
+    vi.mocked(setSkillGroup).mockResolvedValue({ ok: true, data: null });
+    vi.mocked(renameSkillGroup).mockResolvedValue({ ok: true, data: null });
+  });
+
+  const newGroup = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    await user.click(screen.getByRole("button", { name: "+ New group" }));
+    await user.type(screen.getByLabelText("Name of the new group"), `${name}{Enter}`);
+  };
+
+  it("makes a group, which is saved with its first skill, in a field of its own", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await newGroup(user, "Tools");
+    expect(screen.getByRole("heading", { name: "Tools" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Add to Tools"), "Ahrefs{Enter}");
+    expect(addSkill).toHaveBeenCalledWith({ name: "Ahrefs", group: "Tools" });
+    expect(within(await screen.findByRole("list", { name: "Skills in Tools" })).getByText("Ahrefs")).toBeInTheDocument();
+    expect(latest.skills.at(-1)).toEqual({ id: "new-Ahrefs", name: "Ahrefs", group: "Tools" });
+  });
+
+  it("refuses a group name with “:” or “·”, or one that's taken", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await newGroup(user, "Tools: design");
+    expect(toast).toHaveBeenCalledWith("A group's name can't have “:” or “·” in it.");
+    await user.clear(screen.getByLabelText("Name of the new group"));
+    await user.type(screen.getByLabelText("Name of the new group"), "Tools{Enter}");
+    await newGroup(user, "tools");
+    expect(toast).toHaveBeenLastCalledWith("There's a group called tools already.");
+  });
+
+  it("moves a skill from its menu, and moves one typed into another group's field", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await newGroup(user, "Design");
+    await user.type(screen.getByLabelText("Add to Design"), "Prototyping{Enter}");
+    await user.click(screen.getByRole("button", { name: "Figma (change its group)" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Design" }));
+    expect(setSkillGroup).toHaveBeenCalledWith({ id: "s1", group: "Design" });
+    expect(within(screen.getByRole("list", { name: "Skills in Design" })).getByText("Figma")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Add a skill"), "figma{Enter}");
+    expect(setSkillGroup).toHaveBeenLastCalledWith({ id: "s1", group: "" });
+    expect(toast).toHaveBeenCalledWith("Moved “Figma” out of Design.");
+    expect(within(screen.getByRole("list", { name: "Your skills" })).getByText("Figma")).toBeInTheDocument();
+  });
+
+  it("renames a group, moving its skills with it", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await newGroup(user, "Desing");
+    await user.type(screen.getByLabelText("Add to Desing"), "Prototyping{Enter}");
+    await user.click(screen.getByRole("button", { name: "Rename Desing" }));
+    await user.clear(screen.getByLabelText("New name for Desing"));
+    await user.type(screen.getByLabelText("New name for Desing"), "Design{Enter}");
+    expect(renameSkillGroup).toHaveBeenCalledWith({ from: "Desing", to: "Design" });
+    expect(screen.getByRole("heading", { name: "Design" })).toBeInTheDocument();
+    expect(latest.skills.find((skill) => skill.name === "Prototyping")?.group).toBe("Design");
   });
 });
 

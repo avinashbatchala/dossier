@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { action, ActionError } from "@/lib/action";
-import { isAiConfigured, isAiUsable } from "@/lib/ai/config";
+import { isAiUsable } from "@/lib/ai/config";
 import { handOffFoundPosting, handsOffToClaude } from "@/lib/connector/handoff";
 import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { fullText } from "@/lib/job-search/find";
@@ -12,6 +12,8 @@ import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { scoreJobKey, scorePostingJob } from "@/lib/jobs/score-posting";
 import { removeSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { dismissPosting, savePosting, storePosting, unmarkPosting } from "@/lib/postings";
+import { scoringProblem } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
 import { saveSettings } from "@/lib/settings-data";
 
 // Find jobs (E14-6). Each search is kept with what it found (E14-10).
@@ -79,11 +81,14 @@ export const restorePosting = action(postingRef.extend({ saved: z.boolean() }), 
 /**
  * "Score" (#208): how well a posting fits the profile, in the background; a
  * scoring under way is followed, not started again. With the Claude connector
- * on and no AI model of Dossier's own, a Claude chat scores it instead (#221).
+ * on and no AI model of Dossier's own, a Claude chat scores it instead (#221),
+ * unless Settings → Scoring chose Jev (#274).
  */
 export const startScoringPosting = action(z.object({ posting: foundPostingSchema }), async ({ posting }): Promise<{ jobId: string } | { handoff: string }> => {
-  if (await handsOffToClaude(await isAiUsable())) return { handoff: await handOffFoundPosting(posting, "score") };
-  if (!(await isAiConfigured())) throw new ActionError("Choose an AI provider in Settings → AI provider first.");
+  const scoring = await loadScoringConfig();
+  if (scoring.scorer === "AI" && (await handsOffToClaude(await isAiUsable()))) return { handoff: await handOffFoundPosting(posting, "score") };
+  const problem = await scoringProblem(scoring);
+  if (problem) throw new ActionError(problem);
   const key = scoreJobKey(posting);
   const [unfinished] = await findUnfinishedJobs(key);
   return { jobId: unfinished?.id ?? (await startJob(scorePostingJob, { posting }, { key })) };

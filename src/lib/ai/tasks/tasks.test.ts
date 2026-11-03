@@ -12,6 +12,7 @@ import { isoDate } from "./extract-posting";
 import { sameSkill } from "./match-requirements";
 import { COVER_LETTER_APPROACH } from "./prompt-parts";
 import { withoutFrame } from "./write-cover-letter";
+import { resumeUnits } from "./tailor-resume";
 import { recipient } from "./write-email";
 import {
   extractPosting,
@@ -281,6 +282,14 @@ describe("tailorResume", () => {
     expect(sent(provider).system).toMatch(/Write with personality/);
     expect(sent(provider).system).toMatch(/reasonable conclusions/);
     expect(sent(provider).system).toMatch(/Write everything in Dutch\./);
+  });
+});
+
+describe("resumeUnits' skills (#280)", () => {
+  it("keeps the model's order, a line per group where its first skill comes, only the profile's own skills", () => {
+    const grouped = { ...demoProfile(), skills: demoProfile().skills.map((skill) => ({ ...skill, group: ["Figma", "Prototyping"].includes(skill.name) ? "Tools" : "" })) };
+    const units = resumeUnits(grouped, { summary: "", roles: [], projects: [], education: [], skills: ["figma", "User research", "Prototyping", "Kubernetes", "Design systems"] });
+    expect(units.find((unit) => unit.id === "skills")?.text).toBe("Tools: Figma · Prototyping\nUser research · Design systems");
   });
 });
 

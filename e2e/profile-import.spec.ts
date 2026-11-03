@@ -14,6 +14,7 @@ const RESUME = docxWith([
   "Design Lead in Utrecht · robin@example.com",
   "Experience",
   "Design Lead, Acme Payments, Utrecht, March 2021 – present",
+  "Payouts for online marketplaces, 60 people",
   "Led the redesign of the payout flow",
   "Skills: Figma",
   "Languages: Dutch (native)",
@@ -48,6 +49,7 @@ test("reads a resume, shows what it found and merges it into the profile", async
   await expect(page).toHaveURL(/\/profile\/import\?job=/);
   const preview = page.locator("section", { has: page.getByRole("heading", { name: "Experience" }) });
   await expect(preview).toContainText("Design Lead · Acme Payments");
+  await expect(preview).toContainText("Payouts for online marketplaces, 60 people");
   await expect(preview).toContainText("Led the redesign of the payout flow");
   // "Service design" isn't in the file.
   await expect(page.locator("li", { hasText: "Service design" })).toContainText("check");

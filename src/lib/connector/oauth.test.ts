@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const env = vi.hoisted(() => ({ DOSSIER_SECRET: "s".repeat(40), DOSSIER_PASSWORD: "argon2id:m=19456,t=2,p=1:c2FsdA:aGFzaA" }));
 vi.mock("@/lib/env", () => ({ env }));
-const settings = vi.hoisted(() => ({ connectorEnabledAt: "2026-10-23T09:00:00.000Z" as string | null }));
+const settings = vi.hoisted(() => ({ connectorEnabledAt: "2026-10-23T09:00:00.000Z" as string | null, connectorRedirects: ["https://n8n.example/rest/oauth2-credential/callback"] }));
 vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => settings }));
 
 import {
+  addedRedirects,
   allowedRedirect,
   authorizationServerMetadata,
   challengeOf,
@@ -14,6 +15,7 @@ import {
   issueCode,
   protectedResourceMetadata,
   readClient,
+  redirectProblem,
   refresh,
   registerClient,
   verifyAccessToken,
@@ -44,6 +46,37 @@ describe("the Claude connector's sign-in (#221)", () => {
     expect(allowedRedirect("http://localhost:33418/other")).toBe(false);
     expect(allowedRedirect("https://localhost/callback")).toBe(false);
     expect(allowedRedirect("not a url")).toBe(false);
+  });
+
+  it("sends another app back to an address added in Settings → MCP connector, exactly (#281)", async () => {
+    const added = await addedRedirects();
+    expect(added).toEqual(["https://n8n.example/rest/oauth2-credential/callback"]);
+    expect(allowedRedirect("https://n8n.example/rest/oauth2-credential/callback", added)).toBe(true);
+    expect(allowedRedirect("https://n8n.example/rest/oauth2-credential/callback/", added)).toBe(false);
+    expect(allowedRedirect("https://n8n.example/rest/oauth2-credential/callback?x=1", added)).toBe(false);
+    expect(allowedRedirect("https://n8n.example/rest/oauth2-credential/callback")).toBe(false);
+  });
+
+  it("takes an https callback address, or http on this computer or a private network (#281)", () => {
+    for (const ok of [
+      "https://n8n.example/rest/oauth2-credential/callback",
+      "http://localhost:5678/rest/oauth2-credential/callback",
+      "http://192.168.1.20:5678/callback",
+      "http://10.0.0.5/callback",
+      "http://172.20.1.1/callback",
+      "http://n8n:5678/callback",
+      "http://n8n.local/callback",
+      "http://n8n.home.arpa/callback",
+    ]) {
+      expect(redirectProblem(ok), ok).toBeNull();
+    }
+    expect(redirectProblem("http://n8n.example/callback")).toBe("Use an https:// address, or http:// only for an app on this computer or your own network.");
+    expect(redirectProblem("http://10.example.com/callback")).toBe("Use an https:// address, or http:// only for an app on this computer or your own network.");
+    expect(redirectProblem("http://172.32.0.1/callback")).toBe("Use an https:// address, or http:// only for an app on this computer or your own network.");
+    expect(redirectProblem("https://n8n.example/callback#done")).toBe("A callback address can't have a # part or a user name in it.");
+    expect(redirectProblem("https://me@n8n.example/callback")).toBe("A callback address can't have a # part or a user name in it.");
+    expect(redirectProblem("javascript:alert(1)")).toBe("That isn't a web address. Copy it from the app, starting with https://.");
+    expect(redirectProblem("n8n.example/callback")).toBe("That isn't a web address. Copy it from the app, starting with https://.");
   });
 
   it("keeps a client's redirects in its id, ignoring a loopback port that changes", async () => {
@@ -93,7 +126,7 @@ describe("the Claude connector's sign-in (#221)", () => {
     const freshTokens = await exchangeCode({ code: fresh.code, clientId: fresh.clientId, redirectUri: CLAUDE, verifier: VERIFIER });
     settings.connectorEnabledAt = null;
     expect(await verifyAccessToken(freshTokens.access_token)).toBeNull();
-    await expect(signIn()).rejects.toThrow("The Claude connector is off.");
+    await expect(signIn()).rejects.toThrow("The MCP connector is off.");
 
     // A new password, like every browser session.
     settings.connectorEnabledAt = "2026-10-23T11:00:00.000Z";

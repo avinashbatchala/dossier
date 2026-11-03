@@ -108,6 +108,35 @@ describe("ResumeDocument", () => {
     expect(screen.getByText("Former manager, Northwind Logistics")).toBeInTheDocument();
   });
 
+  it("puts the line about a role's company under its title, as written, tailored or not (#257)", () => {
+    for (const units of [undefined, demoResumeUnits()]) {
+      const { unmount } = render(<ResumeDocument theme={theme("editorial")} profile={profile} paper="A4" units={units} today={today} />);
+      const line = screen.getByText("Freight platform for European carriers, 300 people");
+      expect(line.previousElementSibling).toHaveTextContent("Senior Product Designer, Northwind Logistics");
+      expect(line.nextElementSibling?.tagName).toBe("UL");
+      // A role without one has nothing between its title and its points.
+      const studio = screen.getByText("UX Designer").closest("[data-unit]")!;
+      expect(studio.querySelector("ul")?.previousElementSibling).toHaveTextContent("UX Designer, Studio Brik");
+      unmount();
+    }
+  });
+
+  it("prints a line per skill group, led by its name, those without a group first (#280)", () => {
+    const grouped = {
+      ...profile,
+      skills: profile.skills.map((skill) => ({ ...skill, group: ["Figma", "Prototyping"].includes(skill.name) ? "Tools" : skill.name === "User research" ? "Research" : "" })),
+    };
+    render(<ResumeDocument theme={theme("editorial")} profile={grouped} paper="A4" today={today} />);
+    const lines = [...document.querySelectorAll('[data-unit="skills"] p')];
+    expect(lines.map((line) => line.textContent)).toEqual([
+      "Interaction design · Design systems · HTML & CSS · Workshop facilitation",
+      "Tools: Prototyping · Figma",
+      "Research: User research",
+    ]);
+    expect(within(lines[1] as HTMLElement).getByText("Tools:", { selector: "strong" })).toBeInTheDocument();
+    expect(lines[0].querySelector("strong")).toBeNull();
+  });
+
   it("renders a tailored resume from its units", () => {
     render(<ResumeDocument theme={theme("editorial")} profile={profile} paper="A4" units={demoResumeUnits()} />);
     expect(screen.getByText(/^Senior product designer with nine years of making complex/).closest("[data-unit]")).toHaveAttribute(

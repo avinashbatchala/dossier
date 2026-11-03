@@ -33,13 +33,14 @@ export async function loadProfile(): Promise<ProfileData> {
   return {
     basics: basicsFromFields(fields),
     photo: photoFromFields(fields),
-    skills: skills.map(({ id, name }) => ({ id, name })),
+    skills: skills.map(({ id, name, group }) => ({ id, name, group })),
     languages: languages.map(({ id, name, level }) => ({ id, name, level })),
     experience: inEntryOrder(experience, settings.experienceOrder).map((entry) => ({
       id: entry.id,
       role: entry.role,
       company: entry.company,
       location: entry.location,
+      descriptor: entry.descriptor,
       bullets: entry.bullets,
       startYear: entry.startYear,
       startMonth: entry.startMonth,

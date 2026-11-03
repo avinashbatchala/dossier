@@ -37,7 +37,7 @@ services:
       DOSSIER_SECRET: ${DOSSIER_SECRET:?Set DOSSIER_SECRET in .env}
       DOSSIER_BACKUP_RETENTION_DAYS: ${DOSSIER_BACKUP_RETENTION_DAYS:-}
       # Your time zone, e.g. Europe/Berlin: nightly backups run at 03:00 in it.
-      TZ: ${TZ:-}
+      TZ: ${TZ:-UTC}
       DOSSIER_AI_PROVIDER: ${DOSSIER_AI_PROVIDER:-}
       DOSSIER_AI_URL: ${DOSSIER_AI_URL:-}
       DOSSIER_AI_MODEL: ${DOSSIER_AI_MODEL:-}
@@ -51,6 +51,11 @@ services:
       DOSSIER_JSEARCH_HOST: ${DOSSIER_JSEARCH_HOST:-}
       DOSSIER_ADZUNA_APP_ID: ${DOSSIER_ADZUNA_APP_ID:-}
       DOSSIER_ADZUNA_KEY: ${DOSSIER_ADZUNA_KEY:-}
+      DOSSIER_FREEHIRE_URL: ${DOSSIER_FREEHIRE_URL:-}
+      DOSSIER_JOBS_ARBEITSAGENTUR: ${DOSSIER_JOBS_ARBEITSAGENTUR:-}
+      # Defaults for Settings → Scoring: ai or jev (Jev by TypeSafe, with its key).
+      DOSSIER_SCORER: ${DOSSIER_SCORER:-}
+      DOSSIER_TYPESAFE_KEY: ${DOSSIER_TYPESAFE_KEY:-}
       # Gmail and Calendar: a Google OAuth client (or enter it in Settings → Google).
       DOSSIER_GOOGLE_CLIENT_ID: ${DOSSIER_GOOGLE_CLIENT_ID:-}
       DOSSIER_GOOGLE_CLIENT_SECRET: ${DOSSIER_GOOGLE_CLIENT_SECRET:-}
@@ -72,7 +77,7 @@ services:
   # then pull one (see "Choosing an AI provider" in the wiki). Dossier reaches it at http://ollama:11434.
   ollama:
     profiles: [ai]
-    image: ollama/ollama:0.40.6
+    image: ollama/ollama:0.40.10
     restart: unless-stopped
     volumes:
       - ollama:/root/.ollama

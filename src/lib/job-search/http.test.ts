@@ -56,11 +56,19 @@ describe("requestJson", () => {
     await expect(requestJson("JSEARCH", url)).rejects.toMatchObject({ problem: "unavailable", detail: "JSEARCH: /api/search: timed out" });
   });
 
-  it("gives up when the caller does", async () => {
+  it("gives a source 10 seconds unless it asks for longer (#231)", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    stubFetch(() => json({ ok: true }));
+    await requestJson("ADZUNA", url);
+    await requestJson("JSEARCH", url, { timeoutMs: 45_000 });
+    expect(timeout.mock.calls).toEqual([[10_000], [45_000]]);
+  });
+
+  it("gives up when the caller does, however long it would wait", async () => {
     const caller = new AbortController();
     caller.abort();
     stubFetch((_, signal) => Promise.reject(signal?.reason ?? new Error("aborted")));
-    await expect(requestJson("JSEARCH", url, { signal: caller.signal })).rejects.toMatchObject({
+    await expect(requestJson("JSEARCH", url, { signal: caller.signal, timeoutMs: 45_000 })).rejects.toMatchObject({
       problem: "unavailable",
       detail: "JSEARCH: /api/search: request failed",
     });

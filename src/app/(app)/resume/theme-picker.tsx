@@ -22,8 +22,20 @@ type ThemePickerProps = {
   };
 };
 
-const accessibleName = (theme: ThemeData, active: boolean) =>
-  `${theme.name} theme${active ? ", in use" : ""}`;
+/**
+ * What screen readers hear after a theme's visible name: "Classic theme, in
+ * use". The buttons are named by their text rather than an aria-label, which
+ * would have to repeat everything they show, the sketch's name included
+ * (WCAG 2.5.3).
+ */
+function NameSuffix({ active }: { active: boolean }) {
+  return (
+    <>
+      {" "}
+      <span className="sr-only">{`theme${active ? ", in use" : ""}`}</span>
+    </>
+  );
+}
 
 /** The Themes tab: built-in thumbnails, your own themes, and a way to make one (RES-2, RES-4). */
 export function ThemePicker({ themes, activeId, userName, onSelect, onCustomize, actions }: ThemePickerProps) {
@@ -56,7 +68,6 @@ export function ThemePicker({ themes, activeId, userName, onSelect, onCustomize,
               <button
                 key={theme.id}
                 type="button"
-                aria-label={accessibleName(theme, active)}
                 data-in-use={active || undefined}
                 onClick={() => onSelect(theme.id)}
                 className={cn(
@@ -67,8 +78,13 @@ export function ThemePicker({ themes, activeId, userName, onSelect, onCustomize,
                 <span aria-hidden className="size-3.5 flex-none rounded-full" style={{ background: theme.accent }} />
                 <span className="flex-1 truncate text-sm" style={{ fontFamily: THEME_FONTS[theme.headFont].family }}>
                   {theme.name}
+                  <NameSuffix active={active} />
                 </span>
-                {active && <span className="text-xs text-muted">In use</span>}
+                {active && (
+                  <span aria-hidden className="text-xs text-muted">
+                    In use
+                  </span>
+                )}
               </button>
             );
           })}
@@ -164,7 +180,6 @@ function ThemeThumbnail({
   return (
     <button
       type="button"
-      aria-label={accessibleName(theme, active)}
       data-in-use={active || undefined}
       onClick={onSelect}
       className="group flex flex-col gap-2 text-left"
@@ -201,9 +216,16 @@ function ThemeThumbnail({
           {sidebarEnd && sidebar}
         </span>
       </span>
-      <span aria-hidden className="flex items-baseline justify-between text-control">
-        <span className={active ? "font-semibold" : undefined}>{theme.name}</span>
-        {active && <span className="text-xs text-muted">In use</span>}
+      <span className="flex items-baseline justify-between text-control">
+        <span className={active ? "font-semibold" : undefined}>
+          {theme.name}
+          <NameSuffix active={active} />
+        </span>
+        {active && (
+          <span aria-hidden className="text-xs text-muted">
+            In use
+          </span>
+        )}
       </span>
     </button>
   );

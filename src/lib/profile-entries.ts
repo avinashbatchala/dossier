@@ -22,9 +22,13 @@ export async function firstSort(model: {
 }
 
 /** Finds a skill by name, ignoring case (citext), or creates it. */
-export async function findOrCreateSkill(name: string) {
+export async function findOrCreateSkill(name: string, group?: string) {
   const existing = await prisma.skill.findUnique({ where: { name } });
-  if (existing) return { skill: { id: existing.id, name: existing.name }, added: false };
-  const created = await prisma.skill.create({ data: { name, sort: await nextSort(prisma.skill) } });
-  return { skill: { id: created.id, name: created.name }, added: true };
+  if (existing) {
+    // Added under a group in Profile → Skills, it moves there (#280).
+    const skill = group !== undefined && group !== existing.group ? await prisma.skill.update({ where: { id: existing.id }, data: { group } }) : existing;
+    return { skill: { id: skill.id, name: skill.name, group: skill.group }, added: false };
+  }
+  const created = await prisma.skill.create({ data: { name, group: group ?? "", sort: await nextSort(prisma.skill) } });
+  return { skill: { id: created.id, name: created.name, group: created.group }, added: true };
 }

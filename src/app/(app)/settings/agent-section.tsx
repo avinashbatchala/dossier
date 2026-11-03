@@ -11,9 +11,11 @@ import { Toggle } from "@/components/ui/toggle";
 import { useAutosave } from "@/hooks/use-autosave";
 import type { Country } from "@/lib/job-search/countries";
 import { searchArea, searchHref, type JobSource, type SearchQuery } from "@/lib/job-search/search";
+import type { Scorer } from "@/lib/scoring/scorers";
 
 import { saveAgentSettings } from "../agent/actions";
 import { RemoteOnlyField, SearchFields, type SearchFieldErrors } from "../jobs/search-fields";
+import { SETTINGS_SECTIONS, settingsSectionHref, type SettingsSectionId } from "./sections";
 import { SettingsSectionIntro } from "./settings-screen";
 
 export type AgentSettings = {
@@ -41,14 +43,15 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 export function AgentSection({
   initial,
   source,
-  aiReady,
+  scoring,
   countries,
   timeZone,
 }: {
   initial: AgentSettings;
   /** The source in Settings → Job search; null while job search is off. */
   source: JobSource | null;
-  aiReady: boolean;
+  /** What scores the postings (Settings → Scoring), and whether it's set up. */
+  scoring: { scorer: Scorer; ready: boolean };
   countries: readonly Country[];
   /** The user's time zone, which the hour is in. */
   timeZone: string;
@@ -93,20 +96,18 @@ export function AgentSection({
       {source === "ARBEITSAGENTUR" ? (
         // It searches on its own, which the BA's terms forbid most clearly (#223).
         <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-          The agent doesn&apos;t search the Bundesagentur für Arbeit. Choose JSearch or Adzuna in{" "}
+          The agent doesn&apos;t search the Bundesagentur für Arbeit. Choose JSearch, Adzuna or FreeHire in{" "}
           <Link href="/settings?section=jobs" className="font-medium text-warning underline underline-offset-2">
             Settings → Job search
           </Link>{" "}
           for it.
         </p>
-      ) : (!source || !aiReady) && (
-        <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-          {!source ? "The agent searches the source you choose in " : "The agent scores postings with the AI provider in "}
-          <Link href={!source ? "/settings?section=jobs" : "/settings?section=ai"} className="font-medium text-warning underline underline-offset-2">
-            {!source ? "Settings → Job search" : "Settings → AI provider"}
-          </Link>
-          {!source ? ", which is off. Choose one first." : ", which isn't set up yet. Choose one first."}
-        </p>
+      ) : !source ? (
+        <SetupNote before="The agent searches the source you choose in " section="jobs" after=", which is off. Choose one first." />
+      ) : scoring.ready ? null : scoring.scorer === "JEV" ? (
+        <SetupNote before="The agent scores postings with Jev, which needs your TypeSafe key in " section="scoring" after="." />
+      ) : (
+        <SetupNote before="The agent scores postings with the AI provider in " section="ai" after=", which isn't set up yet. Choose one first." />
       )}
 
       <Card padding="none" className="px-7 py-4">
@@ -199,5 +200,18 @@ export function AgentSection({
         {settings.autoDraft ? ` and prepares up to ${plural(settings.maxDrafts, "draft", "drafts")}` : ""}. Scoring and drafts go to your AI provider with your profile, as a new application does; the job source only gets the search.
       </p>
     </>
+  );
+}
+
+/** What the agent still needs, with a link to the section that sets it up. */
+function SetupNote({ before, section, after }: { before: string; section: SettingsSectionId; after: string }) {
+  return (
+    <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+      {before}
+      <Link href={settingsSectionHref(section)} className="font-medium text-warning underline underline-offset-2">
+        Settings → {SETTINGS_SECTIONS.find((entry) => entry.id === section)?.label}
+      </Link>
+      {after}
+    </p>
   );
 }

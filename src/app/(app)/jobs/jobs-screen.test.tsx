@@ -161,6 +161,12 @@ describe("the search form", () => {
     expect(screen.getByLabelText("Within")).toBeDisabled();
   });
 
+  it("has no radius for a source without one", () => {
+    renderScreen({ source: "FREEHIRE" });
+    expect(screen.getByLabelText("Within")).toBeDisabled();
+    expect(screen.getByText("FreeHire has no distance filter")).toBeInTheDocument();
+  });
+
   it("says when the source doesn't cover the country", async () => {
     renderScreen({ source: "ARBEITSAGENTUR" });
     await userEvent.selectOptions(screen.getByLabelText("Country"), "fr");
@@ -326,6 +332,11 @@ describe("the results", () => {
     const wholeCountry = { ...query, place: "" };
     renderScreen({ search: { id: "run-1", source: "JSEARCH", query: wholeCountry, ranAt: "today at 14:32", postings: [], next: null } });
     expect(screen.getByText("No postings for “product designer” anywhere in Germany. Try fewer words, or a longer period.")).toBeInTheDocument();
+  });
+
+  it("says when nothing was found on a source without a radius", () => {
+    renderScreen({ source: "FREEHIRE", search: { ...stored([]), source: "FREEHIRE" } });
+    expect(screen.getByText("No postings for “product designer” in Hamburg. Try fewer words.")).toBeInTheDocument();
   });
 
   it("labels each of Adzuna's postings with a link to its site for the posting's country, as its terms ask", () => {

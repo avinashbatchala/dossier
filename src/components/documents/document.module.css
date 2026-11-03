@@ -148,6 +148,15 @@
   min-width: 0;
 }
 
+/* Skill groups (#280): a line each, the group's name first. */
+.skillLine + .skillLine {
+  margin-top: calc(var(--u) * 3);
+}
+
+.skillLabel {
+  font-weight: 600;
+}
+
 .section {
   display: flex;
   flex-direction: column;
@@ -173,6 +182,8 @@
 
 .summary {
   text-wrap: pretty;
+  /* Its paragraphs, as typed in Profile → Basics (#277). */
+  white-space: pre-line;
 }
 
 /* ─── Entries (roles, education) ───────────────────────────────────────── */
@@ -201,6 +212,15 @@
   font-size: 0.9em;
   color: var(--doc-muted);
   white-space: nowrap;
+}
+
+/* A line about the company or the role, under its title (#257). */
+.descriptor {
+  margin-top: calc(var(--u) * 2);
+  font-size: 0.9em;
+  font-style: italic;
+  color: var(--doc-muted);
+  break-before: avoid;
 }
 
 .bullets {

@@ -108,6 +108,11 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
               Northwind Logistics
             </p>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -154,6 +159,11 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
               Fieldnote
             </p>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -384,7 +394,9 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -518,6 +530,11 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
               Northwind Logistics
             </p>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -564,6 +581,11 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
               Fieldnote
             </p>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -794,7 +816,9 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -928,6 +952,11 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -974,6 +1003,11 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -1204,7 +1238,9 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -1316,7 +1352,9 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -1389,6 +1427,11 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -1435,6 +1478,11 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -1763,6 +1811,11 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -1809,6 +1862,11 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -2039,7 +2097,9 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -2173,6 +2233,11 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -2219,6 +2284,11 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -2449,7 +2519,9 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -2561,7 +2633,9 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -2634,6 +2708,11 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -2680,6 +2759,11 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3008,6 +3092,11 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3054,6 +3143,11 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3284,7 +3378,9 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -3396,7 +3492,9 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -3469,6 +3567,11 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3515,6 +3618,11 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3843,6 +3951,11 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -3889,6 +4002,11 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -4119,7 +4237,9 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -4220,6 +4340,11 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -4266,6 +4391,11 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -4544,7 +4674,9 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -4656,7 +4788,9 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
         <div
           data-unit="skills"
         >
-          <p>
+          <p
+            class="_skillLine_fa1ef7"
+          >
             Interaction design · Design systems · Prototyping · User research · Figma · HTML & CSS · Workshop facilitation
           </p>
         </div>
@@ -4729,6 +4863,11 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
               Mar 2021 – Present
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Freight platform for European carriers, 300 people
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >
@@ -4775,6 +4914,11 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
               Jun 2018 – Feb 2021
             </span>
           </div>
+          <p
+            class="_descriptor_fa1ef7"
+          >
+            Note-taking app for field researchers
+          </p>
           <ul
             class="_bullets_fa1ef7"
           >

@@ -38,12 +38,12 @@ describe("ThemePicker", () => {
     const signal = screen.getByRole("button", { name: "Signal theme" });
     const name = within(signal).getByText("Jane Doe");
     expect(name).toHaveStyle({ color: "#ffffff" });
-    expect(name.parentElement).toHaveStyle({ background: "#1f3a5f" });
+    expect(name.parentElement).toHaveStyle({ backgroundColor: "#1f3a5f" });
   });
 
   it("lists your own themes (RES-4)", () => {
     renderPicker("c1");
-    expect(screen.getByRole("button", { name: "My theme theme, in use" })).toHaveTextContent("My themeIn use");
+    expect(within(screen.getByRole("button", { name: "My theme theme, in use" })).getByText("In use")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Editorial theme" })).toBeInTheDocument();
   });
 

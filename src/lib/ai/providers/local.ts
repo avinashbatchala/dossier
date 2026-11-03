@@ -52,6 +52,7 @@ export class LocalProvider implements AIProvider {
   complete<T>(request: JsonCompletionRequest<T>): Promise<T>;
   async complete<T>(request: CompletionRequest | JsonCompletionRequest<T>): Promise<string | T> {
     const provider = await this.delegate(request.signal);
+    // The same call either way: the check tells TypeScript which overload it is.
     return "schema" in request ? provider.complete(request) : provider.complete(request);
   }
 

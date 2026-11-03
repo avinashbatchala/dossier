@@ -140,7 +140,7 @@ describe("the next interview's date (E9-9)", () => {
     const at = new Date("2026-10-01T12:00:00Z");
     render(<StatusControl id="app-1" status="INTERVIEW" interviewAt={at} />);
     const pill = screen.getByRole("button", { name: `Next interview: ${formatDateTime(at)}. Change` });
-    expect(pill).toHaveTextContent(`Interview${formatDateTime(at)}`);
+    expect(pill).toHaveTextContent(`Interview ${formatDateTime(at)}`);
     await user.click(pill);
     const dialog = screen.getByRole("dialog", { name: "Next interview" });
     expect(within(dialog).getByLabelText("Date and time")).toHaveValue(

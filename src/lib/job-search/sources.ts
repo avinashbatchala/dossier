@@ -10,9 +10,9 @@ export type JobSearchSettingsView = {
   adzuna: { appId: string; keyState: JobKeyState };
   /** Whether this server offers the Bundesagentur für Arbeit, and when its note was accepted (#223). */
   arbeitsagentur: { offered: boolean; acceptedAt: string | null };
+  /** The FreeHire it searches: "freehire.me", or a self-hosted one's host (DOSSIER_FREEHIRE_URL). */
+  freehire: { host: string };
 };
-
-export const JOB_KEY_UNREADABLE = "Your saved key can't be read. Please enter it again.";
 
 /** Where to get a JSearch key, by where it's from. */
 export const JSEARCH_KEY_URLS: Record<JSearchHost, string> = {
@@ -41,6 +41,8 @@ export type SourceInfo = {
   attributionLink: { home: string; local: RegExp } | null;
   /** The countries it lists jobs in (ISO codes); null for every country. */
   countries: readonly string[] | null;
+  /** Whether it looks within a distance of the place; without, the place only puts postings there first. */
+  radius: boolean;
 };
 
 export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
@@ -53,6 +55,7 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
     attribution: null,
     attributionLink: null,
     countries: null,
+    radius: true,
   },
   ADZUNA: {
     name: "Adzuna",
@@ -64,6 +67,7 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
     // Its terms: "Adzuna" on each displayed advert, at least 116 × 23 px, linked to adzuna.co.uk or the local site.
     attributionLink: { home: "https://www.adzuna.co.uk", local: /^www\.adzuna\.(?:[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})$/ },
     countries: ["at", "au", "be", "br", "ca", "ch", "de", "es", "fr", "gb", "in", "it", "mx", "nl", "nz", "pl", "sg", "us", "za"],
+    radius: true,
   },
   ARBEITSAGENTUR: {
     name: "Bundesagentur für Arbeit",
@@ -74,8 +78,24 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
     attribution: "Source: Bundesagentur für Arbeit",
     attributionLink: null,
     countries: ["de"],
+    radius: true,
+  },
+  FREEHIRE: {
+    name: "FreeHire",
+    description: "Mostly tech postings, read straight from company career pages (Greenhouse, Lever, Workday and more), with full postings.",
+    tag: "Most countries · free, no key · no distance filter",
+    keyUrl: null,
+    quotaPeriod: null,
+    attribution: "Jobs by FreeHire",
+    attributionLink: null,
+    countries: null,
+    // It has a city filter, but only for the names it knows, and a country with it widens rather than narrows.
+    radius: false,
   },
 };
+
+/** FreeHire's public catalogue; DOSSIER_FREEHIRE_URL can name a self-hosted one instead. */
+export const FREEHIRE_URL = "https://freehire.me";
 
 /** Whether a source lists jobs in a country ("de"). */
 export function sourceCovers(source: JobSource, country: string): boolean {

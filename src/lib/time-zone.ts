@@ -5,6 +5,17 @@ import { cookies } from "next/headers";
 import { TIME_ZONE_COOKIE } from "@/lib/greeting";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 
+/** Whether `Intl` takes `zone` as a time zone. */
+function isTimeZone(zone: string | undefined): zone is string {
+  if (!zone) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The browser's time zone as it last told the server (the dashboard's
  * greeting keeps it in a cookie), for showing times the user picked, such as
@@ -15,11 +26,20 @@ export async function userTimeZone(): Promise<string | undefined> {
   if (!value) return undefined;
   try {
     const zone = decodeURIComponent(value);
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return zone;
+    return isTimeZone(zone) ? zone : undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The server's own time zone, or UTC when it has none `Intl` takes: an
+ * empty TZ makes Node report "Etc/Unknown", and some values none at all
+ * (#258).
+ */
+export function serverTimeZone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone as string | undefined;
+  return isTimeZone(zone) ? zone : "UTC";
 }
 
 /**
@@ -34,7 +54,7 @@ export async function lastKnownTimeZone(): Promise<string> {
   } catch {
     // No request: cookies() can't be read here.
   }
-  return zone ?? (await loadSettings()).browserTimeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return zone ?? (await loadSettings()).browserTimeZone ?? serverTimeZone();
 }
 
 /** Keeps the browser's zone for work done without a request; called after a page with the zone its request had. */

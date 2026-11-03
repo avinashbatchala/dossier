@@ -7,8 +7,10 @@ src/generated
 npm-debug.log*
 Dockerfile
 .dockerignore
-# Not part of the app: planning docs, the prototype, test output and local data.
+# Not part of the app: planning docs, the prototype, the website, test output and local data.
 docs
+site
+_site
 design
 coverage
 playwright-report

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
 import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
+import { SCORERS } from "@/lib/scoring/scorers";
 import { startupsRefreshSchema } from "@/lib/startups/types";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
@@ -157,6 +158,11 @@ export const settingsSchema = z.object({
   adzunaKeyEnc: z.string().nullable().catch(null),
   /** When "I understand" was ticked under the Bundesagentur für Arbeit's note (#223); its searches wait for it. */
   arbeitsagenturAcceptedAt: z.iso.datetime().nullable().catch(null),
+  // Scoring (#274): what Score in Find jobs and the job agent score postings
+  // with. Null means "not set in the app": DOSSIER_SCORER decides, else the
+  // AI model. Jev's key is encrypted like the others, under its own key.
+  scorer: z.enum(SCORERS).nullable().catch(null),
+  typesafeKeyEnc: z.string().nullable().catch(null),
   // Job agent (E16): one search, run once a day. Off until it's turned on.
   // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
@@ -231,6 +237,8 @@ export const settingsSchema = z.object({
   // Every connector token carries it, so a new value signs Claude out. It
   // belongs to the install, so exports leave it out (INSTALL_SETTINGS).
   connectorEnabledAt: z.iso.datetime().nullable().catch(null),
+  /** Other MCP apps' callback addresses, allowed like Claude's (#281). The install's too: an import must never add one. */
+  connectorRedirects: stringList.catch([]),
   // The browser's time zone as it last told the server, for work done
   // without a request, such as the inbox check (time-zone.ts). It belongs
   // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).

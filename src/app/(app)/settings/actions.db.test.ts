@@ -8,21 +8,26 @@ import { createTestClient, resetDatabase } from "@/test/db";
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 
 import { json, stubFetch } from "@/lib/ai/test-http";
-import { decryptSecret, JOB_SOURCE_KEY } from "@/lib/secrets";
+import { decryptSecret, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 import { clearJobSearchCache } from "@/lib/job-search/cache";
 import { jsearchV2LastPage } from "@/test/job-search-fixtures";
 
 import {
   addDocumentLanguage,
-  disconnectClaude,
+  addConnectorRedirect,
+  disconnectApps,
+  removeConnectorRedirect,
   listAiModels,
   saveAiProvider,
   saveApiKey,
   saveJobSearchDetails,
   saveJobSource,
   saveJobSourceKey,
+  saveScorer,
+  saveTypesafeKey,
   setConnector,
   testAiConnection,
+  testJev,
   testJobSource,
   updateSettings,
 } from "./actions";
@@ -159,6 +164,7 @@ describe("job search settings (E14-4)", () => {
         jsearch: { host: "openwebninja", keyState: "none" },
         adzuna: { appId: "", keyState: "none" },
         arbeitsagentur: { offered: true, acceptedAt: null },
+        freehire: { host: "freehire.me" },
       },
     });
     await saveJobSource({ source: "OFF" });
@@ -232,19 +238,63 @@ describe("job search settings (E14-4)", () => {
   });
 });
 
-describe("the Claude connector (#221)", () => {
+describe("scoring settings (#274)", () => {
+  it("saves the scorer, and the TypeSafe key encrypted for it only", async () => {
+    expect(await saveScorer({ scorer: "JEV" })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "none" } });
+    expect(await saveTypesafeKey({ change: { action: "set", value: " ts_secret " } })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "set" } });
+    const saved = await settings();
+    expect(saved.scorer).toBe("JEV");
+    expect(saved.typesafeKeyEnc).not.toContain("ts_secret");
+    expect(decryptSecret(TYPESAFE_KEY, saved.typesafeKeyEnc!)).toBe("ts_secret");
+    expect(() => decryptSecret(JOB_SOURCE_KEY, saved.typesafeKeyEnc!)).toThrow();
+
+    expect(await saveTypesafeKey({ change: { action: "clear" } })).toEqual({ ok: true, data: { scorer: "JEV", keyState: "none" } });
+    expect((await settings()).typesafeKeyEnc).toBeNull();
+    expect(await saveScorer({ scorer: "AI" })).toMatchObject({ ok: true, data: { scorer: "AI" } });
+  });
+
+  it("tests Jev with the saved key, with one short question", async () => {
+    expect(await testJev({})).toEqual({ ok: true, data: { connected: false, message: "Enter your TypeSafe key in Settings → Scoring first." } });
+
+    await saveTypesafeKey({ change: { action: "set", value: "ts_secret" } });
+    const requests = stubFetch(() => json({ model: "jev-1.14.0", answers: { check: { type: "noul", noul: 0.98 } } }));
+    expect(await testJev({})).toEqual({ ok: true, data: { connected: true, model: "jev-1.14.0", seconds: expect.any(Number) } });
+    expect(requests[0].url.href).toBe("https://api.typesafe.ai/v1/systemone");
+    expect(requests[0].headers.get("authorization")).toBe("Bearer ts_secret");
+    expect(requests[0].body).toMatchObject({ model: "jev-latest", questions: { check: { type: "noul" } } });
+
+    stubFetch(() => json({}, { status: 401 }));
+    expect(await testJev({})).toEqual({ ok: true, data: { connected: false, message: "TypeSafe didn't accept the key. Check it in Settings → Scoring." } });
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("the MCP connector (#221, #281)", () => {
   it("turns on with the time it did, which every token carries, and off again", async () => {
-    expect(await disconnectClaude({})).toEqual({ ok: false, error: "The Claude connector is off already." });
+    expect(await disconnectApps({})).toEqual({ ok: false, error: "The MCP connector is off already." });
     expect(await setConnector({ on: true })).toEqual({ ok: true, data: { on: true } });
     const since = (await settings()).connectorEnabledAt;
     expect(Date.parse(since!)).toBeGreaterThan(Date.now() - 60_000);
 
-    // Disconnect Claude: a new time, so every token stops working.
+    // Disconnect all apps: a new time, so every token stops working.
     await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(await disconnectClaude({})).toMatchObject({ ok: true, toast: "Claude is disconnected. Connect it again from Claude to use Dossier there." });
+    expect(await disconnectApps({})).toMatchObject({ ok: true, toast: "Every app is disconnected. Connect again from an app to use Dossier there." });
     expect((await settings()).connectorEnabledAt).not.toBe(since);
 
     await setConnector({ on: false });
     expect((await settings()).connectorEnabledAt).toBeNull();
+  });
+
+  it("keeps other apps' callback addresses, once each, and refuses one that isn't safe", async () => {
+    const n8n = "https://n8n.example/rest/oauth2-credential/callback";
+    expect(await addConnectorRedirect({ uri: ` ${n8n} ` })).toEqual({ ok: true, data: { redirects: [n8n] } });
+    expect(await addConnectorRedirect({ uri: n8n })).toEqual({ ok: true, data: { redirects: [n8n] } });
+    expect(await addConnectorRedirect({ uri: "http://n8n.example/callback" })).toEqual({
+      ok: false,
+      error: "Use an https:// address, or http:// only for an app on this computer or your own network.",
+    });
+    expect(await addConnectorRedirect({ uri: "http://localhost:5678/callback" })).toMatchObject({ ok: true, data: { redirects: [n8n, "http://localhost:5678/callback"] } });
+    expect((await settings()).connectorRedirects).toEqual([n8n, "http://localhost:5678/callback"]);
+    expect(await removeConnectorRedirect({ uri: n8n })).toEqual({ ok: true, data: { redirects: ["http://localhost:5678/callback"] } });
   });
 });

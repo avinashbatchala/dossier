@@ -60,6 +60,22 @@ describe("tailoringSummary (E7-6)", () => {
     expect(untouched.list).toEqual(["Left out references, since the posting doesn't ask for them"]);
   });
 
+  it("reads skills in groups by their names, and claims no reordering for the profile's own order (#280)", () => {
+    const grouped = { ...profile, skills: profile.skills.map((skill) => ({ ...skill, group: skill.name === "Figma" ? "Tools" : "" })) };
+    const { list } = tailoringSummary({
+      ...base,
+      profile: grouped,
+      match: { items: [] },
+      resume: [
+        { id: "summary", label: "Summary", text: profile.basics.summary },
+        ...profile.experience.map((entry) => ({ id: `experience:${entry.id}`, label: "", text: entry.bullets })),
+        { id: "skills", label: "Skills", text: "Interaction design · Design systems · Prototyping · User research · HTML & CSS · Workshop facilitation\nTools: Figma" },
+      ],
+      letter: [],
+    });
+    expect(list).toEqual(["Left out references, since the posting doesn't ask for them"]);
+  });
+
   it("mentions skills left out, the note, and details to check", () => {
     const summary = tailoringSummary({
       ...base,

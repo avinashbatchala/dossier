@@ -56,6 +56,8 @@ export function appEnv(): Record<string, string> {
     // A production server asks whether to send the usage ping (#172); resetData
     // answers no, and a yes sends it to the fake job sources, never the project.
     DOSSIER_USAGE_PING_TEST_URL: `http://localhost:${FAKE_JOBS_PORT}/ping`,
+    // Jev is the fake job sources' too, once a spec chooses it in Settings → Scoring (#274).
+    DOSSIER_TYPESAFE_TEST_BASE_URL: `http://localhost:${FAKE_JOBS_PORT}/typesafe`,
     PORT: String(APP_PORT),
   };
 }

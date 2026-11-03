@@ -56,6 +56,7 @@ const answer = {
       role: "Design Lead",
       company: "Acme Payments",
       location: null,
+      descriptor: "  Payouts for online marketplaces, 60 people ",
       startYear: 2021,
       startMonth: 3,
       endYear: 2030,
@@ -64,8 +65,8 @@ const answer = {
       bullets: ["- Led the redesign of the payout flow", "• Set up the design system in Figma"],
       skills: ["Figma", "Accessibility"],
     },
-    { role: "Product Designer", company: "Fieldnote", location: null, startYear: 2017, startMonth: 0, endYear: 2021, endMonth: null, current: false, bullets: [], skills: [] },
-    { role: "", company: "", location: null, startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, bullets: [], skills: [] },
+    { role: "Product Designer", company: "Fieldnote", location: null, descriptor: null, startYear: 2017, startMonth: 0, endYear: 2021, endMonth: null, current: false, bullets: [], skills: [] },
+    { role: "", company: "", location: null, descriptor: null, startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, bullets: [], skills: [] },
   ],
   projects: [
     {
@@ -106,7 +107,7 @@ describe("extractProfile (E4-10)", () => {
   it("checks the answer: dates in range, levels, one of each skill, and names looked up in the resume", async () => {
     const provider = new MockProvider({ reply: () => answer });
     const { data, promptVersion } = await extractProfile(provider, { resume: RESUME, today: new Date("2026-09-29") }, options);
-    expect(promptVersion).toBe("extract-profile@3");
+    expect(promptVersion).toBe("extract-profile@4");
     expect(data.basics).toEqual({
       name: "John Doe",
       headline: "Senior Product Designer",
@@ -133,6 +134,7 @@ describe("extractProfile (E4-10)", () => {
         role: "Design Lead",
         company: "Acme Payments",
         location: "",
+        descriptor: "Payouts for online marketplaces, 60 people",
         bullets: "Led the redesign of the payout flow\nSet up the design system in Figma",
         skills: ["Figma", "Accessibility"],
         startYear: 2021,
@@ -146,6 +148,7 @@ describe("extractProfile (E4-10)", () => {
         role: "Product Designer",
         company: "Fieldnote",
         location: "",
+        descriptor: "",
         bullets: "",
         skills: [],
         startYear: 2017,

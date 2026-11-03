@@ -72,7 +72,7 @@ function salaryOf(offer: Offer): string {
 }
 
 export function postingFromOffer(offer: Offer): FoundPosting {
-  const posted = offer.datumErsteVeroeffentlichung ? Date.parse(`${offer.datumErsteVeroeffentlichung.slice(0, 10)}T00:00:00Z`) : NaN;
+  const posted = offer.datumErsteVeroeffentlichung ? Date.parse(`${offer.datumErsteVeroeffentlichung.slice(0, 10)}T00:00:00Z`) : Number.NaN;
   return {
     source: "ARBEITSAGENTUR",
     externalId: offer.referenznummer.slice(0, 500),

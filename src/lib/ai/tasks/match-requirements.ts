@@ -79,8 +79,9 @@ function classify(
   if (requirement.kind === "years") {
     const dated = profile.experience.filter((entry) => entry.startYear !== null);
     if (dated.length === 0) return { ...base, result: "gap", note: "Add your experience to check this" };
-    const first = dated.reduce((earliest, entry) =>
-      entry.startYear! * 12 + (entry.startMonth ?? 1) < earliest.startYear! * 12 + (earliest.startMonth ?? 1) ? entry : earliest,
+    const first = dated.reduce(
+      (earliest, entry) => (entry.startYear! * 12 + (entry.startMonth ?? 1) < earliest.startYear! * 12 + (earliest.startMonth ?? 1) ? entry : earliest),
+      dated[0],
     );
     const count = profile.experience.length;
     const roles = `${count} ${count === 1 ? "role" : "roles"} in your profile, since ${formatMonthYear(first.startYear, first.startMonth)}`;

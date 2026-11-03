@@ -67,7 +67,7 @@ export function sourcesFor(profile: ProfileData, extracted: Extracted | null, po
     basics.name, basics.headline, basics.city, basics.country, basics.summary,
     ...profile.skills.map((skill) => skill.name),
     ...profile.languages.map((language) => `${language.name} ${languageLevelLabel(language.level)}`),
-    ...profile.experience.flatMap((entry) => [entry.role, entry.company, entry.location, formatDateRange(entry), entry.bullets]),
+    ...profile.experience.flatMap((entry) => [entry.role, entry.company, entry.location, entry.descriptor, formatDateRange(entry), entry.bullets]),
     ...profile.projects.flatMap((entry) => [entry.name, entry.link, formatDateRange(entry), entry.bullets]),
     ...profile.education.flatMap((entry) => [entry.degree, entry.school, formatDateRange(entry), entry.notes]),
     // The candidate's own citations back what's said about their work (#218).
@@ -85,7 +85,8 @@ export function sourcesFor(profile: ProfileData, extracted: Extracted | null, po
 /** Where sentences start: capitals there are grammar, not names. */
 function sentenceStarts(text: string): Set<number> {
   const starts = new Set<number>([0]);
-  for (const match of text.matchAll(/(?:[.!?:;]["”’)]?\s+|\n)\s*(?:[-*•·]\s+)?(?=\S)/g)) starts.add(match.index + match[0].length);
+  // Trimmed: blank lines at the end, which models sometimes write by the thousand, would make this search slow.
+  for (const match of text.trimEnd().matchAll(/(?:[.!?:;]["”’)]?\s+|\n)\s*(?:[-*•·]\s+)?(?=\S)/g)) starts.add(match.index + match[0].length);
   return starts;
 }
 

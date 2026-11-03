@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# The website, built by site/build.sh
+/_site/
+
 # DOSSIER_DATA_DIR in development (backups, temporary downloads)
 /data/
 

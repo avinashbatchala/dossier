@@ -12,7 +12,7 @@ const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"'
 export function decodeEntities(text: string): string {
   return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, code: string) => {
     if (code[0] === "#") {
-      const value = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      const value = code[1].toLowerCase() === "x" ? Number.parseInt(code.slice(2), 16) : Number.parseInt(code.slice(1), 10);
       return Number.isFinite(value) && value > 0 && value < 0x110000 ? String.fromCodePoint(value) : whole;
     }
     return ENTITIES[code.toLowerCase()] ?? whole;
@@ -27,19 +27,21 @@ export function htmlToText(html: string): string {
       .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
       .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
         const url = decodeEntities(href);
-        const text = label.replace(/<[^>]+>/g, "").trim();
+        const text = label.replace(/<[^<>]+>/g, "").trim();
         return text && decodeEntities(text) !== url ? `${text} (${url})` : url;
       })
       .replace(/<\s*(p|br|li|div|h\d)[^>]*>/gi, "\n")
-      .replace(/<[^>]+>/g, ""),
+      .replace(/<[^<>]+>/g, ""),
   )
     .replace(/[ \t ]+/g, " ")
-    .replace(/ *\n */g, "\n")
+    // The line above left single spaces only.
+    .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}/gi;
+// At most 64 characters before the @ and 253 after (RFC 5321), which also keeps long text quick to search.
+const EMAIL = /[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,24}/gi;
 /** Addresses that are never someone to write to about a job: images, tracking, examples, support and legal desks. */
 const NOT_A_CONTACT =
   /\.(png|jpe?g|gif|svg|webp|css|js)$|@(example|sentry|wixpress|sentry-next|domain|email)\.|^(no-?reply|donotreply|mailer-daemon|privacy|dpo|gdpr|datenschutz|abuse|legal|security|dmca|unsubscribe|support|help|billing|invoices?|accounts?|sales|press|media|partners?|marketing)@/i;
@@ -48,7 +50,7 @@ const NOT_A_CONTACT =
 export function findEmails(text: string): string[] {
   const found = new Set<string>();
   for (const match of text.matchAll(EMAIL)) {
-    const email = match[0].replace(/\.+$/, "").toLowerCase();
+    const email = match[0].toLowerCase();
     if (!NOT_A_CONTACT.test(email)) found.add(email);
   }
   return [...found];
@@ -90,9 +92,9 @@ export function companySite(url: string): string {
   return new URL(url).origin;
 }
 
-/** The first web address in some text. */
+/** The first web address in some text, without the punctuation of the sentence it ends. */
 export function firstLink(text: string): string {
-  return /https?:\/\/[^\s)<>"']+/i.exec(text)?.[0].replace(/[.,;:!?]+$/, "") ?? "";
+  return /https?:\/\/[^\s)<>"']*[^\s)<>"'.,;:!?]/i.exec(text)?.[0] ?? "";
 }
 
 /** A short line from a longer text: its first line, cut at `max` characters. */
@@ -119,9 +121,9 @@ const LEFT_OUT = "[address left out]";
 export function withoutAddresses(text: string): string {
   return text
     .replace(/mailto:[^\s)"'>]+/gi, LEFT_OUT)
-    .replace(/[a-z0-9._%+-]+\s*[[({<]\s*at\s*[\])}>]\s*[a-z0-9-]+(?:\s*(?:[[({<]\s*dot\s*[\])}>]|\.)\s*[a-z0-9-]+)+/gi, LEFT_OUT)
-    .replace(/\b[a-z0-9._%+-]+\s+at\s+[a-z0-9-]+(?:\s+dot\s+[a-z0-9-]+)+\b/gi, LEFT_OUT)
-    .replace(/[a-z0-9._%+-]+\s*@\s*[a-z0-9-]+(?:\s*\.\s*[a-z0-9-]+)*\.[a-z]{2,24}\b/gi, LEFT_OUT);
+    .replace(/[a-z0-9._%+-]{1,64}\s*[[({<]\s*at\s*[\])}>]\s*[a-z0-9-]+(?:\s*(?:[[({<]\s*dot\s*[\])}>]|\.)\s*[a-z0-9-]+)+/gi, LEFT_OUT)
+    .replace(/\b[a-z0-9._%+-]{1,64}\s+at\s+[a-z0-9-]+(?:\s+dot\s+[a-z0-9-]+)+\b/gi, LEFT_OUT)
+    .replace(/[a-z0-9._%+-]{1,64}\s*@\s*[a-z0-9-]+(?:\s*\.\s*[a-z0-9-]+)*\.[a-z]{2,24}\b/gi, LEFT_OUT);
 }
 
 /** Ways a page says it takes no unsolicited applications, in the languages startups write in most. */

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { googleFetch } from "./account";
 import { googleUrl } from "./endpoints";
-import { GoogleError } from "./errors";
+import { isGone } from "./errors";
 import type { Interval } from "./slots";
 
 // The parts of the Calendar API Dossier uses (E15-5): free/busy for times to
@@ -94,9 +94,6 @@ function readEvent(json: unknown): CalendarEvent {
     applicationId: event.extendedProperties?.private?.[APPLICATION_PROPERTY] ?? null,
   };
 }
-
-/** Whether a failure means the event is gone: deleted, or never there. */
-export const isGone = (error: unknown) => error instanceof GoogleError && (error.status === 404 || error.status === 410);
 
 /** One event, or null when it's been deleted. */
 export async function getEvent(calendarId: string, eventId: string, signal?: AbortSignal): Promise<CalendarEvent | null> {
