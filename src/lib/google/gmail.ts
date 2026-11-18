@@ -79,7 +79,7 @@ function findPart(part: GmailPart, type: string): GmailPart | null {
 const decodeBody = (data: string) => Buffer.from(data, "base64url").toString("utf8");
 
 /** A message from the API's answer. */
-export function readMessage(json: unknown): ReadMail {
+function readMessage(json: unknown): ReadMail {
   const message = messageSchema.parse(json);
   const { payload } = message;
   const plain = findPart(payload, "text/plain");

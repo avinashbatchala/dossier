@@ -22,17 +22,30 @@ beforeEach(() => resetDatabase(prisma()));
 afterAll(() => prisma().$disconnect());
 
 describe("rememberListView (E9-4)", () => {
-  it("starts from the board, all applications, latest update first", async () => {
-    expect(await loadSettings()).toMatchObject({ applicationsView: "board", applicationsFilter: "all", applicationsSort: "updated" });
+  it("starts from the board, latest update first", async () => {
+    expect(await loadSettings()).toMatchObject({ applicationsView: "board", applicationsSort: "updated", applicationsBoardStatuses: [] });
   });
 
-  it("saves the view, filter and sort in Settings", async () => {
-    expect(await rememberListView({ view: "table", filter: "closed", sort: { key: "match", reversed: true } })).toEqual({ ok: true, data: null });
-    expect(await loadSettings()).toMatchObject({ applicationsView: "table", applicationsFilter: "closed", applicationsSort: "-match" });
+  it("saves the view and sort in Settings", async () => {
+    expect(await rememberListView({ view: "list", sort: { key: "match", reversed: true } })).toEqual({ ok: true, data: null });
+    expect(await loadSettings()).toMatchObject({ applicationsView: "list", applicationsSort: "-match" });
+  });
+
+  it("keeps Board per status, and leaves the view for all applications alone (E29-1, LB1)", async () => {
+    await rememberListView({ view: "board", status: "sent", sort: { key: "updated", reversed: false } });
+    await rememberListView({ view: "board", status: "closed", sort: { key: "updated", reversed: false } });
+    expect(await loadSettings()).toMatchObject({ applicationsView: "board", applicationsBoardStatuses: ["sent", "closed"] });
+    await rememberListView({ view: "list", status: "sent", sort: { key: "updated", reversed: false } });
+    expect((await loadSettings()).applicationsBoardStatuses).toEqual(["closed"]);
+  });
+
+  it("reads the list's old name in Settings", async () => {
+    await prisma().setting.create({ data: { key: "applicationsView", value: "table" } });
+    expect((await loadSettings()).applicationsView).toBe("list");
   });
 
   it("refuses what the list doesn't know", async () => {
-    expect(await rememberListView({ view: "grid" as "board", filter: "all", sort: { key: "updated", reversed: false } })).toMatchObject({ ok: false });
+    expect(await rememberListView({ view: "grid" as "board", sort: { key: "updated", reversed: false } })).toMatchObject({ ok: false });
   });
 });
 

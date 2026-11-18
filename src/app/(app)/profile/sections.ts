@@ -12,14 +12,14 @@ export const SECTIONS = [
     optional: false,
     label: "Basics",
     title: "The basics",
-    hint: "How employers can reach you. Only what you choose to show ends up on a resume.",
+    hint: "How employers can reach you, the same for every profile. Only what you choose to show ends up on a resume.",
   },
   {
     id: "summary",
     optional: false,
-    label: "Summary",
-    title: "Summary",
-    hint: "What you do, what you're good at and what you're looking for. Each application gets its own version.",
+    label: "Headline and summary",
+    title: "Headline and summary",
+    hint: "This profile's own title and a few lines about you: what you do, what you're good at and what you're looking for. Each application gets its own version.",
   },
   {
     id: "experience",
@@ -95,10 +95,10 @@ export const SECTIONS = [
 
 export type SectionId = (typeof SECTIONS)[number]["id"];
 /** A section the user made (#298). */
-export type CustomSectionId = `custom:${string}`;
+type CustomSectionId = `custom:${string}`;
 export type ProfileSectionId = SectionId | CustomSectionId;
-/** What the Profile page can show: a section, or the form that adds one (#338). */
-export type ProfilePage = ProfileSectionId | "new";
+/** What the Profile page can show: a section, the form that adds one (#338), or the jobs the profile is for (E24-3). */
+export type ProfilePage = ProfileSectionId | "new" | "target";
 
 export type NavSection = { id: ProfileSectionId; optional: boolean; label: string; title: string; hint: string };
 
@@ -119,8 +119,12 @@ export function navSections(customSections: readonly CustomSection[], order: rea
 
 /** The section in `?section=`, or Basics when it's missing or unknown. */
 export function sectionFromParam(value: string | string[] | undefined, customSections: readonly CustomSection[] = []): ProfilePage {
-  if (value === "new") return "new";
+  if (value === "new" || value === "target") return value;
   return navSections(customSections).find((section) => section.id === value)?.id ?? "basics";
 }
 
-export const sectionHref = (id: ProfilePage) => `/profile?section=${id}`;
+/** A section of the Profile page, of a given profile (E24-2) or of the one last opened. */
+export const sectionHref = (id: ProfilePage, profileId?: string) => `/profile?section=${id}${profileId ? `&profile=${profileId}` : ""}`;
+
+/** Sections every profile shares (E33-1): the nav tags them "All profiles". */
+export const SHARED_SECTIONS: ReadonlySet<string> = new Set(["basics", "languages", "facts"]);

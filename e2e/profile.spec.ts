@@ -35,6 +35,11 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
 
   await page.reload();
   await expect(page.getByRole("button", { name: /Design Lead.*Acme Payments/ })).toBeVisible();
+  // How many tailored resumes use each role (E33-2): the demo application's resume has the others.
+  await expect(page.getByRole("button", { name: /Design Lead.*Acme Payments/ })).toContainText("2 lines · not used in a resume yet");
+  await expect(page.getByRole("button", { name: /^Senior Product Designer/ })).toContainText("3 lines · used in 1 resume");
+  await page.getByRole("button", { name: /^Senior Product Designer/ }).click();
+  await expect(page.getByRole("button", { name: /^Senior Product Designer/, expanded: true })).toContainText("Used in 1 of 1 resume");
   await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: /Basics/ }).click();
   await expect(page.getByLabel("Full name")).toHaveValue("John Doe");
 

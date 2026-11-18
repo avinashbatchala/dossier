@@ -1,5 +1,6 @@
 "use client";
 
+import { FileText } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { UnitRenderer } from "@/components/documents/document-page";
@@ -36,6 +37,8 @@ export function EmailTab({
   onWrite,
   attachments,
   gmail,
+  markAsSent,
+  before,
 }: {
   applicationId: string;
   /** The email's units; null until it's written. */
@@ -54,10 +57,15 @@ export function EmailTab({
   attachments: Attachments;
   /** Sending with Gmail (E15-2): who it sends from, and whether it went out that way before. */
   gmail?: { sender: GmailSender; sentBefore: boolean };
+  /** "Mark as sent" while it's a draft (E30-2): for an application sent some other way. */
+  markAsSent?: ReactNode;
+  /** Above it, e.g. a follow-up drafted on a click (E30-8). */
+  before?: ReactNode;
 }) {
   if (!units) {
     return (
-      <div className="flex flex-1 flex-col items-center overflow-auto bg-canvas px-10 pt-11 pb-16">
+      <div className="flex flex-1 flex-col items-center gap-4 overflow-auto bg-canvas px-10 pt-11 pb-[var(--composer-space,4rem)]">
+        {before}
         <div className="flex w-full max-w-[560px] flex-col items-start gap-3 rounded-panel border border-line-card bg-card px-7 py-7">
           <h2 className="font-serif text-section">An email to send it with</h2>
           <p className="text-sm text-muted">
@@ -68,6 +76,12 @@ export function EmailTab({
             {writing ? "Writing the email…" : "Write the email"}
           </Button>
         </div>
+        {markAsSent && (
+          <div className="mt-4 flex w-full max-w-[560px] flex-wrap items-center justify-between gap-3 text-meta text-muted">
+            Sent it another way, such as on their site?
+            {markAsSent}
+          </div>
+        )}
       </div>
     );
   }
@@ -76,30 +90,39 @@ export function EmailTab({
   const copy = async (text: string, what: string) =>
     toast((await copyText(text)) ? `Copied the ${what}.` : "That didn't copy. Select the text and copy it yourself.");
 
+  const fromGmail = gmail?.sender.from ?? null;
   return (
-    <div className="flex flex-1 flex-col items-center gap-4 overflow-auto bg-canvas px-10 pt-11 pb-16">
-      <div className="flex w-full max-w-[680px] flex-wrap items-center justify-between gap-x-3 gap-y-1 text-meta text-muted">
+    <div className="flex flex-1 flex-col items-center gap-4 overflow-auto bg-canvas px-10 pt-11 pb-[var(--composer-space,4rem)]">
+      {before}
+      <div className="flex w-full max-w-[820px] flex-wrap items-center justify-between gap-x-3 gap-y-1 text-meta text-muted">
         <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span>Email · {aboutWords([body])}</span>
+          <span className="text-[13.5px] font-medium text-ink">Email to send with it</span>
+          <span>{aboutWords([body])}</span>
           {history}
         </span>
         {hint && <span>{hint}</span>}
       </div>
-      {notice && <div className="w-full max-w-[680px]">{notice}</div>}
+      {notice && <div className="w-full max-w-[820px]">{notice}</div>}
 
+      {/* One card (E30-13, design 4b): who it's to and from, the subject, the message, the PDFs and how to send it. */}
       <article
         aria-label="Email"
         aria-busy={writing || undefined}
         // The parts' highlight and toolbar are measured in page units, which are pixels here.
         style={{ "--u": "1px" } as CSSProperties}
-        className={cn("w-full max-w-[680px] rounded-panel border border-line-card bg-card motion-safe:transition-opacity", writing && "opacity-50")}
+        className={cn("w-full max-w-[820px] rounded-panel border border-line-card bg-card motion-safe:transition-opacity", writing && "opacity-50")}
       >
-        <Field label="To" onCopy={to ? () => void copy(to, "recipient") : undefined}>
+        <Field label="To" note={to ? "From the posting" : undefined} onCopy={to ? () => void copy(to, "recipient") : undefined}>
           {renderUnit({
             id: "to",
             children: to || <span className="text-muted">The posting doesn&apos;t give an address. Edit to add one.</span>,
           })}
         </Field>
+        {fromGmail && (
+          <Field label="From" note="Gmail connected">
+            {fromGmail}
+          </Field>
+        )}
         <Field label="Subject" onCopy={subject ? () => void copy(subject, "subject") : undefined}>
           {renderUnit({ id: "subject", children: subject })}
         </Field>
@@ -107,53 +130,48 @@ export function EmailTab({
           {renderUnit({ id: "body", className: "text-field leading-[1.6] break-words whitespace-pre-wrap", children: body })}
         </div>
 
-        {(attachments.resume || attachments.letter) && (
-          <div className="flex flex-col gap-2.5 border-t border-line px-7 pt-4 pb-5">
-            <h3 className="text-meta text-muted">Attach</h3>
-            <ul className="flex flex-col gap-2">
-              {attachments.resume && (
-                <Attachment name={attachments.resume} href={`/api/pdf?doc=resume&application=${applicationId}`} what="tailored resume" />
-              )}
-              {attachments.letter && (
-                <Attachment name={attachments.letter} href={`/api/pdf?doc=letter&application=${applicationId}`} what="cover letter" />
-              )}
-            </ul>
+        <div className="flex flex-wrap items-center gap-2.5 border-t border-line px-7 py-4">
+          {attachments.resume && <Attachment name={attachments.resume} href={`/api/pdf?doc=resume&application=${applicationId}`} what="tailored resume" />}
+          {attachments.letter && <Attachment name={attachments.letter} href={`/api/pdf?doc=letter&application=${applicationId}`} what="cover letter" />}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button variant={fromGmail ? "text" : "primary"} size="sm" onClick={() => void copy(body, "message")}>
+              Copy <span className="sr-only">message</span>
+            </Button>
+            {/* Mail apps can't take attachments from a link: the PDFs are attached by hand. */}
+            <a href={mailtoHref({ to, subject, body })} className={buttonClassName(fromGmail ? "text" : "secondary", "sm")}>
+              Open in mail app
+            </a>
+            {gmail && (
+              <SendWithGmail
+                applicationId={applicationId}
+                sender={gmail.sender}
+                to={to}
+                subject={subject}
+                attachments={[attachments.resume, attachments.letter].filter((name): name is string => name !== null)}
+                sentBefore={gmail.sentBefore}
+              />
+            )}
           </div>
-        )}
+        </div>
       </article>
 
-      <div className="flex w-full max-w-[680px] flex-wrap items-center gap-3">
-        {gmail && (
-          <SendWithGmail
-            applicationId={applicationId}
-            sender={gmail.sender}
-            to={to}
-            subject={subject}
-            attachments={[attachments.resume, attachments.letter].filter((name): name is string => name !== null)}
-            sentBefore={gmail.sentBefore}
-          />
-        )}
-        <Button variant={gmail?.sender.from ? "secondary" : "primary"} onClick={() => void copy(body, "message")}>
-          Copy message
-        </Button>
-        {/* Mail apps can't take attachments from a link: the PDFs are attached by hand. */}
-        <a href={mailtoHref({ to, subject, body })} className={buttonClassName("secondary", "md")}>
-          Open in mail app
-        </a>
+      <div className="flex w-full max-w-[820px] flex-wrap items-center gap-3">
+        {markAsSent}
         <Button variant="text" className="ml-auto" aria-disabled={writing || undefined} onClick={() => !writing && onWrite()}>
-          {writing ? "Rewriting…" : "Rewrite"}
+          {writing ? "Writing it again…" : "Write it again"}
         </Button>
       </div>
     </div>
   );
 }
 
-/** A header line of the email, "To" or "Subject", with its Copy button. */
-function Field({ label, onCopy, children }: { label: string; onCopy?: () => void; children: ReactNode }) {
+/** A header line of the email, "To", "From" or "Subject", with where it comes from and its Copy button. */
+function Field({ label, note, onCopy, children }: { label: string; note?: string; onCopy?: () => void; children: ReactNode }) {
   return (
     <div className="flex items-baseline gap-4 border-b border-line px-7 py-3.5">
       <span className="w-14 shrink-0 text-meta text-muted">{label}</span>
       <div className="min-w-0 flex-1 text-field break-words">{children}</div>
+      {note && <span className="shrink-0 text-[12px] text-muted">{note}</span>}
       {onCopy && (
         <Button variant="text" size="sm" className="py-0!" aria-label={`Copy the ${label === "To" ? "recipient" : label.toLowerCase()}`} onClick={onCopy}>
           Copy
@@ -163,19 +181,12 @@ function Field({ label, onCopy, children }: { label: string; onCopy?: () => void
   );
 }
 
-/** A PDF to attach, with its download. */
+/** A PDF to attach, as a chip that downloads it. */
 function Attachment({ name, href, what }: { name: string; href: string; what: string }) {
   return (
-    <li className="flex items-center justify-between gap-3 rounded-control border border-line-card bg-input py-2 pr-2 pl-3">
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span aria-hidden className="rounded-[5px] bg-danger-surface px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wide text-danger">
-          PDF
-        </span>
-        <span className="truncate text-control">{name}</span>
-      </span>
-      <DownloadPdfButton variant="secondary" size="sm" href={href} progress={`Rendering your ${what} as a PDF…`}>
-        Download <span className="sr-only">{name}</span>
-      </DownloadPdfButton>
-    </li>
+    <DownloadPdfButton variant="secondary" size="sm" href={href} progress={`Rendering your ${what} as a PDF…`} className="max-w-[260px] gap-2 font-normal">
+      <FileText size={14} aria-hidden="true" className="flex-none text-muted" />
+      <span className="sr-only">Download</span> <span className="truncate">{name}</span>
+    </DownloadPdfButton>
   );
 }

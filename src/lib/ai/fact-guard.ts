@@ -154,8 +154,9 @@ export function unverifiedFacts(text: string, sources: FactSources): string[] {
  * aren't checked.
  */
 export function guardUnits(units: Unit[], sources: FactSources): Unit[] {
-  return units.map(({ id, label, text }) => {
-    const unit = { id, label, text };
+  return units.map(({ id, label, text, serves }) => {
+    // Which requirements it serves (E30-4) stays; a new guard replaces an old one.
+    const unit = { id, label, text, ...(serves ? { serves } : {}) };
     if (["skills", "languages", "sign-off"].includes(id)) return unit;
     const unverified = unverifiedFacts(text, sources);
     return unverified.length > 0 ? { ...unit, unverified } : unit;

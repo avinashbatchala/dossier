@@ -4,7 +4,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { photoFromFields } from "@/lib/photo";
 import { prisma } from "@/lib/prisma";
 import { basicsFromFields, factTexts, inEntryOrder, type FactItem, type ProfileData } from "@/lib/profile";
-import { loadSettings } from "@/lib/settings-data";
+import { loadProfileSettings, profileIdOr } from "@/lib/profiles";
 
 /** The profile's name, "" without one: for the sidebar, the sign-in greeting and file names. */
 export async function loadProfileName(): Promise<string> {
@@ -12,30 +12,40 @@ export async function loadProfileName(): Promise<string> {
   return field?.value ?? "";
 }
 
+/** The profile's country as written, for the setup guide's job search step (E22-9). */
+export async function loadProfileCountry(): Promise<string> {
+  const field = await prisma.profileField.findUnique({ where: { key: "country" } });
+  return field?.value ?? "";
+}
+
 /**
- * The whole profile for the editor. Experience, projects and education are
- * newest first by start date, or in the order set by hand (E4-9);
- * certifications and publications are always in the order set by hand
- * (#293, #218).
+ * One profile, the first unless another is asked for (E24-1): the shared
+ * basics, languages and facts, and that profile's own headline, summary and
+ * sections. Experience, projects and education are newest first by start
+ * date, or in the order set by hand (E4-9); certifications and publications
+ * are always in the order set by hand (#293, #218).
  */
-export async function loadProfile(db: PrismaClient | Prisma.TransactionClient = prisma): Promise<ProfileData> {
-  const [fields, skills, languages, experience, projects, education, certifications, publications, references, customSections, facts, settings] = await Promise.all([
+export async function loadProfile(profileId?: string | null, db: PrismaClient | Prisma.TransactionClient = prisma): Promise<ProfileData> {
+  const id = await profileIdOr(profileId, db);
+  const own = { where: { profileId: id } };
+  const [profile, fields, skills, languages, experience, projects, education, certifications, publications, references, customSections, facts, settings] = await Promise.all([
+    db.profile.findUniqueOrThrow({ where: { id }, select: { headline: true, summary: true } }),
     db.profileField.findMany(),
-    db.skill.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
+    db.skill.findMany({ ...own, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
     db.language.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
-    db.experience.findMany({ include: { skills: { select: { skillId: true } } } }),
-    db.project.findMany({ include: { skills: { select: { skillId: true } } } }),
-    db.education.findMany(),
-    db.certification.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
-    db.publication.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
-    db.reference.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
-    db.customSection.findMany({ orderBy: { createdAt: "asc" }, include: { items: { orderBy: [{ sort: "asc" }, { createdAt: "asc" }] } } }),
+    db.experience.findMany({ ...own, include: { skills: { select: { skillId: true } } } }),
+    db.project.findMany({ ...own, include: { skills: { select: { skillId: true } } } }),
+    db.education.findMany(own),
+    db.certification.findMany({ ...own, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
+    db.publication.findMany({ ...own, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
+    db.reference.findMany({ ...own, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
+    db.customSection.findMany({ ...own, orderBy: { createdAt: "asc" }, include: { items: { orderBy: [{ sort: "asc" }, { createdAt: "asc" }] } } }),
     loadFacts(null, db),
-    loadSettings(db),
+    loadProfileSettings(id, db),
   ]);
 
   return {
-    basics: basicsFromFields(fields),
+    basics: { ...basicsFromFields(fields), headline: profile.headline, summary: profile.summary },
     photo: photoFromFields(fields),
     skills: skills.map(({ id, name, group }) => ({ id, name, group })),
     languages: languages.map(({ id, name, level }) => ({ id, name, level })),
@@ -98,10 +108,11 @@ export async function loadProfile(db: PrismaClient | Prisma.TransactionClient = 
       email,
       phone,
     })),
-    customSections: customSections.map(({ id, title, format, items }) => ({
+    customSections: customSections.map(({ id, title, format, countsAs, items }) => ({
       id,
       title,
       format,
+      countsAs,
       items: items.map((item) => ({
         id: item.id,
         title: item.title,

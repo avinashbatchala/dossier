@@ -33,6 +33,7 @@ vi.mock("@/components/toast", () => {
 
 const profile: ImportedProfile = {
   leftOut: [],
+  levels: null,
   basics: { name: "John Doe", city: "Utrecht" },
   skills: [
     { name: "Figma", found: true },
@@ -71,11 +72,11 @@ beforeEach(() => {
 
 describe("ProfileImport (E4-10)", () => {
   it("says where a hosted provider sends the resume, and needs a provider at all", () => {
-    const { unmount } = render(<ProfileImport keptFor="24 hours" aiReady provider="ANTHROPIC" initialJobId={null} />);
+    const { unmount } = render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="ANTHROPIC" initialJobId={null} />);
     expect(screen.getByRole("note")).toHaveTextContent("contact details included, is sent to Anthropic");
     expect(screen.getByText(/The file's text is deleted once you've chosen, or after 24 hours if you don't\./)).toBeInTheDocument();
     unmount();
-    render(<ProfileImport keptFor="24 hours" aiReady={false} provider="LOCAL" initialJobId={null} />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady={false} provider="LOCAL" initialJobId={null} />);
     expect(screen.getByRole("note")).toHaveTextContent("No AI provider is set up yet");
     expect(screen.getByRole("button", { name: "Read my resume →" })).toHaveAttribute("aria-disabled", "true");
   });
@@ -83,19 +84,19 @@ describe("ProfileImport (E4-10)", () => {
   it("sends the chosen file and follows the reading in the address", async () => {
     const user = userEvent.setup();
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ jobId: "job-1" }));
-    render(<ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId={null} />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="LOCAL" initialJobId={null} />);
     const file = new File(["%PDF-"], "resume.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText("Your resume, as PDF, Word (.docx) or Markdown (.md)"), file);
     await user.click(screen.getByRole("button", { name: "Read my resume →" }));
     expect(fetch).toHaveBeenCalledWith("/api/profile/import", expect.objectContaining({ method: "POST", body: file }));
-    expect(router.replace).toHaveBeenCalledWith("/profile/import?job=job-1");
+    expect(router.replace).toHaveBeenCalledWith("/profile/import?profile=p1&job=job-1");
     expect(screen.getByRole("heading", { name: "Reading your resume…" })).toBeInTheDocument();
   });
 
   it("shows why a file can't be read", async () => {
     const user = userEvent.setup();
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ error: "Choose a PDF, a Word (.docx) or a Markdown (.md) file." }, { status: 400 }));
-    render(<ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId={null} />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="LOCAL" initialJobId={null} />);
     await user.upload(screen.getByLabelText("Your resume, as PDF, Word (.docx) or Markdown (.md)"), new File(["x"], "resume.pdf"));
     await user.click(screen.getByRole("button", { name: "Read my resume →" }));
     expect(toast).toHaveBeenCalledWith("Choose a PDF, a Word (.docx) or a Markdown (.md) file.");
@@ -105,7 +106,7 @@ describe("ProfileImport (E4-10)", () => {
   it("previews what was found, marking what isn't in the file, and merges", async () => {
     const user = userEvent.setup();
     vi.mocked(useJob).mockReturnValue(done as never);
-    render(<ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
     expect(screen.getByRole("heading", { name: "Here's what your resume says" })).toBeInTheDocument();
     expect(screen.getByText(/^1 role, 0 projects, 0 degrees, 2 skills, 1 language, 0 references\./)).toBeInTheDocument();
     expect(screen.getByText("John Doe")).toBeInTheDocument();
@@ -115,26 +116,26 @@ describe("ProfileImport (E4-10)", () => {
     expect(screen.getByText(/^German/)).toHaveTextContent("(no level given; change it any time)");
 
     await user.click(screen.getByRole("button", { name: "Merge into my profile" }));
-    expect(applyProfileImport).toHaveBeenCalledWith({ jobId: "job-1", mode: "merge" });
-    expect(router.push).toHaveBeenCalledWith("/profile");
+    expect(applyProfileImport).toHaveBeenCalledWith({ profileId: "p1", jobId: "job-1", mode: "merge" });
+    expect(router.push).toHaveBeenCalledWith("/profile?profile=p1");
   });
 
   it("deletes the reading when another file is chosen", async () => {
     const user = userEvent.setup();
     vi.mocked(useJob).mockReturnValue(done as never);
-    render(<ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
     await user.click(screen.getByRole("button", { name: "Choose another file" }));
     expect(discardProfileImport).toHaveBeenCalledWith({ jobId: "job-1" });
-    expect(router.replace).toHaveBeenCalledWith("/profile/import");
+    expect(router.replace).toHaveBeenCalledWith("/profile/import?profile=p1");
   });
 
   it("asks before replacing the profile", async () => {
     const user = userEvent.setup();
     vi.mocked(useJob).mockReturnValue(done as never);
-    render(<ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
+    render(<ProfileImport profileId="p1" keptFor="24 hours" aiReady provider="LOCAL" initialJobId="job-1" />);
     await user.click(screen.getByRole("button", { name: "Replace my profile…" }));
     expect(applyProfileImport).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Replace my profile" }));
-    expect(applyProfileImport).toHaveBeenCalledWith({ jobId: "job-1", mode: "replace" });
+    expect(applyProfileImport).toHaveBeenCalledWith({ profileId: "p1", jobId: "job-1", mode: "replace" });
   });
 });

@@ -14,7 +14,7 @@ describe("profile sections", () => {
   });
 
   it("list in the order given, with a section the user made above References", () => {
-    const section = { id: "a", title: "Awards", format: "LINES" as const, items: [] };
+    const section = { id: "a", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [] };
     const ids = navSections([section], ["facts", ...BUILT_IN_SECTIONS, "basics"]).map((entry) => entry.id);
     expect([ids[0], ids[1], ids.at(-1)]).toEqual(["facts", "summary", "basics"]);
     expect(ids.indexOf("custom:a")).toBe(ids.indexOf("references") - 1);

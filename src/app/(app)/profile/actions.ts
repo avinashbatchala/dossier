@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import type { Prisma } from "@/generated/prisma/client";
-import { CustomSectionFormat, JobStatus, LanguageLevel } from "@/generated/prisma/enums";
+import { CustomSectionCountsAs, CustomSectionFormat, JobStatus, LanguageLevel } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
 import { rewriteSectionOnDrafts } from "@/lib/custom-section-drafts";
 import { prisma } from "@/lib/prisma";
@@ -15,16 +15,27 @@ import { isPhotoDataUrl, PHOTO_KEY, PHOTO_MAX_LENGTH, PHOTO_ON_RESUMES_KEY } fro
 import { loadProfileName } from "@/lib/profile-data";
 import { importCounts } from "@/lib/profile-import";
 import { applyImportedProfile } from "@/lib/profile-import-apply";
-import { loadSettings, saveSettings } from "@/lib/settings-data";
+import { levelRangeSchema } from "@/lib/profile-levels";
+import { loadProfileLevels, loadProfileSettings, profileIdOr, saveProfileLevels, saveProfileSettings } from "@/lib/profiles";
 
 // Every profile change saves through these actions; they all check the
-// session (action()) and validate their input.
+// session (action()) and validate their input. One that adds to a list,
+// orders it or changes a profile's own settings says which profile
+// (E24-1): the one the page shows. Changes to an entry go by its id.
 
 const text = (max: number) => z.string().max(max);
+const profileId = z.string().min(1);
+
+/** The profile asked for, when it still exists (another tab may have deleted it). */
+async function ownProfile(id: string): Promise<string> {
+  if (!(await prisma.profile.count({ where: { id } }))) throw new ActionError("That profile no longer exists. Reload the page.");
+  return id;
+}
 
 /** Saves the Basics section (PRO-1, PRO-2); autosaved as you type. */
 export const saveBasics = action(
   z.object({
+    profileId,
     name: text(200),
     headline: text(300),
     email: text(320),
@@ -38,15 +49,17 @@ export const saveBasics = action(
     summary: text(5000),
     showAge: z.boolean(),
   }),
-  async (basics) => {
+  async ({ profileId, ...basics }) => {
     const before = await loadProfileName();
-    await prisma.$transaction(
-      Object.entries(fieldsFromBasics(basics)).map(([key, value]) =>
+    await prisma.$transaction([
+      ...Object.entries(fieldsFromBasics(basics)).map(([key, value]) =>
         value === null
           ? prisma.profileField.deleteMany({ where: { key } })
           : prisma.profileField.upsert({ where: { key }, create: { key, value }, update: { value } }),
       ),
-    );
+      // The headline and summary are the profile's own (E24-1).
+      prisma.profile.updateMany({ where: { id: profileId }, data: { headline: basics.headline, summary: basics.summary } }),
+    ]);
     // The sidebar shows the name.
     if (before !== basics.name) revalidatePath("/", "layout");
     return null;
@@ -100,7 +113,9 @@ const skillGroup = z
   .refine((name) => !/[:·\n]/.test(name), "A group's name can't have “:” or “·” in it.");
 
 /** Adds a skill, in a group or none; one that's there already moves to that group (#280). */
-export const addSkill = action(z.object({ name: skillName, group: skillGroup.default("") }), ({ name, group }) => findOrCreateSkill(name, group));
+export const addSkill = action(z.object({ profileId: profileId.optional(), name: skillName, group: skillGroup.default("") }), async ({ profileId: asked, name, group }) =>
+  findOrCreateSkill(asked ? await ownProfile(asked) : await profileIdOr(null), name, group),
+);
 
 /** Moves a skill into a group, or out of any (#280). */
 export const setSkillGroup = action(z.object({ id, group: skillGroup }), async ({ id, group }) => {
@@ -110,30 +125,30 @@ export const setSkillGroup = action(z.object({ id, group: skillGroup }), async (
 
 /** Renames a group: its skills move with it, into another group of that name if there is one (#280). */
 export const renameSkillGroup = action(
-  z.object({ from: skillGroup.pipe(z.string().min(1)), to: skillGroup.pipe(z.string().min(1, "Give the group a name.")) }),
-  async ({ from, to }) => {
-    await prisma.skill.updateMany({ where: { group: from }, data: { group: to } });
+  z.object({ profileId, from: skillGroup.pipe(z.string().min(1)), to: skillGroup.pipe(z.string().min(1, "Give the group a name.")) }),
+  async ({ profileId, from, to }) => {
+    await prisma.skill.updateMany({ where: { profileId, group: from }, data: { group: to } });
     return null;
   },
 );
 
 /** Removes a skill; the database also detaches it from every role (PRO-3). */
 /** A skill dragged or moved in Profile → Skills (public issue 62): every skill's id in the new order. From then on tailored resumes keep it. */
-export const reorderSkills = action(z.object({ ids: z.array(id) }), async ({ ids }) => {
+export const reorderSkills = action(z.object({ profileId, ids: z.array(id) }), async ({ profileId, ids }) => {
   await prisma.$transaction(async (tx) => {
-    const known = new Set((await tx.skill.findMany({ select: { id: true } })).map((entry) => entry.id));
+    const known = new Set((await tx.skill.findMany({ where: { profileId }, select: { id: true } })).map((entry) => entry.id));
     if (ids.length !== known.size || new Set(ids).size !== ids.length || !ids.every((entryId) => known.has(entryId))) {
       throw new ActionError("The list changed in the meantime. Reload the page and try again.");
     }
     for (const [sort, entryId] of ids.entries()) await tx.skill.update({ where: { id: entryId }, data: { sort } });
-    await saveSettings({ skillOrder: "manual" }, tx);
+    await saveProfileSettings(profileId, { skillOrder: "manual" }, tx);
   });
   return null;
 });
 
 /** Back to the most relevant first on tailored resumes; the order in Profile → Skills stays. */
-export const setSkillOrder = action(z.object({ order: z.enum(["relevance", "manual"]) }), async ({ order }) => {
-  await saveSettings({ skillOrder: order });
+export const setSkillOrder = action(z.object({ profileId, order: z.enum(["relevance", "manual"]) }), async ({ profileId, order }) => {
+  await saveProfileSettings(await ownProfile(profileId), { skillOrder: order });
   return null;
 });
 
@@ -215,10 +230,10 @@ const experienceItem = (entry: {
 });
 
 /** "+ Add a role": a blank entry, last in date order (it has no dates yet), first in an order set by hand. */
-export const createExperience = action(z.object({ volunteering: z.boolean().default(false) }), async ({ volunteering }) => {
-  const manual = (await loadSettings()).experienceOrder === "manual";
-  const sort = manual ? await firstSort(prisma.experience) : await nextSort(prisma.experience);
-  return experienceItem(await prisma.experience.create({ data: { sort, volunteering } }));
+export const createExperience = action(z.object({ profileId, volunteering: z.boolean().default(false) }), async ({ profileId, volunteering }) => {
+  const manual = (await loadProfileSettings(await ownProfile(profileId))).experienceOrder === "manual";
+  const sort = manual ? await firstSort(prisma.experience, { profileId }) : await nextSort(prisma.experience, { profileId });
+  return experienceItem(await prisma.experience.create({ data: { profileId, sort, volunteering } }));
 });
 
 /** Autosaves a role. Saving one that was just removed does nothing. */
@@ -241,14 +256,15 @@ export const removeExperience = action(z.object({ id }), async ({ id }) => {
 
 /** Puts a removed role back, with the links to skills that still exist. */
 export const restoreExperience = action(
-  experienceFields.extend({ volunteering: z.boolean(), skillIds: z.array(id) }),
-  async ({ skillIds, ...entry }) => {
-    const skills = await prisma.skill.findMany({ where: { id: { in: skillIds } }, select: { id: true } });
+  experienceFields.extend({ profileId, volunteering: z.boolean(), skillIds: z.array(id) }),
+  async ({ skillIds, profileId, ...entry }) => {
+    const skills = await prisma.skill.findMany({ where: { profileId: await ownProfile(profileId), id: { in: skillIds } }, select: { id: true } });
     const restored = await prisma.experience.upsert({
       where: { id: entry.id },
       create: {
         ...entry,
-        sort: await nextSort(prisma.experience),
+        profileId,
+        sort: await nextSort(prisma.experience, { profileId }),
         skills: { create: skills.map((skill) => ({ skillId: skill.id })) },
       },
       update: {},
@@ -274,7 +290,9 @@ export const setExperienceSkill = action(
 export const attachNewSkill = action(
   z.object({ experienceId: id, name: skillName }),
   async ({ experienceId, name }) => {
-    const result = await findOrCreateSkill(name);
+    const role = await prisma.experience.findUnique({ where: { id: experienceId }, select: { profileId: true } });
+    if (!role) throw new ActionError("That role no longer exists. Reload the page.");
+    const result = await findOrCreateSkill(role.profileId, name);
     const skillId = result.skill.id;
     await prisma.experienceSkill.upsert({ where: { experienceId_skillId: { experienceId, skillId } }, create: { experienceId, skillId }, update: {} });
     return result;
@@ -305,10 +323,10 @@ const projectItem = (entry: z.infer<typeof projectFields>, skillIds: string[] = 
 });
 
 /** "+ Add a project": a blank entry, placed like a new role. */
-export const createProject = action(z.object({}), async () => {
-  const manual = (await loadSettings()).projectOrder === "manual";
-  const sort = manual ? await firstSort(prisma.project) : await nextSort(prisma.project);
-  return projectItem(await prisma.project.create({ data: { sort } }));
+export const createProject = action(z.object({ profileId }), async ({ profileId }) => {
+  const manual = (await loadProfileSettings(await ownProfile(profileId))).projectOrder === "manual";
+  const sort = manual ? await firstSort(prisma.project, { profileId }) : await nextSort(prisma.project, { profileId });
+  return projectItem(await prisma.project.create({ data: { profileId, sort } }));
 });
 
 /** Autosaves a project. Saving one that was just removed does nothing. */
@@ -324,13 +342,14 @@ export const removeProject = action(z.object({ id }), async ({ id }) => {
 });
 
 /** Puts a removed project back, with the links to skills that still exist. */
-export const restoreProject = action(projectFields.extend({ skillIds: z.array(id) }), async ({ skillIds, ...entry }) => {
-  const skills = await prisma.skill.findMany({ where: { id: { in: skillIds } }, select: { id: true } });
+export const restoreProject = action(projectFields.extend({ profileId, skillIds: z.array(id) }), async ({ skillIds, profileId, ...entry }) => {
+  const skills = await prisma.skill.findMany({ where: { profileId: await ownProfile(profileId), id: { in: skillIds } }, select: { id: true } });
   const restored = await prisma.project.upsert({
     where: { id: entry.id },
     create: {
       ...entry,
-      sort: await nextSort(prisma.project),
+      profileId,
+      sort: await nextSort(prisma.project, { profileId }),
       skills: { create: skills.map((skill) => ({ skillId: skill.id })) },
     },
     update: {},
@@ -353,7 +372,9 @@ export const setProjectSkill = action(
 
 /** "New skill? Type it and press Enter" on a project: adds it to the profile if it's new and attaches it. */
 export const attachNewProjectSkill = action(z.object({ projectId: id, name: skillName }), async ({ projectId, name }) => {
-  const result = await findOrCreateSkill(name);
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { profileId: true } });
+  if (!project) throw new ActionError("That project no longer exists. Reload the page.");
+  const result = await findOrCreateSkill(project.profileId, name);
   const skillId = result.skill.id;
   await prisma.projectSkill.upsert({ where: { projectId_skillId: { projectId, skillId } }, create: { projectId, skillId }, update: {} });
   return result;
@@ -381,10 +402,10 @@ const educationItem = (entry: z.infer<typeof educationFields>) => ({
   current: entry.current,
 });
 
-export const createEducation = action(z.object({}), async () => {
-  const manual = (await loadSettings()).educationOrder === "manual";
-  const sort = manual ? await firstSort(prisma.education) : await nextSort(prisma.education);
-  return educationItem(await prisma.education.create({ data: { sort } }));
+export const createEducation = action(z.object({ profileId }), async ({ profileId }) => {
+  const manual = (await loadProfileSettings(await ownProfile(profileId))).educationOrder === "manual";
+  const sort = manual ? await firstSort(prisma.education, { profileId }) : await nextSort(prisma.education, { profileId });
+  return educationItem(await prisma.education.create({ data: { profileId, sort } }));
 });
 
 export const saveEducation = action(educationFields, async ({ id, ...data }) => {
@@ -397,11 +418,11 @@ export const removeEducation = action(z.object({ id }), async ({ id }) => {
   return null;
 });
 
-export const restoreEducation = action(educationFields, async (entry) =>
+export const restoreEducation = action(educationFields.extend({ profileId }), async ({ profileId, ...entry }) =>
   educationItem(
     await prisma.education.upsert({
       where: { id: entry.id },
-      create: { ...entry, sort: await nextSort(prisma.education) },
+      create: { ...entry, profileId: await ownProfile(profileId), sort: await nextSort(prisma.education, { profileId }) },
       update: {},
     }),
   ),
@@ -436,8 +457,8 @@ const certificationItem = (entry: z.infer<typeof certificationFields>) => ({
 });
 
 /** "+ Add a certification": a blank entry at the top, where the newest usually goes. */
-export const createCertification = action(z.object({}), async () =>
-  certificationItem(await prisma.certification.create({ data: { sort: await firstSort(prisma.certification) } })),
+export const createCertification = action(z.object({ profileId }), async ({ profileId }) =>
+  certificationItem(await prisma.certification.create({ data: { profileId: await ownProfile(profileId), sort: await firstSort(prisma.certification, { profileId }) } })),
 );
 
 /** Autosaves a certification. Saving one that was just removed does nothing. */
@@ -452,20 +473,20 @@ export const removeCertification = action(z.object({ id }), async ({ id }) => {
 });
 
 /** Puts a removed certification back; the list then saves its place in the order. */
-export const restoreCertification = action(certificationFields, async (entry) =>
+export const restoreCertification = action(certificationFields.extend({ profileId }), async ({ profileId, ...entry }) =>
   certificationItem(
     await prisma.certification.upsert({
       where: { id: entry.id },
-      create: { ...entry, sort: await nextSort(prisma.certification) },
+      create: { ...entry, profileId: await ownProfile(profileId), sort: await nextSort(prisma.certification, { profileId }) },
       update: {},
     }),
   ),
 );
 
 /** Saves the certifications' order: `ids` is every certification, in the new order. */
-export const reorderCertifications = action(z.object({ ids: z.array(id) }), async ({ ids }) => {
+export const reorderCertifications = action(z.object({ profileId, ids: z.array(id) }), async ({ profileId, ids }) => {
   await prisma.$transaction(async (tx) => {
-    const known = new Set((await tx.certification.findMany({ select: { id: true } })).map((entry) => entry.id));
+    const known = new Set((await tx.certification.findMany({ where: { profileId }, select: { id: true } })).map((entry) => entry.id));
     if (ids.length !== known.size || new Set(ids).size !== ids.length || !ids.every((entryId) => known.has(entryId))) {
       throw new ActionError("The list changed in the meantime. Reload the page and try again.");
     }
@@ -511,11 +532,16 @@ const revalidateSections = () => {
   revalidatePath("/resume");
 };
 
-const customSectionFields = { title: z.string().trim().min(1, "Give the section a name.").max(100), format: z.enum(CustomSectionFormat) };
+const customSectionFields = {
+  title: z.string().trim().min(1, "Give the section a name.").max(100),
+  format: z.enum(CustomSectionFormat),
+  /** What it counts as (E24-5); Extra activities unless the user says otherwise. */
+  countsAs: z.enum(CustomSectionCountsAs).default("EXTRA_ACTIVITIES"),
+};
 
 /** "Add a section" (#298, #338), on the Profile page. */
-export const createCustomSection = action(z.object(customSectionFields), async (data) => {
-  const { id } = await prisma.customSection.create({ data, select: { id: true } });
+export const createCustomSection = action(z.object({ profileId, ...customSectionFields }), async ({ profileId, ...data }) => {
+  const { id } = await prisma.customSection.create({ data: { ...data, profileId: await ownProfile(profileId) }, select: { id: true } });
   revalidateSections();
   return id;
 });
@@ -546,10 +572,11 @@ const restoredItem = z.object({
 
 /** Undo after deleting a section: it comes back with its items and ids, so resumes that hold it find them again. */
 export const restoreCustomSection = action(
-  z.object({ id, ...customSectionFields, items: z.array(restoredItem).max(500) }),
-  async ({ items, ...section }) => {
+  z.object({ id, profileId, ...customSectionFields, items: z.array(restoredItem).max(500) }),
+  async ({ items, profileId, ...section }) => {
+    await ownProfile(profileId);
     await prisma.$transaction(async (tx) => {
-      await tx.customSection.upsert({ where: { id: section.id }, create: section, update: {} });
+      await tx.customSection.upsert({ where: { id: section.id }, create: { ...section, profileId }, update: {} });
       // Items still there (Undo pressed twice) stay as they are; SQLite has no skipDuplicates.
       const kept = new Set((await tx.customItem.findMany({ where: { id: { in: items.map((item) => item.id) } }, select: { id: true } })).map((item) => item.id));
       await tx.customItem.createMany({ data: items.filter((item) => !kept.has(item.id)).map((item, sort) => ({ ...item, sectionId: section.id, sort })) });
@@ -561,15 +588,15 @@ export const restoreCustomSection = action(
 
 const SECTION_GONE = "That section no longer exists. Reload the page to see your sections.";
 
-/** Autosaves a section's name and format. A blank name isn't saved: a resume's heading needs one. */
+/** Autosaves a section's name, format and what it counts as (E24-5). A blank name isn't saved: a resume's heading needs one. */
 export const saveCustomSection = action(
-  z.object({ id, title: text(100), format: z.enum(CustomSectionFormat) }),
-  async ({ id: sectionId, title, format }) => {
+  z.object({ id, title: text(100), format: z.enum(CustomSectionFormat), countsAs: z.enum(CustomSectionCountsAs).optional() }),
+  async ({ id: sectionId, title, format, countsAs }) => {
     const before = await prisma.customSection.findUnique({ where: { id: sectionId }, select: { format: true } });
     if (!before) return null;
     const section = await prisma.customSection.update({
       where: { id: sectionId },
-      data: { format, ...(title.trim() ? { title: title.trim() } : {}) },
+      data: { format, ...(countsAs ? { countsAs } : {}), ...(title.trim() ? { title: title.trim() } : {}) },
       include: { items: { orderBy: [{ sort: "asc" }, { createdAt: "asc" }] } },
     });
     if (before.format !== format) await rewriteSectionOnDrafts(section);
@@ -632,8 +659,8 @@ const publicationItem = (entry: z.infer<typeof publicationFields>) => ({
 });
 
 /** "+ Add a publication": a blank entry at the top, where the newest usually goes. */
-export const createPublication = action(z.object({}), async () =>
-  publicationItem(await prisma.publication.create({ data: { sort: await firstSort(prisma.publication) } })),
+export const createPublication = action(z.object({ profileId }), async ({ profileId }) =>
+  publicationItem(await prisma.publication.create({ data: { profileId: await ownProfile(profileId), sort: await firstSort(prisma.publication, { profileId }) } })),
 );
 
 /** Autosaves a publication. Saving one that was just removed does nothing. */
@@ -648,20 +675,20 @@ export const removePublication = action(z.object({ id }), async ({ id }) => {
 });
 
 /** Puts a removed publication back; the list then saves its place in the order. */
-export const restorePublication = action(publicationFields, async (entry) =>
+export const restorePublication = action(publicationFields.extend({ profileId }), async ({ profileId, ...entry }) =>
   publicationItem(
     await prisma.publication.upsert({
       where: { id: entry.id },
-      create: { ...entry, sort: await nextSort(prisma.publication) },
+      create: { ...entry, profileId: await ownProfile(profileId), sort: await nextSort(prisma.publication, { profileId }) },
       update: {},
     }),
   ),
 );
 
 /** Saves the publications' order: `ids` is every publication, in the new order. */
-export const reorderPublications = action(z.object({ ids: z.array(id) }), async ({ ids }) => {
+export const reorderPublications = action(z.object({ profileId, ids: z.array(id) }), async ({ profileId, ids }) => {
   await prisma.$transaction(async (tx) => {
-    const known = new Set((await tx.publication.findMany({ select: { id: true } })).map((entry) => entry.id));
+    const known = new Set((await tx.publication.findMany({ where: { profileId }, select: { id: true } })).map((entry) => entry.id));
     if (ids.length !== known.size || new Set(ids).size !== ids.length || !ids.every((entryId) => known.has(entryId))) {
       throw new ActionError("The list changed in the meantime. Reload the page and try again.");
     }
@@ -678,40 +705,41 @@ type Section = z.infer<typeof section>;
 /** Each ordered section's setting. */
 const ORDER_SETTING = { experience: "experienceOrder", project: "projectOrder", education: "educationOrder" } as const;
 
-/** The section's table, as far as ordering needs it. */
-function entries(db: Prisma.TransactionClient, section: Section) {
+/** The section's table in one profile, as far as ordering needs it. */
+function entries(db: Prisma.TransactionClient, section: Section, profileId: string) {
   const select = { id: true, sort: true, startYear: true, startMonth: true, endYear: true, endMonth: true, current: true } as const;
+  const where = { profileId };
   const setSort = (entryId: string, sort: number) => ({ where: { id: entryId }, data: { sort } });
   if (section === "experience") {
-    return { list: () => db.experience.findMany({ select }), setSort: (entryId: string, sort: number) => db.experience.update(setSort(entryId, sort)) };
+    return { list: () => db.experience.findMany({ where, select }), setSort: (entryId: string, sort: number) => db.experience.update(setSort(entryId, sort)) };
   }
   if (section === "project") {
-    return { list: () => db.project.findMany({ select }), setSort: (entryId: string, sort: number) => db.project.update(setSort(entryId, sort)) };
+    return { list: () => db.project.findMany({ where, select }), setSort: (entryId: string, sort: number) => db.project.update(setSort(entryId, sort)) };
   }
-  return { list: () => db.education.findMany({ select }), setSort: (entryId: string, sort: number) => db.education.update(setSort(entryId, sort)) };
+  return { list: () => db.education.findMany({ where, select }), setSort: (entryId: string, sort: number) => db.education.update(setSort(entryId, sort)) };
 }
 
 /**
  * Saves an order set by hand: `ids` is every entry of the section, in the new
  * order. From then on the section keeps that order instead of dates.
  */
-export const reorderEntries = action(z.object({ section, ids: z.array(id) }), async ({ section, ids }) => {
+export const reorderEntries = action(z.object({ profileId, section, ids: z.array(id) }), async ({ profileId, section, ids }) => {
   await prisma.$transaction(async (tx) => {
-    const table = entries(tx, section);
+    const table = entries(tx, section, profileId);
     const known = new Set((await table.list()).map((entry) => entry.id));
     if (ids.length !== known.size || new Set(ids).size !== ids.length || !ids.every((entryId) => known.has(entryId))) {
       throw new ActionError("The list changed in the meantime. Reload the page and try again.");
     }
     for (const [sort, entryId] of ids.entries()) await table.setSort(entryId, sort);
-    await saveSettings({ [ORDER_SETTING[section]]: "manual" }, tx);
+    await saveProfileSettings(profileId, { [ORDER_SETTING[section]]: "manual" }, tx);
   });
   return null;
 });
 
 /** Goes back to date order; returns the section's ids in that order for the list. */
-export const sortEntriesByDate = action(z.object({ section }), async ({ section }) => {
-  await saveSettings({ [ORDER_SETTING[section]]: "date" });
-  return inEntryOrder(await entries(prisma, section).list(), "date").map((entry) => entry.id);
+export const sortEntriesByDate = action(z.object({ profileId, section }), async ({ profileId, section }) => {
+  await saveProfileSettings(await ownProfile(profileId), { [ORDER_SETTING[section]]: "date" });
+  return inEntryOrder(await entries(prisma, section, profileId).list(), "date").map((entry) => entry.id);
 });
 
 // ─── Import from a resume (E4-10) ───────────────────────────────────────────
@@ -723,14 +751,16 @@ export const sortEntriesByDate = action(z.object({ section }), async ({ section 
  * deleted, with the resume's text.
  */
 export const applyProfileImport = action(
-  z.object({ jobId: id, mode: z.enum(["merge", "replace"]) }),
-  async ({ jobId, mode }, { toast }) => {
+  z.object({ profileId, jobId: id, mode: z.enum(["merge", "replace"]), levels: levelRangeSchema.optional() }),
+  async ({ profileId, jobId, mode, levels }, { toast }) => {
     const job = await prisma.job.findUnique({ where: { id: jobId }, select: { type: true, status: true, result: true } });
     if (job?.type !== importProfileJob.type || job.status !== JobStatus.DONE) {
       throw new ActionError("That resume isn't read yet, or it's no longer there. Choose the file again.");
     }
     const { profile } = importProfileJob.result.parse(job.result);
-    await applyImportedProfile(prisma, profile, mode);
+    await applyImportedProfile(prisma, await ownProfile(profileId), profile, mode);
+    // The levels confirmed with the reading go to a profile that has none yet (E24-3).
+    if (levels && !(await loadProfileLevels(profileId))) await saveProfileLevels(profileId, levels);
     await prisma.job.deleteMany({ where: { id: jobId } });
     revalidatePath("/", "layout");
     toast(`${mode === "replace" ? "Your profile now holds" : "Added to your profile"}: ${importCounts(profile)}.`);
@@ -764,8 +794,8 @@ const referenceItem = (entry: z.infer<typeof referenceFields>) => ({
   phone: entry.phone,
 });
 
-export const createReference = action(z.object({}), async () =>
-  referenceItem(await prisma.reference.create({ data: { sort: await nextSort(prisma.reference) } })),
+export const createReference = action(z.object({ profileId }), async ({ profileId }) =>
+  referenceItem(await prisma.reference.create({ data: { profileId: await ownProfile(profileId), sort: await nextSort(prisma.reference, { profileId }) } })),
 );
 
 export const saveReference = action(referenceFields, async ({ id, ...data }) => {
@@ -778,12 +808,59 @@ export const removeReference = action(z.object({ id }), async ({ id }) => {
   return null;
 });
 
-export const restoreReference = action(referenceFields, async (entry) =>
+export const restoreReference = action(referenceFields.extend({ profileId }), async ({ profileId, ...entry }) =>
   referenceItem(
     await prisma.reference.upsert({
       where: { id: entry.id },
-      create: { ...entry, sort: await nextSort(prisma.reference) },
+      create: { ...entry, profileId: await ownProfile(profileId), sort: await nextSort(prisma.reference, { profileId }) },
       update: {},
     }),
   ),
 );
+
+// ─── What employers ask for (E33-3) ──────────────────────────────────────────
+
+/**
+ * "Add" on a skill employers ask for (E33-3, as on an application's gap,
+ * design 4g): into this profile's skills, linked to the role it was used in,
+ * with what was done there as a new line. `bullets` is the role's new text,
+ * or null when it didn't change.
+ */
+export const addAskedSkill = action(
+  z.object({ profileId, name: skillName, experienceId: id.nullish(), did: z.string().trim().max(500).optional() }),
+  async ({ profileId: asked, name, experienceId, did }) => {
+    const owner = await ownProfile(asked);
+    const role = experienceId ? await prisma.experience.findFirst({ where: { id: experienceId, profileId: owner }, select: { id: true, bullets: true } }) : null;
+    if (experienceId && !role) throw new ActionError("That role is no longer in your profile. Reload the page.");
+    const { skill } = await findOrCreateSkill(owner, name);
+    let bullets: string | null = null;
+    if (role) {
+      await prisma.experienceSkill.upsert({ where: { experienceId_skillId: { experienceId: role.id, skillId: skill.id } }, create: { experienceId: role.id, skillId: skill.id }, update: {} });
+      if (did) {
+        bullets = role.bullets.trim() ? `${role.bullets.trimEnd()}\n${did}` : did;
+        await prisma.experience.update({ where: { id: role.id }, data: { bullets } });
+      }
+    }
+    return { skill, experienceId: role?.id ?? null, bullets };
+  },
+);
+
+/** "Not here" on a role's gap prompt (E33-4), or its Undo: kept with the profile, for that role and skill. */
+export const notHereAskedSkill = action(
+  z.object({ profileId, roleId: id, key: z.string().trim().min(1).max(200), on: z.boolean() }),
+  async ({ profileId: asked, roleId, key, on }) => {
+    const owner = await ownProfile(asked);
+    const entry = `${roleId} ${key}`;
+    const { gapsNotHere } = await loadProfileSettings(owner);
+    await saveProfileSettings(owner, { gapsNotHere: on ? [...new Set([...gapsNotHere, entry])] : gapsNotHere.filter((kept) => kept !== entry) });
+    return null;
+  },
+);
+
+/** "I don't have this" on a skill employers ask for (E33-3), or its Undo: kept with the profile, by the skill's key. */
+export const hideAskedSkill = action(z.object({ profileId, key: z.string().trim().min(1).max(200), hidden: z.boolean() }), async ({ profileId: asked, key, hidden }) => {
+  const owner = await ownProfile(asked);
+  const { gapsDismissed } = await loadProfileSettings(owner);
+  await saveProfileSettings(owner, { gapsDismissed: hidden ? [...new Set([...gapsDismissed, key])] : gapsDismissed.filter((entry) => entry !== key) });
+  return null;
+});

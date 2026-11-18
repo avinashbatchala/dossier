@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  coverageBand,
   editsSchema,
   extractedSchema,
   matchSchema,
@@ -56,6 +57,22 @@ describe("JSON column schemas", () => {
     expect(
       matchSchema.safeParse({ items: [{ ...item, requirement: "x", result: "maybe" }] }).success,
     ).toBe(false);
+  });
+
+  it("words the coverage, and a missing must-have keeps it from a strong fit (E30-1)", () => {
+    const item = { skill: null, experienceIds: [], note: null };
+    const of = (covered: number, gaps: number, mustHave = false): Match => ({
+      items: [
+        ...Array.from({ length: covered }, (_, index) => ({ ...item, requirement: `c${index}`, result: "covered" as const })),
+        ...Array.from({ length: gaps }, (_, index) => ({ ...item, requirement: `g${index}`, result: "gap" as const, mustHave })),
+      ],
+    });
+    expect(coverageBand(of(5, 2))).toBe("Strong fit");
+    expect(coverageBand(of(5, 2, true))).toBe("Good fit");
+    expect(coverageBand(of(3, 3))).toBe("Good fit");
+    expect(coverageBand(of(1, 2))).toBe("Partial fit");
+    expect(coverageBand(of(1, 4))).toBe("Long shot");
+    expect(coverageBand({ items: [] })).toBe("Not checked yet");
   });
 
   it("records chat edits with the text they replaced", () => {

@@ -24,7 +24,7 @@ export const BUILT_IN_SECTIONS = [
 export type BuiltInSection = (typeof BUILT_IN_SECTIONS)[number];
 
 /** What each built-in section is called on the screens that move them. */
-export const SECTION_NAMES: Record<BuiltInSection, string> = {
+const SECTION_NAMES: Record<BuiltInSection, string> = {
   summary: "Summary",
   experience: "Experience",
   volunteering: "Volunteering",
@@ -42,7 +42,7 @@ export const SECTION_NAMES: Record<BuiltInSection, string> = {
  * header, and the Facts are never printed. They keep a place in the order for
  * the list's sake, and resumes don't draw them.
  */
-export const PROFILE_ONLY_SECTIONS = ["basics", "facts"] as const;
+const PROFILE_ONLY_SECTIONS = ["basics", "facts"] as const;
 
 /** A custom section's key (#298). */
 export const customKey = (sectionId: string) => `custom:${sectionId}`;

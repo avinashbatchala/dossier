@@ -65,7 +65,7 @@ describe("the fact guard (E6-6)", () => {
 
   it("takes what the candidate's own sections say as true (#298)", () => {
     const item = { id: "i1", title: "Chartered MBA, 2009", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true };
-    const backed = sourcesFor({ ...profile, customSections: [{ id: "s1", title: "Honours", format: "LINES", items: [item] }] }, extracted, sample.ledgerly.posting, 11);
+    const backed = sourcesFor({ ...profile, customSections: [{ id: "s1", title: "Honours", format: "LINES", countsAs: "EXTRA_ACTIVITIES" as const, items: [item] }] }, extracted, sample.ledgerly.posting, 11);
     expect(unverifiedFacts("An MBA since 2009", backed)).toEqual([]);
     expect(check("An MBA since 2009")).toEqual(["MBA", "2009"]);
   });
@@ -104,14 +104,21 @@ describe("guardUnits", () => {
     const units = guardUnits(
       [
         { id: "summary", label: "Summary", text: "Led a team of 12 at Google." },
-        { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign", unverified: ["old"] },
+        {
+          id: "experience:e1",
+          label: "Northwind Logistics role",
+          text: "Led the carrier portal redesign",
+          unverified: ["old"],
+          serves: [{ line: "Led the carrier portal redesign", requirements: ["Portals"] }],
+        },
         { id: "skills", label: "Skills", text: "Kubernetes · Figma" },
       ],
       factSources(["Northwind Logistics", "Led the carrier portal redesign", "Figma"]),
     );
     expect(units).toEqual([
       { id: "summary", label: "Summary", text: "Led a team of 12 at Google.", unverified: ["Google", "12"] },
-      { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign" },
+      // Which requirements it serves stays (E30-4).
+      { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign", serves: [{ line: "Led the carrier portal redesign", requirements: ["Portals"] }] },
       { id: "skills", label: "Skills", text: "Kubernetes · Figma" },
     ]);
   });

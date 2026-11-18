@@ -7,6 +7,7 @@ import { countPdfPages, printBasePath } from "@/lib/pdf/pages";
 import { renderPdf } from "@/lib/pdf/render";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
+import { loadProfileSettings, profileIdOr } from "@/lib/profiles";
 import { loadSettings } from "@/lib/settings-data";
 import { route } from "@/lib/route";
 import { FIT_LEVELS } from "@/lib/themes";
@@ -49,9 +50,12 @@ async function renderRequested(request: NextRequest): Promise<{ pdf: Uint8Array;
   const date = new Date();
 
   if (doc === "base") {
+    // A profile's own Base resume (E24-2), the first one's without `&profile=`.
+    const profileId = await profileIdOr(params.get("profile"));
+    const own = await loadProfileSettings(profileId);
     // "Fit to one page" (public issue 69): squeezed a step at a time until it fits, as the preview does.
-    let pdf = await renderPdf(printBasePath());
-    for (let fit = 1; settings.fitBaseResume && fit <= FIT_LEVELS && countPdfPages(pdf) > 1; fit++) pdf = await renderPdf(printBasePath(fit));
+    let pdf = await renderPdf(printBasePath(0, profileId));
+    for (let fit = 1; own.fitBaseResume && fit <= FIT_LEVELS && countPdfPages(pdf) > 1; fit++) pdf = await renderPdf(printBasePath(fit, profileId));
     return { pdf, fileName: resolveFileName(settings.fileNamePattern, { name, doc: DocumentKind.RESUME, date }) };
   }
 

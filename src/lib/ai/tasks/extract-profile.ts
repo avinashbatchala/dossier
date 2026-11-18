@@ -7,8 +7,9 @@ import { BASICS_FIELDS, sameName, type BasicsField } from "@/lib/profile";
 import { BASICS_LABELS, importedProfileSchema, type ImportedProfile } from "@/lib/profile-import";
 
 import { system, type Task } from "./prompt-parts";
+import { levelRange } from "@/lib/profile-levels";
 
-export const EXTRACT_PROFILE_VERSION = "extract-profile@6";
+const EXTRACT_PROFILE_VERSION = "extract-profile@7";
 
 // What the model returns; code checks every part of it (E4-10).
 const text = z.string().nullable();
@@ -54,6 +55,8 @@ const answerSchema = z.object({
   ),
   publications: z.array(z.object({ citation: z.string(), link: text })),
   references: z.array(z.object({ name: z.string(), relation: text, company: text, email: text, phone: text })),
+  /** The levels the resume points to (E24-3), the one thing judged rather than copied; null when it has no roles to judge from. */
+  levels: z.object({ from: z.string(), to: z.string() }).nullable(),
 });
 
 const INSTRUCTIONS = `You turn the text of a candidate's resume into their profile, as JSON.
@@ -68,6 +71,7 @@ Take everything only from the resume: never add, guess or improve facts. Use nul
 - certifications: every certificate, certification or licence, most recent first, with who issued it (issuer), the year and month it was obtained, expiryYear and expiryMonth only if the resume says when it runs out, its credentialId and its link (where to verify it) if given.
 - publications: every paper, article, book or chapter the resume lists as the candidate's publications, in its order. citation: the whole entry exactly as the resume writes it, word for word, without its link; link: its DOI or web address if given.
 - references: only people the resume names as references, with how they know the candidate (relation), their company, email and phone.
+- levels: the one thing you judge rather than copy. The lowest and highest of five job levels the candidate would apply for now, from their roles' titles, scope and years: intern (an internship), junior (entry level), mid (mid level), senior, lead (lead, head of, manager or director). A range usually spans one or two steps. Null when the resume has no roles to judge from.
 Keep the resume's language; don't translate.`;
 
 /** The resume's text, marked as material to read rather than instructions to follow. */
@@ -104,7 +108,7 @@ const LITERAL_BASICS: ReadonlySet<BasicsField> = new Set(["name", "email", "phon
  * known levels, every name looked up in the resume, and basics that the file
  * says. What's dropped is listed in `leftOut` (#371).
  */
-export function checkedProfile(answer: z.infer<typeof answerSchema>, resume: string, today: Date): ImportedProfile {
+function checkedProfile(answer: z.infer<typeof answerSchema>, resume: string, today: Date): ImportedProfile {
   const haystack = normalized(resume);
   const inResume = (value: string) => !value.trim() || haystack.includes(normalized(value));
   const missing = (...values: string[]) => values.filter((value) => !inResume(value));
@@ -249,6 +253,8 @@ export function checkedProfile(answer: z.infer<typeof answerSchema>, resume: str
         unverified: missing(clean(entry.name)),
       })),
     leftOut: [...new Set(leftOut)],
+    // Shown for confirmation, and taken only by a profile without levels (E24-3).
+    levels: answer.levels ? levelRange(answer.levels.from, answer.levels.to) : null,
   });
 }
 

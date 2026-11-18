@@ -5,24 +5,33 @@ import { z } from "zod";
 
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { action } from "@/lib/action";
-import { FILTERS, SORT_KEYS, VIEWS } from "@/lib/applications-list";
+import { parseStatusParam, SORT_KEYS, statusParamValue, VIEWS } from "@/lib/applications-list";
 import { boardOrder, withShownOrder } from "@/lib/board-order";
 import { prisma } from "@/lib/prisma";
-import { saveSettings } from "@/lib/settings-data";
+import { loadSettings, saveSettings } from "@/lib/settings-data";
 
-/** Remembers how the Applications screen was left (LST-7), for the next visit. */
+/**
+ * Remembers how the Applications screen was left (LST-7), for the next
+ * visit: the sort, and the view, for all applications or for the status on
+ * show (E29-1, LB1), where Board is remembered over the list.
+ */
 export const rememberListView = action(
   z.object({
     view: z.enum(VIEWS),
-    filter: z.enum(FILTERS.map((filter) => filter.value)),
+    status: z.string().nullable().optional(),
     sort: z.object({ key: z.enum(SORT_KEYS), reversed: z.boolean() }),
   }),
-  async ({ view, filter, sort }) => {
-    await saveSettings({
-      applicationsView: view,
-      applicationsFilter: filter,
-      applicationsSort: `${sort.reversed ? "-" : ""}${sort.key}`,
-    });
+  async ({ view, status, sort }) => {
+    const applicationsSort = `${sort.reversed ? "-" : ""}${sort.key}`;
+    const asked = status ? parseStatusParam(status) : null;
+    if (!asked) {
+      await saveSettings({ applicationsView: view, applicationsSort });
+      return null;
+    }
+    const key = statusParamValue(asked);
+    const { applicationsBoardStatuses } = await loadSettings();
+    const others = applicationsBoardStatuses.filter((entry) => entry !== key);
+    await saveSettings({ applicationsSort, applicationsBoardStatuses: view === "board" ? [...others, key] : others });
     return null;
   },
 );

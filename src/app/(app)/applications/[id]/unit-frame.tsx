@@ -1,10 +1,11 @@
 "use client";
 
 import { Popover } from "radix-ui";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { Unit } from "@/lib/application-data";
+import { lineText } from "@/lib/changed-lines";
 import { cn } from "@/lib/cn";
 import { isBulletUnit } from "@/lib/unit-text";
 
@@ -24,6 +25,14 @@ export type UnitFrameProps = {
   /** The AI is rewriting it (E8-4). */
   busy: boolean;
   flashing: boolean;
+  /**
+   * A change just landed here (E30-12): the page scrolls to it, marks the
+   * changed lines (all of it when `lines` is null) for about 4 s, and offers
+   * Keep and Undo.
+   */
+  landing?: { lines: string[] | null; onKeep: () => void; onUndo: () => void } | null;
+  /** The lines that cover the requirement picked in the Fit column (E30-4), highlighted with `flash`. */
+  highlight?: readonly string[] | null;
   onEdit: () => void;
   onCancel: () => void;
   onSave: (text: string) => void;
@@ -35,6 +44,9 @@ export type UnitFrameProps = {
 
 const toolButton =
   "rounded-[6px] px-[9px] py-[5px] text-on-inverse hover:bg-white/14 focus-visible:outline-on-inverse focus-visible:-outline-offset-2";
+
+/** How long a change's mark stays (E30-12). */
+const LANDING_MS = 4_000;
 
 /**
  * One unit of a tailored document in the preview (APP-5, APP-6). Hovering it
@@ -51,6 +63,8 @@ export function UnitFrame({
   saving,
   busy,
   flashing,
+  landing = null,
+  highlight = null,
   onEdit,
   onCancel,
   onSave,
@@ -70,11 +84,55 @@ export function UnitFrame({
   }, [editing]);
 
   const flagged = !editing && unit.unverified && unit.unverified.length > 0;
+  const landed = landing !== null && !editing;
+  const lines = landing?.lines ?? null;
+  const linesKey = lines?.join("\n") ?? "";
+
+  // The lines that cover the picked requirement (E30-4); the whole part when none of its lines match.
+  const highlightKey = highlight?.join("\n") ?? "";
+  useEffect(() => {
+    const element = frame.current;
+    if (!element || !highlightKey) return;
+    const wanted = new Set(highlightKey.split("\n"));
+    const marked = [...element.querySelectorAll("li, p")].filter((line) => wanted.has(lineText(line.textContent ?? "")));
+    marked.forEach((line) => line.setAttribute("data-highlight", ""));
+    // No line of it matches, e.g. a summary drawn as one block: the whole part.
+    // An attribute React doesn't own, so a re-render keeps it.
+    if (marked.length === 0) element.setAttribute("data-highlight-all", "");
+    return () => {
+      marked.forEach((line) => line.removeAttribute("data-highlight"));
+      element.removeAttribute("data-highlight-all");
+    };
+  }, [highlightKey]);
+
+  // Where the change landed: into view, and its lines marked for a moment.
+  useEffect(() => {
+    const element = frame.current;
+    if (!landed || !element) return;
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    element.scrollIntoView?.({ block: "center", behavior: smooth ? "smooth" : "auto" });
+    const wanted = new Set(linesKey ? linesKey.split("\n") : []);
+    const marked = wanted.size > 0 ? [...element.querySelectorAll("li, p")].filter((line) => wanted.has(lineText(line.textContent ?? ""))) : [];
+    marked.forEach((line) => line.setAttribute("data-change", ""));
+    const timer = setTimeout(() => marked.forEach((line) => line.removeAttribute("data-change")), LANDING_MS);
+    return () => {
+      clearTimeout(timer);
+      marked.forEach((line) => line.removeAttribute("data-change"));
+    };
+  }, [landed, linesKey]);
 
   return (
     <div
       ref={frame}
-      className={cn(className, styles.frame, flashing && styles.flash, busy && styles.busy, editing && styles.editing)}
+      className={cn(
+        className,
+        styles.frame,
+        flashing && !landed && styles.flash,
+        landed && !lines && styles.landing,
+        busy && styles.busy,
+        editing && styles.editing,
+      )}
+      data-highlighted={highlightKey ? "" : undefined}
       data-unit={id}
       role="group"
       aria-label={unit.label}
@@ -87,7 +145,17 @@ export function UnitFrame({
       </div>
       {editing && <UnitEditor unit={unit} saving={saving} onCancel={onCancel} onSave={onSave} />}
       {flagged && <CheckThis facts={unit.unverified!} />}
-      {busy ? (
+      {landed && !busy ? (
+        <div role="status" className={cn(styles.status, "flex items-center gap-0.5 rounded-control bg-inverse p-[3px] pl-2.5 font-sans text-xs leading-[1.2] font-medium whitespace-nowrap text-on-inverse shadow-toolbar")}>
+          <span className="pr-1.5">Changed just now</span>
+          <button type="button" className={toolButton} onClick={landing!.onKeep}>
+            Keep
+          </button>
+          <button type="button" className={toolButton} onClick={landing!.onUndo}>
+            Undo
+          </button>
+        </div>
+      ) : busy ? (
         <span className={cn(styles.status, "rounded-[6px] border border-line-popover bg-card px-2 py-1 font-sans text-[11.5px] leading-[1.2] text-muted")}>
           Rewriting…
         </span>

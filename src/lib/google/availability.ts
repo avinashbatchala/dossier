@@ -1,5 +1,6 @@
 import "server-only";
 
+import { setUpcomingInterview } from "@/lib/interviews";
 import { prisma } from "@/lib/prisma";
 import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
@@ -43,6 +44,7 @@ export async function proposeSlots(now = new Date()): Promise<{ slots: Interval[
 export async function scheduleInterview(applicationId: string, start: Date): Promise<CalendarSync> {
   const { count } = await prisma.application.updateMany({ where: { id: applicationId }, data: { nextInterviewAt: start } });
   if (count === 0) throw new GoogleError("unavailable", "That application no longer exists.");
+  await setUpcomingInterview(applicationId, start);
   return syncInterviewToCalendar(applicationId);
 }
 
@@ -50,7 +52,7 @@ export async function scheduleInterview(applicationId: string, start: Date): Pro
 export type CalendarSync = { inCalendar: boolean; eventLink: string | null };
 
 /** Whether Dossier keeps interviews in the calendar: connected, allowed, and switched on in Settings → Google. */
-async function calendarInUse(): Promise<{ calendarId: string } | null> {
+export async function calendarInUse(): Promise<{ calendarId: string } | null> {
   const [connection, settings] = await Promise.all([googleConnection(), loadSettings()]);
   if (connection.status !== "connected" || !connection.canUseCalendar || !settings.calendarEvents) return null;
   return { calendarId: settings.calendarId };
@@ -108,6 +110,8 @@ export async function syncInterviewToCalendar(applicationId: string): Promise<Ca
   if (current) await deleteEvent(calendarId, current.id);
 
   const created = await createEvent(calendarId, { ...eventFor(application), start, end: new Date(start.getTime() + hours.slotMinutes * 60_000), timeZone: hours.timeZone });
+  // Its length, until the event says otherwise (E30-6).
+  await prisma.interview.updateMany({ where: { applicationId, at: start, minutes: null }, data: { minutes: hours.slotMinutes } });
   await prisma.application.updateMany({ where: { id: applicationId }, data: { interviewEventId: created.id, interviewCalendarId: calendarId } });
   return { inCalendar: true, eventLink: created.htmlLink };
 }
@@ -129,10 +133,20 @@ export async function pullInterviewEvents({ applicationId, signal }: { applicati
     const event = await getEvent(application.interviewCalendarId!, application.interviewEventId!, signal);
     if (!event) {
       await prisma.application.updateMany({ where: { id: application.id }, data: { nextInterviewAt: null, interviewEventId: null, interviewCalendarId: null } });
+      await setUpcomingInterview(application.id, null);
       changed++;
-    } else if (event.start && event.start.getTime() !== application.nextInterviewAt?.getTime()) {
-      await prisma.application.updateMany({ where: { id: application.id }, data: { nextInterviewAt: event.start } });
-      changed++;
+    } else if (event.start) {
+      // Its length, place and who's invited fill the upcoming round (E30-6).
+      const details = {
+        minutes: event.end ? Math.round((event.end.getTime() - event.start.getTime()) / 60_000) : null,
+        place: event.place,
+        people: event.people.join("\n"),
+      };
+      if (event.start.getTime() !== application.nextInterviewAt?.getTime()) {
+        await prisma.application.updateMany({ where: { id: application.id }, data: { nextInterviewAt: event.start } });
+        changed++;
+      }
+      await setUpcomingInterview(application.id, event.start, details);
     }
   }
   return changed;

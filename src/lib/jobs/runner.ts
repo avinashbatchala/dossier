@@ -35,6 +35,11 @@ export type JobDefinition<I, R> = {
    * write its data idempotently (upsert, or replace in one transaction).
    */
   run: (input: I, context: JobContext) => Promise<R>;
+  /**
+   * Runs beside the other jobs, outside their limit, because it asks no AI
+   * provider: a search across portals (E22-4) shouldn't wait for a letter.
+   */
+  beside?: boolean;
 };
 
 /** What a page learns about a job. */
@@ -47,7 +52,7 @@ export type JobView<R = unknown> = {
   result: R | null;
 };
 
-export const JOB_MESSAGES = {
+const JOB_MESSAGES = {
   failed: "Something went wrong while working on this. Try again.",
   interrupted: "Dossier restarted before this finished. Try again.",
   cancelled: "Cancelled.",
@@ -62,6 +67,8 @@ type Listener = (job: JobView) => void;
 type RunnerState = {
   definitions: Map<string, JobDefinition<unknown, unknown>>;
   queue: string[];
+  /** Jobs that run beside the others, outside the limit (JobDefinition.beside). */
+  beside?: Set<string>;
   running: Map<string, AbortController>;
   listeners: Map<string, Set<Listener>>;
   pumping: boolean;
@@ -126,9 +133,13 @@ export async function startJob<I, R>(
     },
     select: { id: true },
   });
+  if (definition.beside) besideJobs().add(job.id);
   enqueue(job.id);
   return job.id;
 }
+
+/** The jobs outside the limit; kept with the queue, so dev reloads keep it. */
+const besideJobs = () => (state.beside ??= new Set());
 
 /** Runs a failed job again, as the same job with the same input. */
 export async function retryJob(id: string): Promise<boolean> {
@@ -207,12 +218,19 @@ async function pump(): Promise<void> {
   state.pumping = true;
   try {
     const limit = await concurrency();
-    while (state.queue.length > 0 && state.running.size < limit) {
-      const id = state.queue.shift()!;
+    const beside = besideJobs();
+    let counted = [...state.running.keys()].filter((id) => !beside.has(id)).length;
+    // In order; a job beside the others starts whatever the limit, the rest while there's room.
+    for (const id of [...state.queue]) {
+      const free = beside.has(id);
+      if (!free && counted >= limit) continue;
+      state.queue.splice(state.queue.indexOf(id), 1);
+      if (!free) counted++;
       const controller = new AbortController();
       state.running.set(id, controller);
       void execute(id, controller).finally(() => {
         state.running.delete(id);
+        beside.delete(id);
         void pump();
       });
     }

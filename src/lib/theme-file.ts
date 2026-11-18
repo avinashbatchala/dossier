@@ -18,13 +18,13 @@ import { THEME_STYLE_DEFAULTS, type ThemeData } from "./themes";
 // A theme as a file to share or keep (E5-7, RES-8), and the rules every saved
 // theme's look follows, from the builder or a file.
 
-export const THEME_FILE_FORMAT = "dossier-theme";
+const THEME_FILE_FORMAT = "dossier-theme";
 /**
  * Bump when the file's shape changes; imports refuse versions they don't
  * know. Version 2 added the header, sidebar and date styles, 3 the photo's
  * shape and position (#224); older files read with the defaults.
  */
-export const THEME_FILE_VERSION = 3;
+const THEME_FILE_VERSION = 3;
 
 const font = z.enum(ThemeFont, { error: (issue) => `That theme uses a font Dossier doesn't have (${String(issue.input)}).` });
 
@@ -53,7 +53,7 @@ export const themeFieldsSchema = z.object({
 });
 export type ThemeFields = z.output<typeof themeFieldsSchema>;
 
-export const themeFileSchema = z.object({
+const themeFileSchema = z.object({
   format: z.literal(THEME_FILE_FORMAT),
   version: z.number(),
   // Version 1 files have no header, sidebar or date style, and versions 1 and 2 no photo.

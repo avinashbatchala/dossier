@@ -94,6 +94,8 @@ test("shows the most severe first, and each next one after a dismiss, for good",
   await expect(region(page, info)).toBeVisible();
   await expectAccessibleNotice(page);
 
+  // Dismiss hides at once and saves after (#381): reload only once both are saved.
+  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'announcementsDismissed'`))[0]?.value ?? "").toContain(important.id);
   await page.reload();
   await expect(region(page, security)).toBeHidden();
   await expect(region(page, important)).toBeHidden();

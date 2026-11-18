@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { LanguageLevel } from "@/generated/prisma/enums";
 import { BASICS_FIELDS, type BasicsField } from "@/lib/profile";
+import { levelRangeSchema } from "@/lib/profile-levels";
 
 // A profile read from a resume file (E4-10, PRO-12), as the preview shows it
 // and the import applies it. Anything the file's text doesn't contain is
@@ -78,6 +79,8 @@ export const importedProfileSchema = z.object({
   ),
   /** What the model gave that wasn't kept, and why (#371): "Country “Oregon”: not a country". Absent in older readings. */
   leftOut: z.array(z.string()).default([]),
+  /** The levels it points to (E24-3), for a profile without them; absent in readings made before. */
+  levels: levelRangeSchema.nullable().default(null),
 });
 export type ImportedProfile = z.infer<typeof importedProfileSchema>;
 

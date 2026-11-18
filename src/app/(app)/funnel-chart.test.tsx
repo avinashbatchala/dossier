@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FunnelStep } from "@/lib/dashboard";
 
 import { FunnelChart } from "./funnel-chart";
+
+vi.mock("next/link", () => ({ default: ({ href, ...props }: ComponentProps<"a">) => <a href={href} {...props} /> }));
 
 const none = { open: 0, rejected: 0, declined: 0, archived: 0 };
 // The demo's funnel: 7 sent, one rejected at screening and one offer declined.
@@ -18,7 +21,7 @@ const funnel: FunnelStep[] = [
 
 describe("the funnel as a Sankey diagram", () => {
   it("names every stage with its count, and where the ones that stopped are", () => {
-    const { container } = render(<FunnelChart funnel={funnel} />);
+    render(<FunnelChart funnel={funnel} />);
     expect(screen.getAllByRole("listitem").map((step) => step.textContent)).toEqual([
       "Sent7Everything you've sent",
       "Screening571% of sent",
@@ -26,25 +29,29 @@ describe("the funnel as a Sankey diagram", () => {
       "Offer267% of interview",
       "Accepted0None yet",
     ]);
-    const picture = container.querySelector("[aria-hidden='true']")!;
-    expect([...picture.querySelectorAll(":scope > span")].map((label) => label.textContent)).toEqual([
-      "2 waiting",
-      "1 in screening",
-      "1 rejected",
-      "1 interviewing",
-      "1 deciding",
-      "1 declined",
-    ]);
+    const ends = ["2 waiting", "1 in screening", "1 rejected", "1 interviewing", "1 deciding", "1 declined"];
+    expect(ends.map((name) => screen.getByRole("link", { name }).textContent)).toEqual(ends);
+  });
+
+  it("opens each stage's and each end node's applications (E28-2)", () => {
+    render(<FunnelChart funnel={funnel} />);
+    expect(screen.getByRole("link", { name: /^Screening/ })).toHaveAttribute("href", "/applications?status=screening");
+    expect(screen.getByRole("link", { name: /^Accepted/ })).toHaveAttribute("href", "/applications?status=accepted");
+    expect(screen.getByRole("link", { name: "2 waiting" })).toHaveAttribute("href", "/applications?status=sent");
+    expect(screen.getByRole("link", { name: "1 rejected" })).toHaveAttribute("href", "/applications?status=rejected");
+    expect(screen.getByRole("link", { name: "1 declined" })).toHaveAttribute("href", "/applications?status=declined");
+    // None of them is inside the picture hidden from screen readers.
+    for (const link of screen.getAllByRole("link")) expect(link.closest("[aria-hidden='true']")).toBeNull();
   });
 
   it("draws the stages to scale, a band for each outcome and room for every label", () => {
     const { container } = render(<FunnelChart funnel={funnel} />);
     const svg = container.querySelector("svg")!;
-    // 16 pixels an application: Sent is 112 tall, and Sent's two waiting end at 132.
-    expect(svg).toHaveAttribute("viewBox", "0 0 1000 132");
+    // 26 pixels an application (E28-2): Sent is 182 tall, and Sent's two waiting end at 202.
+    expect(svg).toHaveAttribute("viewBox", "0 0 1000 202");
     expect(svg.querySelectorAll("path[d$='Z']")).toHaveLength(6);
     const nodes = [...svg.querySelectorAll("rect[width='12']")].map((node) => node.getAttribute("height"));
-    expect(nodes).toEqual(["112", "80", "48", "32", "2", "32", "16", "16", "16", "16", "16"]);
+    expect(nodes).toEqual(["182", "130", "78", "52", "2", "52", "26", "26", "26", "26", "26"]);
   });
 
   it("tells more on hover, for a stage and for an outcome", () => {
@@ -55,13 +62,13 @@ describe("the funnel as a Sankey diagram", () => {
     expect(picture).toHaveTextContent("5 reached screening3 went on to interview, 2 stopped here");
     fireEvent.pointerLeave(screening);
 
-    const rejected = within(picture).getByText("rejected");
+    const rejected = screen.getByRole("link", { name: "1 rejected" });
     fireEvent.pointerEnter(rejected);
     expect(picture).toHaveTextContent("1 rejected at screening20% of screening");
     fireEvent.pointerLeave(rejected);
     expect(picture).not.toHaveTextContent("at screening");
 
-    fireEvent.pointerEnter(within(picture).getByText("deciding"));
+    fireEvent.pointerEnter(screen.getByRole("link", { name: "1 deciding" }));
     expect(picture).toHaveTextContent("1 offer you're deciding on50% of offer");
   });
 

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { BrandMark } from "@/components/brand-mark";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { getSession } from "@/lib/auth/session";
 import { isDesktopApp } from "@/lib/desktop";
+import { isDesktopClient } from "@/lib/desktop-client";
 
 import { DesktopBrowserWait } from "./desktop-browser-wait";
 import { LoginForm } from "./login-form";
@@ -34,7 +36,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <DesktopBrowserWait next={safeNextPath(typeof next === "string" ? next : null)} expired={link === "expired"} />
         ) : (
           <>
-            <LoginForm next={typeof next === "string" ? next : undefined} />
+            <LoginForm next={typeof next === "string" ? next : undefined} keepsSession={isDesktopClient((await headers()).get("user-agent"))} />
             <p className="text-meta leading-[1.6] text-pretty text-muted">
               Your password is set on the server, as a hash in{" "}
               <code className="font-mono text-label">DOSSIER_PASSWORD</code>. Forgot it? Make a new hash with{" "}

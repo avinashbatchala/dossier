@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
-import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
+import { agentPortal, jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
+import { portalUpdates } from "@/lib/portals/updates";
 import { COUNTRIES } from "@/lib/job-search/countries";
 import { isDesktopApp } from "@/lib/desktop";
 import { loadSearch } from "@/lib/posting-searches";
+import { agentPortals } from "@/lib/agent/run";
 import { listAgentSearches } from "@/lib/agent/searches";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
@@ -22,12 +24,16 @@ import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 import { scoringProblem } from "@/lib/scoring";
 import { loadScoringConfig, scoringView } from "@/lib/scoring/config";
+import { agentCoversOf } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
+import { loadSettingsStatus } from "@/lib/settings-status-data";
 import { availableUpdate } from "@/lib/update-check";
 import { USAGE_PING_HOST, usagePingChoice } from "@/lib/usage-ping";
 
 import { AgentSection } from "./agent-section";
+import { PortalCatalog } from "./browse-portals";
 import { AiBehaviour } from "./ai-behaviour";
+import { AiDataFlows } from "./ai-data-flows";
 import { AiProviderSection } from "./ai-provider-section";
 import { DataSection } from "./data-section";
 import { DocumentsSection } from "./documents-section";
@@ -37,26 +43,36 @@ import { JobSearchSection } from "./job-search-section";
 import { ScoringSection } from "./scoring-section";
 import { AboutSection, type AboutFacts, type UsagePingView } from "./about-section";
 import { ConnectorSection } from "./connector-section";
+import { NotificationsSection } from "./notifications-section";
 import { settingsSectionFromParam } from "./sections";
+import { SettingsOverview } from "./settings-overview";
 import { SettingsScreen } from "./settings-screen";
+import { listProfiles, profileSearchDefaults } from "@/lib/profiles";
+import { listChannels, listDeliveries } from "@/lib/notifications/store";
 
 export const metadata: Metadata = { title: "Settings" };
 
-/** Settings (PRD §6.8); the section is in `?section=` (E10-1). */
+/** Settings (PRD §6.8); the section is in `?section=` (E10-1), and without one the overview (E34-2). */
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   const params = await searchParams;
   const section = settingsSectionFromParam(params.section);
-  const settings = await loadSettings();
+  const [settings, status, aiView] = await Promise.all([loadSettings(), loadSettingsStatus(), section === "ai" ? loadAiSettingsView() : null]);
 
   return (
-    <SettingsScreen section={section}>
-      {section === "ai" ? (
+    <SettingsScreen
+      section={section}
+      status={status}
+      aside={aiView ? <AiDataFlows initial={{ provider: aiView.provider, baseUrl: aiView.baseUrl }} /> : section === "jobs" ? <PortalCatalog /> : undefined}
+    >
+      {section === "overview" ? (
+        <SettingsOverview status={status} />
+      ) : aiView ? (
         <>
-          <AiProviderSection initial={await loadAiSettingsView()} />
-          <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff }} />
+          <AiProviderSection initial={aiView} />
+          <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff, dailyNoteAi: settings.dailyNoteAi }} />
         </>
       ) : section === "jobs" ? (
-        <JobSearchSection initial={jobSearchView(await loadJobSearchConfig())} />
+        <JobSearchSection initial={await jobSearchViewWithUpdates()} archiveDays={settings.archiveAfterDays} />
       ) : section === "scoring" ? (
         <ScoringSection initial={scoringView(await loadScoringConfig())} />
       ) : section === "agent" ? (
@@ -64,19 +80,23 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           initial={{
             enabled: settings.agentEnabled,
             hour: settings.agentHour,
-            minScore: settings.agentMinScore,
+            covers: agentCoversOf(settings),
             maxScores: settings.agentMaxScores,
             maxDrafts: settings.agentMaxDrafts,
             autoDraft: settings.agentAutoDraft,
           }}
           searches={await listAgentSearches()}
           suggestedQuery={(await loadSearch())?.query}
-          source={(await loadJobSearchConfig()).source}
+          profiles={await Promise.all((await listProfiles()).map(async (profile) => ({ ...profile, defaults: await profileSearchDefaults(profile.id) })))}
+          source={agentPortal(await loadJobSearchConfig())}
+          sources={agentPortals(await loadJobSearchConfig())}
           scoring={await scoringReadiness()}
           countries={COUNTRIES}
           timeZone={await lastKnownTimeZone()}
           onlyWhileOpen={isDesktopApp()}
         />
+      ) : section === "notifications" ? (
+        <NotificationsSection initial={{ channels: await listChannels(), log: await listDeliveries() }} />
       ) : section === "google" ? (
         <>
           <GoogleNotice outcome={typeof params.google === "string" ? params.google : null} />
@@ -110,7 +130,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         />
       ) : section === "data" ? (
         <DataSection
-          hasApiKey={[settings.apiKeyEnc, settings.jsearchKeyEnc, settings.adzunaKeyEnc].some((key) => key !== null)}
+          hasApiKey={[settings.apiKeyEnc, settings.jsearchKeyEnc, settings.adzunaKeyEnc].some((key) => key !== null) || Object.keys(settings.portalKeysEnc).length > 0}
           exportName={exportFileName()}
           backups={{
             on: settings.nightlyBackup,
@@ -130,7 +150,6 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             dateFormat: settings.dateFormat,
             defaultTone: settings.defaultTone,
             docLanguage: settings.docLanguage,
-            resumeLanguage: settings.resumeLanguage,
             customLanguages: settings.customLanguages,
             fileNamePattern: settings.fileNamePattern,
             includeRefs: settings.includeRefs,
@@ -210,4 +229,10 @@ async function aboutFacts(): Promise<AboutFacts> {
 async function usagePingView(): Promise<UsagePingView> {
   const settings = await loadSettings();
   return { host: USAGE_PING_HOST, ...usagePingChoice(settings), id: settings.usagePingId, production: process.env.NODE_ENV === "production" };
+}
+
+/** Settings → Job search's portals, each with its update from the catalog (E23-5). */
+async function jobSearchViewWithUpdates() {
+  const config = await loadJobSearchConfig();
+  return jobSearchView(config, await portalUpdates(config));
 }

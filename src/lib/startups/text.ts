@@ -162,3 +162,14 @@ export function noApplicationsSentence(text: string): string {
   }
   return "";
 }
+
+// People looking for work sometimes post in the hiring thread, against its
+// rules (public #144): a first line in the first person ("I'm a backend
+// engineer…"), one that says so ("SEEKING WORK"), or the "Who wants to be
+// hired?" thread's own form ("Willing to relocate:", "Résumé/CV:").
+const FIRST_PERSON = /^(?:i(?:\s*['’]\s*m|\s+am)?\s|me\b|my name\b)/i;
+const SEEKING = /\b(?:(?:seeking|looking for)\s+(?:work|a\s+(?:new\s+)?(?:role|job|position))|open to work|available for (?:hire|work)|hire me)\b/i;
+const SEEKER_FORM = /^\s*(?:willing to relocate|r[ée]sum[ée]\s*\/\s*cv)\s*:/im;
+
+/** Whether a post is someone looking for work rather than an employer hiring. */
+export const isJobSeeker = (header: string, text: string) => FIRST_PERSON.test(header.trim()) || SEEKING.test(header) || SEEKER_FORM.test(text);

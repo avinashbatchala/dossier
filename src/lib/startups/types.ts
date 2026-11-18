@@ -13,8 +13,7 @@ export const STARTUP_SOURCE_INFO: Record<StartupSource, { name: string; kind: st
   HN: { name: "Hacker News", kind: "Who is hiring?" },
 };
 
-export const STARTUP_STATUSES = ["NEW", "SAVED", "CONTACTED", "DISMISSED"] as const;
-export type StartupStatusName = (typeof STARTUP_STATUSES)[number];
+export type StartupStatusName = "NEW" | "SAVED" | "CONTACTED" | "DISMISSED";
 
 /** What an address is for: an application address, the founders', a general one, or someone's own. */
 export const EMAIL_LABELS = ["Hiring", "Founders", "General", "Person"] as const;
@@ -47,7 +46,7 @@ export function startupAddress(emails: unknown): string {
 }
 
 export const startupLinkSchema =z.object({ label: z.string().max(60), url: z.string().max(2000).regex(/^https?:\/\//i) });
-export type StartupLink = z.infer<typeof startupLinkSchema>;
+type StartupLink = z.infer<typeof startupLinkSchema>;
 
 /** A startup as a source found it. */
 export type FoundStartup = {
@@ -66,11 +65,20 @@ export type FoundStartup = {
   postedAt: string | null;
 };
 
+/** A reason a startup fits, or a red flag (good: false). */
+export type StartupReason = { text: string; good: boolean };
+
 /** A startup as the screen sees it. */
 export type StartupView = FoundStartup & {
   id: string;
+  /** 0–100: how well it fits the profile it fits best. */
   score: number;
-  reasons: string[];
+  /** Why: the keyword match's reasons are all good; the scoring model's (#524) can be red flags. */
+  reasons: StartupReason[];
+  /** Scored with the model in Settings → Scoring (#524), not the keyword match. */
+  aiScored: boolean;
+  /** The profile it fits best (E24-6), which the score is for. */
+  profileId: string | null;
   status: StartupStatusName;
   /** Where its site says it takes no unsolicited applications; "" when it doesn't. */
   noApplicationsFrom: string;
@@ -79,36 +87,45 @@ export type StartupView = FoundStartup & {
   notes: string;
   /** The application started from it, if any. */
   applicationId: string | null;
+  /** "hires from the Netherlands" (E32-4), worked out for the profile's country when the list loads; "" otherwise. */
+  hiresFrom?: string;
 };
 
 /** Where to look: anywhere, the profile's city, its country, or remote work open to it. */
-export const STARTUP_PLACES = ["any", "city", "country", "remote"] as const;
-export type StartupPlace = (typeof STARTUP_PLACES)[number];
+const STARTUP_PLACES = ["any", "city", "country", "remote"] as const;
 
-export const STARTUP_SORTS = ["match", "newest"] as const;
+const STARTUP_SORTS = ["match", "newest"] as const;
+
+/**
+ * The tabs (E32-4, PL1, decided 17 November 2026): Hiring now is every
+ * startup not dismissed; Applied for is one with an application or that was
+ * contacted.
+ */
+export const STARTUP_VIEWS = ["HIRING", "NEW", "SAVED", "APPLIED", "DISMISSED"] as const;
+export type StartupViewName = (typeof STARTUP_VIEWS)[number];
+export const STARTUP_VIEW_LABELS: Record<StartupViewName, string> = { HIRING: "Hiring now", NEW: "New", SAVED: "Saved", APPLIED: "Applied for", DISMISSED: "Dismissed" };
 
 export const startupFilterSchema = z.object({
   q: z.string().trim().max(200).default(""),
   place: z.enum(STARTUP_PLACES).default("any"),
   source: z.enum(STARTUP_SOURCES).or(z.literal("")).default(""),
-  minScore: z.coerce.number().int().min(0).max(100).default(0),
   withEmail: z.boolean().default(false),
-  status: z.enum(STARTUP_STATUSES).default("NEW"),
+  view: z.enum(STARTUP_VIEWS).default("HIRING"),
   sort: z.enum(STARTUP_SORTS).default("match"),
 });
 export type StartupFilter = z.output<typeof startupFilterSchema>;
 
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
 
-/** The filter in the Startups screen's address. */
+/** The filter in the Startups screen's address; ?view=contacted from before is Applied for. */
 export function startupFilterFromParams(params: Record<string, string | string[] | undefined>): StartupFilter {
+  const view = one(params.view).toUpperCase();
   const parsed = startupFilterSchema.safeParse({
     q: one(params.q),
     place: one(params.place) || undefined,
     source: one(params.source).toUpperCase(),
-    minScore: one(params.min) || undefined,
     withEmail: one(params.email) === "1",
-    status: one(params.view).toUpperCase() || undefined,
+    view: view === "CONTACTED" ? "APPLIED" : view || undefined,
     sort: one(params.sort) || undefined,
   });
   return parsed.success ? parsed.data : startupFilterSchema.parse({});
@@ -120,9 +137,8 @@ export function startupFilterHref(filter: StartupFilter): string {
   if (filter.q) params.set("q", filter.q);
   if (filter.place !== "any") params.set("place", filter.place);
   if (filter.source) params.set("source", filter.source.toLowerCase());
-  if (filter.minScore > 0) params.set("min", String(filter.minScore));
   if (filter.withEmail) params.set("email", "1");
-  if (filter.status !== "NEW") params.set("view", filter.status.toLowerCase());
+  if (filter.view !== "HIRING") params.set("view", filter.view.toLowerCase());
   if (filter.sort !== "match") params.set("sort", filter.sort);
   const query = params.toString();
   return query ? `/startups?${query}` : "/startups";

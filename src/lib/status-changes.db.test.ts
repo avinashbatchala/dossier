@@ -104,3 +104,29 @@ describe("undoStatusChange", () => {
     expect(await undoStatusChange(db, "missing")).toEqual({ outcome: "not-found" });
   });
 });
+
+describe("how it was sent (E29-7)", () => {
+  const via = async (id: string) => (await db.application.findUniqueOrThrow({ where: { id }, select: { sentVia: true } })).sentVia;
+
+  it("keeps it on the first send only, and forgets it when that send is undone", async () => {
+    const { id } = await db.application.create({ data: { company: "Ledgerly" } });
+    const sent = await applyStatusChange(db, id, "SENT", t(0), { sentVia: "GMAIL" });
+    expect(await via(id)).toBe("GMAIL");
+
+    // Moving on later doesn't change how it went out.
+    await applyStatusChange(db, id, "SCREENING", t(1), { sentVia: "EMAIL" });
+    expect(await via(id)).toBe("GMAIL");
+
+    await undoStatusChange(db, (await db.statusEvent.findFirstOrThrow({ where: { to: "SCREENING" } })).id);
+    expect(await via(id)).toBe("GMAIL");
+    if (sent.outcome !== "changed") throw new Error("not sent");
+    await undoStatusChange(db, sent.event.id);
+    expect(await via(id)).toBeNull();
+  });
+
+  it("stays unsaid when it isn't given", async () => {
+    const { id } = await db.application.create({ data: {} });
+    await applyStatusChange(db, id, "SENT", t(0));
+    expect(await via(id)).toBeNull();
+  });
+});

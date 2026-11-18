@@ -23,10 +23,14 @@ const refreshEverything = () => revalidatePath("/", "layout");
 export const setArchived = action(z.object({ id: z.string().min(1), archived: z.boolean() }), async ({ id, archived }) => {
   const current = await prisma.application.findUnique({ where: { id }, select: { updatedAt: true } });
   if (!current) throw new ActionError(GONE);
-  await prisma.application.update({
-    where: { id },
-    data: { archivedAt: archived ? new Date() : null, updatedAt: current.updatedAt },
-  });
+  await prisma.$transaction([
+    prisma.application.update({
+      where: { id },
+      data: { archivedAt: archived ? new Date() : null, updatedAt: current.updatedAt },
+    }),
+    // Its mail's status suggestions go with it (#358): they'd only nag from the Inbox.
+    ...(archived ? [prisma.emailMessage.updateMany({ where: { applicationId: id, suggestedStatus: { not: null } }, data: { suggestedStatus: null } })] : []),
+  ]);
   refreshEverything();
   return null;
 });

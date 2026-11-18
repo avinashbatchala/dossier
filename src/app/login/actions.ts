@@ -11,6 +11,7 @@ import { startLoginAttempt } from "@/lib/auth/login-throttle";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { passwordMatches, startSession } from "@/lib/auth/session";
 import { pausedForNewBrowsersMessage, tooManyAttemptsMessage } from "@/lib/auth/throttle";
+import { isDesktopClient } from "@/lib/desktop-client";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 
@@ -40,7 +41,8 @@ export const signIn = publicAction(
     if (!(await passwordMatches(password))) throw new ActionError(loginMessages.wrong);
     await attempt.succeeded();
 
-    await startSession({ persistent: remember });
+    // The desktop app keeps its sign-in across launches (#359); a browser only when asked.
+    await startSession({ persistent: remember || isDesktopClient((await headers()).get("user-agent")) });
     await rememberBrowser();
     const firstName = (await loadProfileName()).trim().split(/\s+/)[0] || "there";
     toast(`Welcome back, ${firstName}.`);

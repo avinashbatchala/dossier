@@ -2,15 +2,20 @@ import { readFile } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
-import { resetData, sql } from "./support";
+import { FIRST_PROFILE, resetData, setProfileSetting, sql } from "./support";
 
 // The theme builder (E5) and the PDF download (E5-5).
 test.beforeAll(resetData);
 
 test("builds a theme, makes it the base theme and downloads the resume as a PDF", async ({ page }) => {
   await page.goto("/resume");
-  await page.getByRole("button", { name: /Make your own theme/ }).click();
-  await page.getByRole("radiogroup", { name: "Accent" }).getByRole("radio", { name: "Green" }).click();
+  // A click before the page is live does nothing, so it's clicked until the builder opens.
+  const accent = page.getByRole("radiogroup", { name: "Accent" });
+  await expect(async () => {
+    if (!(await accent.isVisible())) await page.getByRole("button", { name: /Make your own theme/ }).click();
+    await expect(accent).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await accent.getByRole("radio", { name: "Green" }).click();
   await page.getByRole("radiogroup", { name: "Spacing" }).getByRole("radio", { name: "Compact" }).click();
   await page.getByLabel("Theme name").fill("Quiet green");
   await page.getByRole("button", { name: "Save theme" }).click();
@@ -64,19 +69,19 @@ test("Fit to one page downloads the resume itself, on one page (#328)", async ({
   expect(pages(unfitted)).toBeGreaterThan(1);
   expect(unfitted).toContain(link);
 
-  await sql(`INSERT INTO "Setting" (key, value, "updatedAt") VALUES ('fitBaseResume', 'true', now())`);
+  await setProfileSetting("fitBaseResume", "true");
   try {
     const fitted = await download();
     expect(pages(fitted)).toBe(1);
     expect(fitted).toContain(link);
   } finally {
-    await sql(`DELETE FROM "Setting" WHERE key = 'fitBaseResume'`);
+    await setProfileSetting("fitBaseResume", null);
   }
 });
 
 test("keeps the summary's paragraphs, as typed in Profile → Summary (#277)", async ({ page }) => {
-  const [{ value }] = await sql<{ value: string }>(`SELECT value FROM "ProfileField" WHERE key = 'summary'`);
-  await sql(`UPDATE "ProfileField" SET value = $1 WHERE key = 'summary'`, ["Designs calm tools for busy teams.\n\nLeads research from the first interview to the shipped screen."]);
+  const [{ value }] = await sql<{ value: string }>(`SELECT summary AS value FROM "Profile" WHERE id = ${FIRST_PROFILE}`);
+  await sql(`UPDATE "Profile" SET summary = $1 WHERE id = ${FIRST_PROFILE}`, ["Designs calm tools for busy teams.\n\nLeads research from the first interview to the shipped screen."]);
   try {
     await page.goto("/resume");
     const summary = page.getByText(/^Designs calm tools for busy teams\./);
@@ -84,6 +89,6 @@ test("keeps the summary's paragraphs, as typed in Profile → Summary (#277)", a
     // Rendered text keeps the break only where the page shows it.
     expect(await summary.evaluate((element) => (element as HTMLElement).innerText)).toContain("\n");
   } finally {
-    await sql(`UPDATE "ProfileField" SET value = $1 WHERE key = 'summary'`, [value]);
+    await sql(`UPDATE "Profile" SET summary = $1 WHERE id = ${FIRST_PROFILE}`, [value]);
   }
 });

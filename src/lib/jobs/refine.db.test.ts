@@ -63,11 +63,34 @@ describe("refineJob (E8-5)", () => {
     expect(saved).toMatchObject({
       role: "AI",
       text: "Trimmed your summary.",
-      writtenWith: "refine-chat@9",
+      writtenWith: "refine-chat@10",
       previousTone: null,
       edits: [{ document: "RESUME", unitId: "summary", text: "Designer of calm tools.", previousText: resume[0].text }],
     });
     expect((await units("RESUME"))[0].text).toBe("Designer of calm tools.");
+  });
+
+  it("keeps which requirements the new lines serve, by the match's texts (E30-12)", async () => {
+    const role = resume.find((unit) => unit.id.startsWith("experience:"))!;
+    const kept = role.text.split("\n")[0];
+    await prisma().application.update({
+      where: { id: "app-1" },
+      data: { match: { items: [{ requirement: "Design systems", result: "covered", skill: null, experienceIds: [], note: null }, { requirement: "Payments", result: "gap", skill: null, experienceIds: [], note: null }] } },
+    });
+    await prisma().document.update({
+      where: { applicationId_kind: { applicationId: "app-1", kind: "RESUME" } },
+      data: { units: resume.map((unit) => (unit.id === role.id ? { ...unit, serves: [{ line: kept, requirements: ["Design systems"] }] } : unit)) },
+    });
+    const mock = reply({ reply: "Added payouts.", edits: [{ document: "RESUME", unitId: role.id, text: `${kept}\nDesigned payout flows`, serves: [2] }] });
+    provider.current = mock;
+    await ask("Mention payouts");
+    // The match's requirements go along, numbered.
+    expect(JSON.stringify(mock.calls[0])).toContain('\\"n\\": 2');
+    const changed = (await units("RESUME")).find((unit) => unit.id === role.id);
+    expect(changed?.serves).toEqual([
+      { line: kept, requirements: ["Design systems"] },
+      { line: "Designed payout flows", requirements: ["Payments"] },
+    ]);
   });
 
   it("edits the email, which the model sees once there is one", async () => {
@@ -133,6 +156,24 @@ describe("refineJob (E8-5)", () => {
     provider.current = mock;
     await ask("Make it shorter");
     expect(JSON.stringify(mock.calls)).not.toContain("Salary floor");
+  });
+});
+
+describe("Ask (E30-10, AP5)", () => {
+  it("answers a question without changing a document or making a version", async () => {
+    const mock = new MockProvider({ reply: () => "They care most about design systems." });
+    provider.current = mock;
+    const message = await prisma().chatMessage.create({ data: { applicationId: "app-1", role: "USER", text: "What matters most to them?" } });
+    const result = await refineJob.run({ applicationId: "app-1", messageId: message.id, request: "What matters most to them?", target: null, viewing: "RESUME", mode: "ask" }, context);
+    const saved = await lastMessage();
+    expect(result).toEqual({ messageId: saved.id, edited: [] });
+    expect(saved).toMatchObject({ role: "AI", text: "They care most about design systems.", writtenWith: "answer-question@1", edits: null });
+    expect(await units("RESUME")).toEqual(resume);
+    expect(await prisma().documentVersion.count()).toBe(0);
+    // From the profile, the posting and the facts: the documents don't go along.
+    const sent = JSON.stringify(mock.calls[0]);
+    expect(sent).toContain("Ledgerly is hiring a Senior Product Designer.");
+    expect(sent).not.toContain(resume[0].text);
   });
 });
 

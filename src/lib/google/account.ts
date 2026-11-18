@@ -112,7 +112,7 @@ const globalForTokens = globalThis as unknown as { googleTokens?: Map<string, { 
 const tokens = (globalForTokens.googleTokens ??= new Map());
 
 /** A valid access token for the connected account, refreshed when it's about to expire. */
-export async function accessToken(group: ScopeGroup, signal?: AbortSignal): Promise<string> {
+async function accessToken(group: ScopeGroup, signal?: AbortSignal): Promise<string> {
   const account = await loadGoogleAccount();
   if (!account) throw new GoogleError("not-connected", "Connect your Google account in Settings → Google first.");
   if (!hasScopes(account.scopes, group)) {

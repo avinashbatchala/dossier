@@ -13,22 +13,16 @@ export type NavItem = {
 const within = (pathname: string, base: string) =>
   pathname === base || pathname.startsWith(`${base}/`);
 
-/** The sections in groups; the last group sits at the bottom. */
-export const NAV: { label?: string; items: NavItem[] }[] = [
+/**
+ * The sections in groups, as the UI refresh has them (E27-3): Dashboard,
+ * then what the user is tracking, where they find work, and their profiles.
+ * The last group sits at the bottom.
+ */
+export const NAV: { label?: string; items: NavItem[]; profiles?: true }[] = [
   { items: [{ href: "/", label: "Dashboard", icon: House, isActive: (pathname) => pathname === "/" }] },
   {
-    label: "You",
+    label: "Track",
     items: [
-      { href: "/profile", label: "Profile", icon: UserRound },
-      { href: "/resume", label: "Base resume", icon: FileText },
-    ],
-  },
-  {
-    label: "Job search",
-    items: [
-      { href: "/jobs", label: "Find jobs", icon: Search },
-      { href: "/startups", label: "Startups", icon: Rocket },
-      { href: "/agent", label: "Agent", icon: Bot },
       {
         href: "/applications",
         label: "Applications",
@@ -37,6 +31,23 @@ export const NAV: { label?: string; items: NavItem[] }[] = [
         isActive: (pathname) => within(pathname, "/applications") || within(pathname, "/new"),
       },
       { href: "/inbox", label: "Inbox", icon: Inbox },
+    ],
+  },
+  {
+    label: "Find work",
+    items: [
+      { href: "/jobs", label: "Positions", icon: Search },
+      { href: "/startups", label: "Startups", icon: Rocket },
+      { href: "/agent", label: "Agent", icon: Bot },
+    ],
+  },
+  {
+    label: "Your profiles",
+    // The sidebar lists each profile here (E27-5); these two are the rail's icons and the page bar's sections.
+    profiles: true,
+    items: [
+      { href: "/profile", label: "Profile", icon: UserRound },
+      { href: "/resume", label: "Base resume", icon: FileText },
     ],
   },
   {

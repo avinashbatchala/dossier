@@ -33,6 +33,12 @@ function addressParts(value: string): { name: string; address: string } | null {
 }
 
 /** "Name <a@b>" with the name encoded, or the address alone. */
+/** "Jane Doe <jane@gmail.com>": the From line a mail goes out with, and what the send confirmation shows (#358). */
+export function fromLine(name: string, address: string): string {
+  const clean = name.trim().replace(/[<>"]/g, "");
+  return clean ? `${clean} <${address}>` : address;
+}
+
 export function encodeAddress(value: string): string {
   const clean = value.replace(/[\r\n]+/g, " ");
   const parts = addressParts(clean);

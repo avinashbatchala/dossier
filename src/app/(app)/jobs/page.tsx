@@ -1,60 +1,71 @@
 import type { Metadata } from "next";
 
+import { listProfiles } from "@/lib/profiles";
 import { isAiUsable } from "@/lib/ai/config";
 import { handsOffToClaude } from "@/lib/connector/handoff";
-import { loadJobSearchConfig } from "@/lib/job-search/config";
+import { enabledPortals, loadJobSearchConfig, portalSetup } from "@/lib/job-search/config";
 import { COUNTRIES } from "@/lib/job-search/countries";
-import { defaultSearch, latestRole, queryFromParams, viewFromParams } from "@/lib/job-search/search";
-import { countSearches, listSearches, loadSearch } from "@/lib/posting-searches";
-import { countPostings, listPostings } from "@/lib/postings";
+import { defaultSearch, EMPTY_QUERY, foundSearchIds, latestRole, libraryFromParams, queryFromParams, searchQuerySchema } from "@/lib/job-search/search";
+import { countLibrary, listLibrary } from "@/lib/library";
+import { listSearches, loadSearch } from "@/lib/posting-searches";
 import { prisma } from "@/lib/prisma";
+import { loadSettings } from "@/lib/settings-data";
 import { userTimeZone } from "@/lib/time-zone";
 
 import { JobsScreen } from "./jobs-screen";
 
-export const metadata: Metadata = { title: "Find jobs" };
+export const metadata: Metadata = { title: "Positions" };
 
 /**
- * Find jobs (E14-6). Every search is kept with what it found (E14-10):
- * ?search=<id> opens one, and without it the latest one shows, so going back
- * costs no searches. ?view=history lists past searches; ?view=saved and
- * ?view=dismissed the postings kept from them (E14-7). A search written in
- * the URL (?q=…) only fills in the form.
+ * Positions (E14-6, E22-5): the search form and the positions library,
+ * through the filters in the URL (tab, show, found, portal, age, score);
+ * ?tab=archive is the Archive (E22-7). A search
+ * lands on ?found=<id>, what it found. Links from before still work:
+ * ?search=<id> is "found by", ?view=saved and ?view=dismissed those kinds. A
+ * search written in the URL (?q=…) only fills in the form.
  */
 export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
   const params = await searchParams;
-  const view = viewFromParams(params);
+  const filters = libraryFromParams(params);
   const typed = queryFromParams(params);
-  const searchId = typeof params.search === "string" ? params.search : undefined;
-  const [config, timeZone, postingCounts, searches, scoreInClaude] = await Promise.all([
+  const [config, timeZone, counts, scoreInClaude, settings, profiles] = await Promise.all([
     loadJobSearchConfig(),
     userTimeZone(),
-    countPostings(),
-    countSearches(),
+    countLibrary(),
     isAiUsable().then(handsOffToClaude),
+    loadSettings(),
+    listProfiles(),
   ]);
   const now = new Date();
-
-  const search = view === "search" && !typed ? await loadSearch(searchId, { timeZone, now }) : null;
-  const [kept, history] = await Promise.all([
-    view === "saved" || view === "dismissed" ? listPostings(view) : undefined,
-    view === "history" ? listSearches({ timeZone, now }) : undefined,
+  // "Found by the agent" is all its searches at once, not one to show (E22-8).
+  // An agent run's several searches (E26-4) have no one search to show above the list.
+  const ids = foundSearchIds(filters.found);
+  const oneSearch = ids?.length === 1 ? ids[0] : null;
+  const [library, searches, foundSearch] = await Promise.all([
+    listLibrary(filters, { now }),
+    listSearches({ timeZone, now }),
+    oneSearch ? loadSearch(oneSearch, { timeZone, now }) : null,
   ]);
+  const enabled = enabledPortals(config);
 
   return (
     <JobsScreen
-      source={config.source}
-      arbeitsagenturNote={config.source === "ARBEITSAGENTUR" && !config.arbeitsagentur.acceptedAt}
+      sources={enabled}
+      arbeitsagenturNote={enabled.includes("ARBEITSAGENTUR") && !portalSetup(config, "ARBEITSAGENTUR")?.acceptedAt}
       scoreInClaude={scoreInClaude}
+      profiles={profiles}
       // Named here: the browser's ICU can name a few countries differently from the server's.
       countries={COUNTRIES}
-      view={view}
-      query={typed ?? search?.query ?? (await latestQuery()) ?? (await profileSearch())}
-      search={search}
-      missingSearch={Boolean(searchId) && !search}
-      kept={kept}
-      history={history}
-      counts={{ ...postingCounts, searches }}
+      query={typed ?? foundSearch?.query ?? (await latestQuery()) ?? (await profileSearch())}
+      // A search in the URL opens the form to run it (E32-3).
+      editing={typed !== null}
+      filters={filters}
+      library={library}
+      searches={searches}
+      foundSearch={foundSearch}
+      missingSearch={Boolean(oneSearch) && !foundSearch}
+      counts={counts}
+      archiveDays={settings.archiveAfterDays}
       today={now.toISOString()}
     />
   );
@@ -62,7 +73,8 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
 
 /** What was searched last, for the form when no search is open. */
 async function latestQuery() {
-  return (await loadSearch())?.query ?? null;
+  const latest = await prisma.postingSearch.findFirst({ where: { agentSearchName: null }, orderBy: { createdAt: "desc" }, select: { query: true } });
+  return latest ? searchQuerySchema.catch(EMPTY_QUERY).parse(latest.query) : null;
 }
 
 /** The first search: the current or latest role, in the profile's city and country. */

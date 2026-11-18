@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 
 import { isAiConfigured } from "@/lib/ai/config";
 import { googleConnection } from "@/lib/google/account";
-import { loadInbox } from "@/lib/google/inbox-data";
-import { prisma } from "@/lib/prisma";
+import { applicationChoices, loadInbox } from "@/lib/google/inbox-data";
 import { loadSettings } from "@/lib/settings-data";
 import { userTimeZone } from "@/lib/time-zone";
 
@@ -22,11 +21,7 @@ export default async function InboxPage() {
     loadSettings(),
     isAiConfigured(),
     userTimeZone(),
-    prisma.application.findMany({
-      where: { archivedAt: null, awaitingReview: false },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, company: true, role: true, title: true },
-    }),
+    applicationChoices(),
   ]);
   return (
     <InboxScreen
@@ -37,10 +32,7 @@ export default async function InboxPage() {
       problem={connection.status === "connected" ? connection.syncProblem : null}
       aiReady={aiReady}
       timeZone={timeZone}
-      applications={applications.map((application) => ({
-        id: application.id,
-        label: [application.company, application.role || application.title].filter(Boolean).join(", ") || "Untitled application",
-      }))}
+      applications={applications}
     />
   );
 }

@@ -20,78 +20,103 @@ test("finds hiring startups with the addresses they publish, and leaves alone wh
   await expect(page.getByRole("note")).toContainText("Press Refresh to look for startups.");
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("Found 5 new startups.")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Last refreshed .*: Y Combinator 2 · Hacker News 3\./)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sources" }).getByText(/^Refreshed .* · reads their sites politely, following robots\.txt$/)).toBeVisible();
 
-  // Remote work only for the US doesn't suit someone in Rotterdam.
-  const cards = page.getByRole("article");
+  // The list and its preview (E32-4). Remote work only for the US doesn't suit someone in Rotterdam.
+  const list = page.getByRole("list", { name: "Startups" });
+  const cards = list.getByRole("listitem");
+  const row = (company: string) => list.getByRole("button", { name: new RegExp(company) });
+  const preview = page.getByRole("region").filter({ has: page.getByRole("region", { name: "Facts" }) }).first();
+  const open = async (company: string) => {
+    await row(company).click();
+    await expect(preview).toContainText(company);
+  };
   await expect(cards).toHaveCount(5);
-  await expect(page.getByRole("article", { name: "Westcoast" })).toHaveCount(0);
+  await expect(row("Westcoast")).toHaveCount(0);
+  // Hiring now holds them all.
+  await expect(page.getByRole("navigation", { name: "Where they stand" }).getByRole("link", { name: /^Hiring now/ })).toHaveAttribute("aria-current", "page");
 
   // Role addresses from the startup's own pages; a person's only when asked.
-  const canal = page.getByRole("article", { name: "Canalworks" });
-  await expect(canal).toContainText("Remote, open to Netherlands");
-  const addresses = canal.getByRole("list", { name: "Addresses they publish" });
+  await open("Canalworks");
+  await expect(row("Canalworks")).toContainText("hires from Netherlands");
+  await expect(preview).toContainText("Remote, open to Netherlands");
+  const addresses = preview.getByRole("list", { name: "Addresses they publish" });
   await expect(addresses).toContainText("jobs@canalworks.example");
   await expect(addresses).toContainText("hello@canalworks.example");
   await expect(addresses).not.toContainText("lena@canalworks.example");
+
+  // Score, as a position is scored (#524): the scoring model's reasons replace the keyword match's, and stay.
+  await preview.getByRole("button", { name: "Score", exact: true }).click();
+  await expect(preview.getByRole("button", { name: "Score again" })).toBeVisible({ timeout: 30_000 });
+  await expect(preview.getByRole("region", { name: "Why it fits" })).toContainText("Your product design roles match");
   expect((await fakeStartupRequests()).map((request) => request.url)).not.toContain("https://canalworks.example/team");
-  await canal.getByRole("button", { name: "Look for people's addresses" }).click();
+  await preview.getByRole("button", { name: "Look for people's addresses" }).click();
   await expect(addresses).toContainText("lena@canalworks.example");
-  await expect(canal).toContainText("People's own addresses are dropped after 14 days unless you write to this startup.");
+  await expect(preview).toContainText("People's own addresses are dropped after 14 days unless you write to this startup.");
 
   // A site that takes no unsolicited applications gets none from here.
-  const quiet = page.getByRole("article", { name: "Quietco" });
-  await expect(quiet.getByRole("note")).toContainText("We do not accept unsolicited applications.");
-  await expect(quiet.getByRole("link", { name: "Write to them" })).toHaveCount(0);
+  await open("Quietco");
+  await expect(preview.getByRole("note")).toContainText("We do not accept unsolicited applications.");
+  await expect(preview.getByRole("link", { name: /^Start application/ })).toHaveCount(0);
 
   // Tulipworks' robots.txt keeps Dossier out, and every request says what it is.
   const requests = await fakeStartupRequests();
   expect(requests.filter((request) => request.url.includes("tulipworks")).map((request) => request.url)).toEqual(["https://tulipworks.example/robots.txt"]);
   expect(requests.every((request) => /Dossier\/[\w.-]+; \+https:\/\/github\.com\/AienTech\/dossier\/blob\/main\/PRIVACY\.md#startups/.test(request.userAgent))).toBe(true);
-  await expect(page.getByRole("article", { name: "Tulipworks" }).getByRole("list", { name: "Addresses they publish" })).toHaveCount(0);
+  await open("Tulipworks");
+  await expect(preview.getByRole("list", { name: "Addresses they publish" })).toHaveCount(0);
 
   await expectAccessible(page);
 
-  // Filters: remote work open to the Netherlands, then Rotterdam itself.
-  await page.getByLabel("Where").selectOption("remote");
+  // Filters: remote work open to the Netherlands, then Rotterdam itself; each chip opens a menu (#519).
+  const where = async (choice: string) => {
+    await page.getByRole("button", { name: /^Where: / }).click();
+    await page.getByRole("menuitemradio", { name: choice, exact: true }).click();
+  };
+  await where("remote, open to Netherlands");
   await expect(cards).toHaveCount(2);
-  await page.getByLabel("Where").selectOption("city");
+  await where("Rotterdam");
   await expect(cards).toHaveCount(1);
-  await expect(page.getByRole("article", { name: "Harbourlight" })).toBeVisible();
-  await page.getByLabel("Where").selectOption("any");
+  await expect(row("Harbourlight")).toBeVisible();
+  await where("anywhere");
   await expect(cards).toHaveCount(5);
 
   // Dismiss, and Undo.
-  const faraway = page.getByRole("article", { name: "Faraway" });
-  await faraway.getByRole("button", { name: "Dismiss" }).click();
-  await expect(faraway).toHaveCount(0);
+  await open("Faraway");
+  await preview.getByRole("button", { name: "Dismiss" }).click();
+  await expect(row("Faraway")).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(faraway).toBeVisible();
+  await expect(row("Faraway")).toBeVisible();
 
-  // Write to them: New application starts from what's known, without any
+  // Start application: New application starts from what's known, without any
   // address, and the email goes to the address the startup publishes.
-  await canal.getByRole("link", { name: "Write to them" }).click();
+  await open("Canalworks");
+  await preview.getByRole("link", { name: /^Start application/ }).click();
   await expect(page).toHaveURL(/\/new$/);
   const posting = page.getByLabel("Job posting");
   await expect(posting).toHaveValue(/Canalworks \(YC W25\) Is Hiring a Product Designer/);
   await expect(posting).not.toHaveValue(/@/);
-  await page.getByRole("button", { name: "Read the posting →" }).click();
-  await page.getByRole("button", { name: "Create application →" }).click();
+  await page.getByRole("button", { name: "Read the posting" }).click();
+  await page.getByRole("button", { name: "Write resume and letter" }).first().click();
   await page.waitForURL(/\/applications\/c/, { timeout: 30_000 });
   await page.getByRole("tab", { name: "Email" }).click();
   await page.getByRole("button", { name: "Write the email" }).click();
   await expect(page.getByRole("article", { name: "Email" }).getByRole("group", { name: "Recipient" })).toContainText("jobs@canalworks.example");
-  await page.goto("/startups");
-  await expect(canal.getByRole("link", { name: "Open the application" })).toBeVisible();
+  // It's under Applied for now (PL1), with its application.
+  await page.goto("/startups?view=applied");
+  await expect(cards).toHaveCount(1);
+  await open("Canalworks");
+  await expect(preview.getByRole("link", { name: "Open the application" })).toBeVisible();
 
   // Removed for good: only hashes stay, and a refresh doesn't bring it back.
-  const harbour = page.getByRole("article", { name: "Harbourlight" });
-  await harbour.getByRole("button", { name: "Remove for good" }).click();
+  await page.goto("/startups");
+  await open("Harbourlight");
+  await preview.getByRole("button", { name: "Remove for good" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Remove for good" }).click();
-  await expect(harbour).toHaveCount(0);
+  await expect(row("Harbourlight")).toHaveCount(0);
   expect(await sql(`SELECT count(*)::int AS n FROM "StartupBlock"`)).toEqual([{ n: 3 }]);
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("No new startups this time.")).toBeVisible({ timeout: 30_000 });
-  await expect(harbour).toHaveCount(0);
+  await expect(row("Harbourlight")).toHaveCount(0);
   await expect(cards).toHaveCount(4);
 });

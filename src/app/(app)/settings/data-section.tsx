@@ -65,7 +65,7 @@ async function send(file: File, preview: boolean): Promise<{ ok: true; data: Rec
 }
 
 /**
- * Settings → Your data (E10-4 to E10-8, SET-10, SET-11): take everything
+ * Settings → Data and backups (E10-4 to E10-8, SET-10, SET-11): take everything
  * out, bring it back, keep backups, or delete it all.
  */
 export function DataSection({
@@ -156,7 +156,7 @@ export function DataSection({
 
   return (
     <>
-      <SettingsSectionIntro title="Your data">
+      <SettingsSectionIntro title="Data and backups">
         Everything you enter lives in one database on your server, and nothing is sold: there&apos;s no one to sell it to. What leaves it goes to
         the AI provider and job source you choose, Google if you connect Gmail, and the daily usage ping and update check (see About).
       </SettingsSectionIntro>
@@ -291,7 +291,7 @@ export function DataSection({
 }
 
 /** One row of the data card: what it does on the left, its control on the right. */
-export function DataRow({
+function DataRow({
   title,
   description,
   action,

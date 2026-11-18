@@ -9,16 +9,33 @@ import { useState } from "react";
 import { DragHandle, MoveButton, useRowSorting } from "@/components/reorder-controls";
 import { cn } from "@/lib/cn";
 
+import { useProfileId } from "./profile-id";
 import { sectionHref, type NavSection, type ProfilePage } from "./sections";
 
-type Row = NavSection & { count: string };
+/** How a section stands (E33-1): done, something to look at, or empty and optional. */
+export type SectionStatus = "done" | "warn" | "empty";
+type Row = NavSection & {
+  status: SectionStatus;
+  /** "3 roles · 1 without lines". */
+  note: string;
+  /** "All profiles" on a section every profile shares. */
+  tag?: string;
+};
+
+const MARKS: Record<SectionStatus, { mark: string; label: string; className: string }> = {
+  done: { mark: "✓", label: "Done", className: "text-success" },
+  warn: { mark: "!", label: "Needs a look", className: "font-semibold text-warning" },
+  empty: { mark: "·", label: "Empty", className: "text-muted" },
+};
 
 /**
- * The Profile page's sections (#337): a link to each, to drag or move with
- * buttons. The buttons show when the row is hovered or reached with the
- * keyboard, where they take the count's place.
+ * The Profile page's sections (#337, E33-1): a link to each with how it
+ * stands (✓, ! or ·), a note line and an "All profiles" tag on shared ones,
+ * to drag or move with buttons. The buttons show when the row is hovered or
+ * reached with the keyboard.
  */
 export function SectionNav({ rows, current, onMove }: { rows: Row[]; current: ProfilePage; onMove: (rows: string[]) => void }) {
+  const profileId = useProfileId();
   const [announcement, setAnnouncement] = useState("");
   const keys = rows.map((row) => row.id as string);
   const { move, context } = useRowSorting({ keys, nameOf: (key) => rows.find((row) => row.id === key)?.label ?? "", onMove, announce: setAnnouncement });
@@ -43,7 +60,7 @@ export function SectionNav({ rows, current, onMove }: { rows: Row[]; current: Pr
         </SortableContext>
       </DndContext>
       <Link
-        href={sectionHref("new")}
+        href={sectionHref("new", profileId)}
         aria-current={current === "new" ? "page" : undefined}
         className={cn("mt-0.5 block rounded-control py-[9px] pr-3 pl-8 text-sm text-muted hover:bg-hover hover:text-ink", current === "new" && "bg-selected font-medium text-ink hover:bg-selected")}
       >
@@ -57,6 +74,7 @@ export function SectionNav({ rows, current, onMove }: { rows: Row[]; current: Pr
 }
 
 function SectionRow({ row, selected, first, last, moveUp, moveDown }: { row: Row; selected: boolean; first: boolean; last: boolean; moveUp: () => void; moveDown: () => void }) {
+  const profileId = useProfileId();
   const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: row.id });
   return (
     <li
@@ -66,15 +84,28 @@ function SectionRow({ row, selected, first, last, moveUp, moveDown }: { row: Row
     >
       <DragHandle ref={setActivatorNodeRef} {...listeners} />
       <Link
-        href={sectionHref(row.id)}
+        href={sectionHref(row.id, profileId)}
         aria-current={selected ? "page" : undefined}
-        className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 py-[9px] pr-2 pl-1 text-sm text-ink hover:text-ink", selected && "font-medium")}
+        className="flex min-w-0 flex-1 items-start gap-2.5 py-2 pr-2 pl-1 text-ink hover:text-ink"
       >
-        <span className="min-w-0 truncate">
-          {row.label}
-          {row.optional && <span className="ml-2 text-xs font-normal text-muted">optional</span>}
-        </span>{" "}
-        <span className="text-xs font-normal text-muted tabular-nums group-hover:hidden group-has-focus-visible:hidden">{row.count}</span>
+        <span aria-hidden="true" className={cn("w-3 flex-none pt-0.5 text-center text-xs", MARKS[row.status].className)}>
+          {MARKS[row.status].mark}
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 items-center gap-2 text-sm">
+            <span className={cn("truncate", selected && "font-medium")}>{row.label}</span>
+            {row.tag && (
+              <>
+                {" "}
+                {/* A line, not a fill: muted text on a fill over the selected row is too faint. */}
+                <span className="flex-none rounded-[5px] border border-line px-1.5 text-[11px] font-normal text-muted">{row.tag}</span>
+              </>
+            )}
+          </span>{" "}
+          <span className={cn("truncate text-xs", row.status === "warn" ? "text-warning" : "text-muted")}>
+            <span className="sr-only">{MARKS[row.status].label}:</span> {row.note}
+          </span>
+        </span>
       </Link>
       <span className="hidden flex-none gap-0.5 group-hover:flex group-has-focus-visible:flex">
         <MoveButton label={`Move “${row.label}” up`} disabled={first} onClick={moveUp}>

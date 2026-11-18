@@ -26,6 +26,8 @@ test("exports, deletes everything and imports it all back", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Your first application" })).toBeVisible();
 
   await page.goto("/settings?section=data");
+  // A file chosen before the page has hydrated is lost.
+  await page.waitForLoadState("networkidle");
   await page.locator("input[type=file]").setInputFiles(file);
   await page.getByRole("alertdialog").getByRole("button", { name: "Import and replace" }).click();
   await expect(page.getByText(/^Imported\. Your previous data is backed up as/)).toBeVisible({ timeout: 30_000 });
@@ -33,5 +35,5 @@ test("exports, deletes everything and imports it all back", async ({ page }) => 
   const [after] = await sql<{ count: number }>(`SELECT count(*)::int AS count FROM "Application"`);
   expect(after.count).toBe(before.count);
   await page.goto("/applications");
-  await expect(page.getByText("Kestrel Maps")).toBeVisible();
+  await expect(page.getByText("Kestrel Maps", { exact: true })).toBeVisible();
 });

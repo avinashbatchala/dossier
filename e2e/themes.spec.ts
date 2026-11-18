@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { resetData, sql } from "./support";
+import { resetData, setProfileSetting, sql } from "./support";
 
 // Managing themes (E5-7): duplicate, export, delete and import again.
 test.beforeAll(resetData);
@@ -66,7 +66,6 @@ test("changes an application's theme from its Resume tab", async ({ page }) => {
   await expect(name).toHaveCSS("font-family", /Garamond/);
 
   await page.reload();
-  await page.getByRole("tab", { name: "Cover letter" }).click();
   await expect(page.getByRole("button", { name: "Classic theme" })).toBeVisible();
   const documents = await sql(`SELECT kind, "themeId" FROM "Document" WHERE "applicationId" = $1 AND kind <> 'EMAIL' ORDER BY kind`, [ledgerly.id]);
   expect(documents).toEqual([
@@ -84,12 +83,12 @@ test("prints every built-in theme with real, embedded text, never Type 3 fonts",
   const themes = await sql<{ id: string }>(`SELECT id FROM "Theme" WHERE "builtIn" ORDER BY id`);
   expect(themes.length).toBeGreaterThanOrEqual(12);
   for (const { id } of themes) {
-    await sql(`INSERT INTO "Setting" (key, value, "updatedAt") VALUES ('baseThemeId', $1, now()) ON CONFLICT (key) DO UPDATE SET value = $1`, [id]);
+    await setProfileSetting("baseThemeId", id);
     const response = await page.request.get("/api/pdf?doc=base");
     expect(response.ok(), id).toBe(true);
     const pdf = (await response.body()).toString("latin1");
     expect(pdf, `${id}: a Type 3 font`).not.toMatch(/\/Type3\b/);
     expect(pdf, `${id}: no embedded TrueType`).toMatch(/\/CIDFontType2\b/);
   }
-  await sql(`UPDATE "Setting" SET value = 'editorial' WHERE key = 'baseThemeId'`);
+  await setProfileSetting("baseThemeId", "editorial");
 });

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { extractText, getDocumentProxy } from "unpdf";
 
-import { resetData, sql } from "./support";
+import { resetData, setProfileSetting, sql } from "./support";
 
 // A resume's sections (#297, #298): reordered and removed on the Base resume
 // with a live preview, sections made and filled in under Profile (#338), and
@@ -13,7 +13,7 @@ test.beforeAll(async () => {
   url = `/applications/${ledgerly.id}`;
   // The demo's base theme may have a sidebar: these specs read one column.
   const [editorial] = await sql<{ id: string }>(`SELECT id FROM "Theme" WHERE name = 'Editorial' LIMIT 1`);
-  await sql(`INSERT INTO "Setting" (key, value, "updatedAt") VALUES ('baseThemeId', $1, now()) ON CONFLICT (key) DO UPDATE SET value = $1`, [editorial.id]);
+  await setProfileSetting("baseThemeId", editorial.id);
 });
 
 const titles = (page: Page) => page.getByRole("article", { name: "Resume" }).getByRole("heading", { level: 2 }).allTextContents();
@@ -39,6 +39,8 @@ test("moves and removes sections on the Base resume, and it stays that way", asy
 
   // Dragging works too: Languages above Education.
   const row = (name: string) => page.locator("li", { has: page.getByRole("button", { name: `Move “${name}” up` }) });
+  // The panel is taller than the window: the rows dragged between have to be on screen.
+  await row("Languages").scrollIntoViewIfNeeded();
   const from = (await row("Languages").getByTitle("Drag to reorder").boundingBox())!;
   const to = (await row("Education").boundingBox())!;
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
@@ -61,7 +63,7 @@ test("makes a section on Profile and fills it in there, and switches its format"
   // On to its page, listed among the profile's sections, without leaving Profile.
   await expect(page).toHaveURL(/\/profile\?section=custom/);
   await expect(page.getByRole("heading", { name: "Awards" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Awards\s*optional\s*0/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Awards\b.*Optional · none yet/ })).toBeVisible();
   await page.getByRole("button", { name: "+ Add an item" }).click();
   const text = page.getByRole("textbox", { name: "Text" });
   await expect(text).toBeFocused();

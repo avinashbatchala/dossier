@@ -11,7 +11,7 @@ import { AiError, toAiError } from "./errors";
 // One interface for every AI provider (E6-1): a local model through Ollama or
 // llama.cpp, LM Studio, any OpenAI-compatible server, Anthropic or Mistral.
 
-export type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /** How much a model that thinks before answering may think; its own default when unset. */
 export type Effort = "low" | "medium" | "high";
@@ -74,7 +74,7 @@ export type ChatCall = {
 export type ChatAnswer = { text: string; cutOff: boolean };
 
 /** SET-3 creativity as a sampling temperature. */
-export const TEMPERATURES: Record<Creativity, number> = {
+const TEMPERATURES: Record<Creativity, number> = {
   FAITHFUL: 0.2,
   BALANCED: 0.6,
   EXPRESSIVE: 0.9,

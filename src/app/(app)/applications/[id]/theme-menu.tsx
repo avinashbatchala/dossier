@@ -5,6 +5,7 @@ import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -17,17 +18,21 @@ import {
  * "Editorial theme ▾" above the Resume and Cover letter tabs' preview (#226,
  * public issue 10): every theme, built-ins first, with the base theme marked.
  * Picking one gives the application's resume and cover letter that theme.
+ * On the resume, its switches follow (E30-9): the sidebar layout and the photo.
  */
 export function ThemeMenu({
   themes,
   baseThemeId,
   current,
   onChange,
+  options = [],
 }: {
   themes: { id: string; name: string; builtIn: boolean }[];
   baseThemeId: string;
   current: { id: string; name: string };
   onChange: (themeId: string) => void;
+  /** Switches under the themes, e.g. "Sidebar layout" and "Photo". */
+  options?: { label: string; checked: boolean; onChange: (checked: boolean) => void }[];
 }) {
   return (
     <DropdownMenu>
@@ -54,6 +59,12 @@ export function ThemeMenu({
             </Fragment>
           ))}
         </DropdownMenuRadioGroup>
+        {options.length > 0 && <DropdownMenuSeparator />}
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem key={option.label} checked={option.checked} onCheckedChange={option.onChange} onSelect={(event) => event.preventDefault()}>
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

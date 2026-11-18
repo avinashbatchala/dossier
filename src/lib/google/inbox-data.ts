@@ -116,6 +116,16 @@ export async function inboxCount(): Promise<number> {
   return prisma.emailMessage.count({ where: { direction: "INCOMING", handledAt: null, dismissedAt: null } });
 }
 
+/** Applications a mail can be linked to, the latest changed first, as "Company, Role"; `except` leaves one out. */
+export async function applicationChoices(except?: string): Promise<{ id: string; label: string }[]> {
+  const rows = await prisma.application.findMany({
+    where: { archivedAt: null, awaitingReview: false, ...(except ? { id: { not: except } } : {}) },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, company: true, role: true, title: true },
+  });
+  return rows.map((row) => ({ id: row.id, label: [row.company, row.role || row.title].filter(Boolean).join(", ") || "Untitled application" }));
+}
+
 /** Per application: replies waiting for an answer, for the dashboard. */
 export async function waitingByApplication(): Promise<Map<string, { count: number; summary: string }>> {
   const rows = await prisma.emailMessage.findMany({

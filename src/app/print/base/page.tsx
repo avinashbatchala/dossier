@@ -6,12 +6,14 @@ import { printBasePath } from "@/lib/pdf/pages";
 import { verifyPrintAccess } from "@/lib/pdf/print-access";
 import { printMetadata } from "@/lib/pdf/print-title";
 import { loadProfile } from "@/lib/profile-data";
+import { loadProfileSettings, profileIdOr } from "@/lib/profiles";
 import { loadSettings } from "@/lib/settings-data";
 import { loadTheme } from "@/lib/theme-data";
 import { BUILT_IN_THEMES, FIT_LEVELS, printCss } from "@/lib/themes";
 
 export async function generateMetadata({ searchParams }: PageProps<"/print/base">): Promise<Metadata> {
-  await verifyPrintAccess(printBasePath(fitLevel((await searchParams).fit)));
+  const { fit, profile } = await searchParams;
+  await verifyPrintAccess(printBasePath(fitLevel(fit), one(profile)));
   return printMetadata(DocumentKind.RESUME);
 }
 
@@ -21,18 +23,23 @@ export async function generateMetadata({ searchParams }: PageProps<"/print/base"
  * issue 69): the renderer tries the levels in turn until it fits.
  */
 export default async function PrintBaseResumePage({ searchParams }: PageProps<"/print/base">) {
-  const fit = fitLevel((await searchParams).fit);
-  await verifyPrintAccess(printBasePath(fit));
-  const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
-  const theme = (await loadTheme(settings.baseThemeId)) ?? BUILT_IN_THEMES[0];
+  const params = await searchParams;
+  const fit = fitLevel(params.fit);
+  await verifyPrintAccess(printBasePath(fit, one(params.profile)));
+  // A profile's own Base resume (E24-2); the first one's without `?profile=`.
+  const profileId = await profileIdOr(one(params.profile));
+  const [profile, own, settings] = await Promise.all([loadProfile(profileId), loadProfileSettings(profileId), loadSettings()]);
+  const theme = (await loadTheme(own.baseThemeId)) ?? BUILT_IN_THEMES[0];
 
   return (
     <>
       <style>{printCss(theme, settings.paper, fit)}</style>
-      <ResumeDocument theme={theme} profile={profile} paper={settings.paper} includeReferences={settings.includeRefs} sections={settings.resumeSections} language={settings.resumeLanguage} fit={fit} />
+      <ResumeDocument theme={theme} profile={profile} paper={settings.paper} includeReferences={settings.includeRefs} sections={own.resumeSections} language={own.resumeLanguage} fit={fit} />
     </>
   );
 }
+
+const one = (value: string | string[] | undefined) => (typeof value === "string" && value ? value : undefined);
 
 const fitLevel = (value: string | string[] | undefined) => {
   const level = Number(typeof value === "string" ? value : 0);

@@ -20,9 +20,11 @@ export async function listAgentSearches(db: PrismaClient = prisma): Promise<Save
 
 /** Create, or update by stable id. Disabled searches count toward the cap too. */
 export async function saveAgentSearch(input: AgentSearchInput, id?: string, db: PrismaClient = prisma): Promise<SavedAgentSearch> {
-  const data = agentSearchInputSchema.parse(input);
+  const parsed = agentSearchInputSchema.parse(input);
   return db.$transaction(async (tx) => {
     await lockAgentSearches(tx);
+    // A profile deleted meanwhile reads as the first (E24-6).
+    const data = { ...parsed, profileId: parsed.profileId && (await tx.profile.findUnique({ where: { id: parsed.profileId }, select: { id: true } })) ? parsed.profileId : null };
     if (id && !await tx.agentSearch.findUnique({ where: { id }, select: { id: true } })) throw new ActionError("That Agent search no longer exists.");
     if (!id && await tx.agentSearch.count() >= MAX_AGENT_SEARCHES) throw new ActionError("Keep at most three Agent searches.");
     const row = id

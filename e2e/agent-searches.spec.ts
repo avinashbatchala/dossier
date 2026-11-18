@@ -167,15 +167,19 @@ test("all searches share scores/quota, retain partial source results and immutab
   await expect(page.getByText(/Unavailable: JSearch isn't answering right now/).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Run all now", exact: true })).toBeVisible();
   expect(await fakeJobSearches()).toBe(before + 3);
-  await expect(page.getByText("0 of 3 in the rolling 24-hour budget", { exact: true })).toBeVisible();
-  await expect(page.getByText("Scored postings", { exact: true })).toBeVisible();
-  expect(await sql(`SELECT count(*)::int AS count FROM "AgentCandidate"`)).toEqual([{ count: 2 }]);
-  expect(await sql(`SELECT "searchName", count(*)::int AS count FROM "AgentCandidateSearch" GROUP BY "searchName" ORDER BY "searchName"`)).toEqual([{ searchName: "Design", count: 2 }, { searchName: "Overlap", count: 2 }]);
-  await expect(page.getByText(/Unavailable: 0 found · 0 new to agent · Source request failed/)).toBeVisible();
-  await expect(page.getByText(/Design: 3 found · 3 new to agent · Source request completed/)).toBeVisible();
-  await expect(page.getByText(/Overlap: 3 found · 3 new to agent · Source request completed/)).toBeVisible();
+  // The runs and limits are one click away (E32-5).
+  await page.getByText("Runs, searches and limits").click();
+  await expect(page.getByText("JSearch: 0 of 3", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "What it found" })).toBeVisible();
+  // Two scored; the third, past the limit of 2, waits under Skipped (E32-5).
+  expect(await sql(`SELECT count(*)::int AS count FROM "AgentCandidate" WHERE "skipReason" IS NULL`)).toEqual([{ count: 2 }]);
+  expect(await sql(`SELECT "skipReason", count(*)::int AS count FROM "AgentCandidate" WHERE "skipReason" IS NOT NULL GROUP BY "skipReason"`)).toEqual([{ skipReason: "budget", count: 1 }]);
+  expect(await sql(`SELECT s."searchName", count(*)::int AS count FROM "AgentCandidateSearch" s JOIN "AgentCandidate" c ON c.id = s."candidateId" WHERE c."skipReason" IS NULL GROUP BY s."searchName" ORDER BY s."searchName"`)).toEqual([{ searchName: "Design", count: 2 }, { searchName: "Overlap", count: 2 }]);
+  await expect(page.getByText(/Unavailable: 0 found · 0 new to agent · JSearch isn't answering right now/)).toBeVisible();
+  await expect(page.getByText(/Design: 3 found · 3 new to agent · Every portal answered/)).toBeVisible();
+  await expect(page.getByText(/Overlap: 3 found · 3 new to agent · Every portal answered/)).toBeVisible();
   await page.getByRole("button", { name: "Run all now", exact: true }).click();
-  await expect(page.getByText(/The agent needs 3 source requests, but may use only 3 in 24 hours/)).toBeVisible();
+  await expect(page.getByText(/The agent needs 3 requests to JSearch this run, but may send each portal only 3 in 24 hours/)).toBeVisible();
   expect(await fakeJobSearches()).toBe(before + 3);
   await accessible(page);
   await capture(page, "agent-searches-results-desktop");
@@ -189,18 +193,22 @@ test("all searches share scores/quota, retain partial source results and immutab
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete search", exact: true }).click();
   await expect(page.getByRole("switch", { name: "Overlap", exact: true })).toHaveCount(0);
   await page.goto("/agent");
+  await page.getByText("Runs, searches and limits").click();
   await expect(page.getByText("Run as “Design”", { exact: true })).toBeVisible();
   await expect(page.getByText(/Overlap \(deleted search\): 3 found/)).toBeVisible();
-  const scored = page.getByRole("region", { name: "Scored postings" });
-  await expect(scored.getByText("Found by: Design · Overlap (deleted search)", { exact: true })).toHaveCount(2);
+  // In Positions, what it found keeps the names its searches had (E22-8).
+  await page.goto("/jobs?found=agent");
+  const found = page.getByRole("list", { name: "Postings" });
+  await expect(found.getByText(/Found by the agent · Design, Overlap/)).toHaveCount(3);
   const response = await page.request.get("/api/export");
   expect(response.ok()).toBe(true);
   const exported = await response.json();
-  expect(exported.schemaVersion).toBe(11);
+  expect(exported.schemaVersion).toBe(16);
   expect(exported.agentSearches.map((search: { name: string }) => search.name)).toEqual(["New design name", "Unavailable"]);
-  expect(exported.agentCandidateSearches).toHaveLength(4);
+  // Each candidate's searches, the skipped one's too.
+  expect(exported.agentCandidateSearches).toHaveLength(6);
   expect(exported.agentCandidateSearches.filter((link: { searchId: string | null }) => link.searchId === null)).toEqual([
-    expect.objectContaining({ searchName: "Overlap" }), expect.objectContaining({ searchName: "Overlap" }),
+    expect.objectContaining({ searchName: "Overlap" }), expect.objectContaining({ searchName: "Overlap" }), expect.objectContaining({ searchName: "Overlap" }),
   ]);
   expect(exported.settings.some((setting: { key: string }) => /agentRuns|agentQuery|KeyEnc/.test(setting.key))).toBe(false);
   await mobile(page);
@@ -208,11 +216,13 @@ test("all searches share scores/quota, retain partial source results and immutab
   await capture(page, "agent-searches-results-mobile");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
-  await scored.getByRole("button", { name: "Dismiss", exact: true }).first().click();
-  await expect(scored.getByText("Found by: Design · Overlap (deleted search)", { exact: true })).toHaveCount(1);
+  // Dismissing the best one takes it out of the agent's queue, with its labels.
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await expect(found.getByText(/Found by the agent · Design, Overlap/)).toHaveCount(2);
   const afterDismissal = await (await page.request.get("/api/export")).json();
   const dismissed = afterDismissal.agentCandidates.find((candidate: { status: string }) => candidate.status === "DISMISSED");
   expect(dismissed).toBeDefined();
-  expect(afterDismissal.agentCandidateSearches).toHaveLength(2);
+  // The skipped one keeps its two (E32-5).
+  expect(afterDismissal.agentCandidateSearches).toHaveLength(4);
   expect(afterDismissal.agentCandidateSearches.some((link: { candidateId: string }) => link.candidateId === dismissed.id)).toBe(false);
 });

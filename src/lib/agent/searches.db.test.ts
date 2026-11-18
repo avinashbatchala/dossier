@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildExport } from "@/lib/data-export";
+import { buildExport, EXPORT_SCHEMA_VERSION } from "@/lib/data-export";
 import { ActionError } from "@/lib/action";
 import { importExport, parseExport } from "@/lib/data-import";
 import { EMPTY_QUERY, type FoundPosting } from "@/lib/job-search/search";
@@ -103,7 +103,7 @@ describe("recurring Agent search storage", () => {
     await deleteAgentSearch(first.id, client);
     await client.setting.createMany({ data: [{ key: "agentRuns", value: "[]" }, { key: "agentQuery", value: JSON.stringify(input.query) }] });
     const data = await buildExport(client);
-    expect(data.schemaVersion).toBe(11);
+    expect(data.schemaVersion).toBe(EXPORT_SCHEMA_VERSION);
     expect(data.settings.map((setting) => setting.key)).not.toContain("agentQuery");
     expect(data.settings.map((setting) => setting.key)).not.toContain("agentRuns");
     const parsed = parseExport(JSON.stringify(data));

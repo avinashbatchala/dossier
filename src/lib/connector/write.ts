@@ -2,15 +2,19 @@ import "server-only";
 
 import { z } from "zod";
 
-import { guardSources, guardUnits } from "@/lib/ai/fact-guard";
+import { ApplicationStatus, DocumentKind, VersionCause, type Tone } from "@/generated/prisma/enums";
+import { guardSources, guardUnits, type FactSources } from "@/lib/ai/fact-guard";
 import { resumeUnits } from "@/lib/ai/tasks/tailor-resume";
 import { withoutFrame } from "@/lib/ai/tasks/write-cover-letter";
 import { createApplicationFromDocuments } from "@/lib/application-create";
-import { SIGN_OFF_UNIT, unitsSchema, type Extracted, type Match, type Unit } from "@/lib/application-data";
+import { extractedOf, SIGN_OFF_UNIT, unitsSchema, type Extracted, type Match, type Unit } from "@/lib/application-data";
 import { documentLabels } from "@/lib/document-labels";
-import { FRAME_LABELS, isFrameUnit } from "@/lib/letter-frame";
-import { loadProfile } from "@/lib/profile-data";
-import { withoutSectionsOff } from "@/lib/resume-sections";
+import { updateDocuments } from "@/lib/document-units";
+import { FRAME_LABELS, isFrameUnit, withFrame, type Frame } from "@/lib/letter-frame";
+import { prisma } from "@/lib/prisma";
+import { loadFactTexts, loadProfile } from "@/lib/profile-data";
+import { loadProfileSettings } from "@/lib/profiles";
+import { sectionLayoutSchema, withoutSectionsOff } from "@/lib/resume-sections";
 import { loadSettings } from "@/lib/settings-data";
 import { TONES } from "@/lib/tones";
 
@@ -22,6 +26,8 @@ import { TONES } from "@/lib/tones";
 // and degrees must be the profile's, skills its own skills, certifications,
 // publications and custom sections come from the profile word for word, and with "Never invent experience" on,
 // names and numbers the profile and posting don't back are marked "check this".
+// A Draft saved this way can be revised the same way (public issue 116,
+// update_application), rather than saved again as a second application.
 
 /** Shown as what wrote the documents, where Dossier would show a prompt version. */
 export const WRITTEN_IN_CLAUDE = "claude-chat";
@@ -70,6 +76,8 @@ export const writtenMatchSchema = z
   .default([]);
 
 export type WrittenApplication = {
+  /** The profile it was written from (E24-6); the first when it's missing. */
+  profileId?: string;
   posting: string;
   postingUrl: string;
   postingId: string | null;
@@ -81,7 +89,7 @@ export type WrittenApplication = {
 };
 
 /** The cover letter's parts, as the AI's are made (src/lib/ai/tasks/write-cover-letter.ts). */
-export function letterUnits(letter: z.output<typeof writtenLetterSchema>, signOff: string): Unit[] {
+function letterUnits(letter: z.output<typeof writtenLetterSchema>, signOff: string): Unit[] {
   const tidy = (text: string) =>
     text
       .split("\n")
@@ -98,11 +106,28 @@ export function letterUnits(letter: z.output<typeof writtenLetterSchema>, signOf
   ]);
 }
 
+/** The tone's sign-off for a letter in English or without its own, else the letter's. */
+function signOffFor(letter: z.output<typeof writtenLetterSchema>, tone: Tone, language: string): string {
+  const english = /^english$/i.test(language.trim() || "English");
+  return english || !letter.sign_off.trim() ? TONES[tone].signOff : letter.sign_off.trim();
+}
+
+/** The units with names and numbers `sources` don't back marked; the recipient and greeting aren't claims about the candidate. */
+function checked(units: Unit[], sources: FactSources): Unit[] {
+  return guardUnits(units, sources).map((unit) => (isFrameUnit(unit.id) ? units.find((entry) => entry.id === unit.id)! : unit));
+}
+
+const unverifiedOf = (units: Unit[]) => units.filter((unit) => unit.unverified?.length).map((unit) => ({ part: unit.label, items: unit.unverified! }));
+
+const matchOf = (items: z.output<typeof writtenMatchSchema>): Match => ({
+  items: items.map((item) => ({ requirement: item.requirement, result: item.result, skill: null, experienceIds: [], note: item.note })),
+});
+
 /** Saves an application Claude wrote; returns its id and the parts marked "check this". */
 export async function saveWrittenApplication(input: WrittenApplication): Promise<{ applicationId: string; unverified: { part: string; items: string[] }[] }> {
-  const [fullProfile, settings] = await Promise.all([loadProfile(), loadSettings()]);
+  const [fullProfile, settings, own] = await Promise.all([loadProfile(input.profileId), loadSettings(), loadProfileSettings(input.profileId)]);
   // A section that's off on the base resume isn't on it (#297).
-  const profile = withoutSectionsOff(fullProfile, settings.resumeSections);
+  const profile = withoutSectionsOff(fullProfile, own.resumeSections);
   const { details } = input;
   const extracted: Extracted = {
     title: details.title?.trim() || null,
@@ -116,19 +141,16 @@ export async function saveWrittenApplication(input: WrittenApplication): Promise
     asksForReferences: false,
     language: details.language.trim() || null,
   };
-  const match: Match = { items: input.match.map((item) => ({ requirement: item.requirement, result: item.result, skill: null, experienceIds: [], note: item.note })) };
+  const match = matchOf(input.match);
 
   const tone = settings.defaultTone;
-  const english = /^english$/i.test(details.language.trim() || "English");
-  const signOff = english || !input.letter.sign_off.trim() ? TONES[tone].signOff : input.letter.sign_off.trim();
   let resume = resumeUnits(profile, input.resume, documentLabels(details.language));
-  let letter = letterUnits(input.letter, signOff);
+  let letter = letterUnits(input.letter, signOffFor(input.letter, tone, details.language));
   if (settings.strict) {
     const facts = input.note.trim() ? [input.note.trim()] : [];
     const sources = guardSources(profile, extracted, input.posting, facts);
-    resume = guardUnits(resume, sources);
-    // The recipient and greeting aren't claims about the candidate: only the paragraphs are checked.
-    letter = guardUnits(letter, sources).map((unit) => (isFrameUnit(unit.id) ? letter.find((entry) => entry.id === unit.id)! : unit));
+    resume = checked(resume, sources);
+    letter = checked(letter, sources);
   }
 
   const applicationId = await createApplicationFromDocuments({
@@ -148,7 +170,84 @@ export async function saveWrittenApplication(input: WrittenApplication): Promise
     tone,
     note: input.note,
     claim: { kind: "connector", postingId: input.postingId },
+    profileId: input.profileId,
   });
-  const unverified = [...resume, ...letter].filter((unit) => unit.unverified?.length).map((unit) => ({ part: unit.label, items: unit.unverified! }));
-  return { applicationId, unverified };
+  return { applicationId, unverified: unverifiedOf([...resume, ...letter]) };
+}
+
+export type WrittenRevision = {
+  resume?: z.output<typeof writtenResumeSchema>;
+  letter?: z.output<typeof writtenLetterSchema>;
+  match?: z.output<typeof writtenMatchSchema>;
+  /** What the user asked to change, for the documents' version history. */
+  change: string;
+};
+
+/**
+ * Replaces the resume, the cover letter or the match of a Draft, checked as
+ * saveWrittenApplication checks them. A sent application keeps the resume it
+ * was sent with (#299), so only a Draft changes. Each changed document gets a
+ * version, as a change from the refine chat does.
+ */
+export async function reviseWrittenApplication(
+  applicationId: string,
+  revision: WrittenRevision,
+): Promise<{ error: string } | { unverified: { part: string; items: string[] }[] }> {
+  const application = await prisma.application.findUnique({
+    where: { id: applicationId, awaitingReview: false },
+    select: {
+      status: true,
+      tone: true,
+      language: true,
+      sections: true,
+      postingText: true,
+      extracted: true,
+      title: true,
+      company: true,
+      role: true,
+      location: true,
+      mode: true,
+      salary: true,
+      profileId: true,
+      documents: { select: { kind: true } },
+    },
+  });
+  if (!application) return { error: "That application no longer exists." };
+  if (application.status !== ApplicationStatus.DRAFT) return { error: "Only a Draft can be changed: this application was sent, and keeps what it was sent with." };
+  const has = (kind: DocumentKind) => application.documents.some((document) => document.kind === kind);
+  if (revision.resume && !has(DocumentKind.RESUME)) return { error: "This application has no tailored resume. The user can write one from the application in Dossier." };
+  if (revision.letter && !has(DocumentKind.COVER_LETTER)) return { error: "This application has no cover letter. The user can write one from the application in Dossier." };
+
+  // The application's own profile (E24), with its own sections when it has them, or its base resume's (#297).
+  const [fullProfile, settings, own, facts] = await Promise.all([
+    loadProfile(application.profileId),
+    loadSettings(),
+    loadProfileSettings(application.profileId),
+    loadFactTexts(applicationId),
+  ]);
+  const sections = sectionLayoutSchema.safeParse(application.sections);
+  const profile = withoutSectionsOff(fullProfile, sections.success ? sections.data : own.resumeSections);
+  const language = application.language || "English";
+  let resume = revision.resume ? resumeUnits(profile, revision.resume, documentLabels(language)) : null;
+  let letter = revision.letter ? letterUnits(revision.letter, signOffFor(revision.letter, application.tone, language)) : null;
+  if (settings.strict) {
+    const sources = guardSources(profile, extractedOf(application), application.postingText, facts);
+    if (resume) resume = checked(resume, sources);
+    if (letter) letter = checked(letter, sources);
+  }
+
+  await updateDocuments(
+    applicationId,
+    async (documents, tx) => {
+      if (resume) documents.RESUME = resume;
+      if (letter && documents.COVER_LETTER) {
+        // The sender, date and signature stay, and the recipient and greeting when none was written.
+        const frame: Partial<Frame> = Object.fromEntries(documents.COVER_LETTER.filter((unit) => isFrameUnit(unit.id)).map((unit) => [unit.id, unit.text]));
+        documents.COVER_LETTER = withFrame(letter, frame);
+      }
+      if (revision.match) await tx.application.update({ where: { id: applicationId }, data: { match: matchOf(revision.match), matchedWith: WRITTEN_IN_CLAUDE } });
+    },
+    { version: { cause: VersionCause.REFINED, detail: revision.change } },
+  );
+  return { unverified: unverifiedOf([...(resume ?? []), ...(letter ?? [])]) };
 }

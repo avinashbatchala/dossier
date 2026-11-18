@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Toggle } from "@/components/ui/toggle";
 import { agentSearchInputSchema, MAX_AGENT_SEARCHES, type SavedAgentSearch } from "@/lib/agent/search";
 import type { Country } from "@/lib/job-search/countries";
@@ -18,11 +19,16 @@ import { EMPTY_QUERY, searchHref, type JobSource, type SearchQuery } from "@/lib
 import { deleteRecurringSearch, moveRecurringSearch, saveRecurringSearch, setRecurringSearchEnabled } from "../agent/actions";
 import { RemoteOnlyField, SearchFields } from "../jobs/search-fields";
 
-export function RecurringSearches({ initial, suggestedQuery, source, countries }: {
+/** A profile a search can be tied to (E24-6), with the filters a search for it starts with. */
+export type SearchProfile = { id: string; name: string; defaults: Partial<SearchQuery> };
+
+export function RecurringSearches({ initial, suggestedQuery, sources, countries, profiles = [] }: {
   initial: SavedAgentSearch[];
   suggestedQuery?: SearchQuery;
-  source: JobSource | null;
+  /** The portals the agent asks (#517): a search goes to all of them. */
+  sources: readonly JobSource[];
   countries: readonly Country[];
+  profiles?: SearchProfile[];
 }) {
   const router = useRouter();
   const track = useTrackSave();
@@ -62,7 +68,7 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
     <div>
       <h3 className="text-field font-medium">Recurring searches ({searches.length}/{MAX_AGENT_SEARCHES})</h3>
       <p className="text-meta text-muted">
-        Up to {MAX_AGENT_SEARCHES} named searches, including disabled ones. Enabled searches run in this order through the shared source in Settings → Job search.
+        Up to {MAX_AGENT_SEARCHES} named searches, including disabled ones. Enabled searches run in this order, each through the portals switched on in Settings → Job search.
         Saved, dismissed and applied-for postings stay out of the review queue.
       </p>
     </div>
@@ -82,6 +88,7 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
           </Link>
           <p className="text-meta text-muted break-words">
             {search.query.keywords}{search.query.place ? ` · ${search.query.place}` : ""} · {search.query.country.toUpperCase() || "Choose a country"}
+            {profiles.length > 1 && ` · ${search.allProfiles ? "All profiles" : (profiles.find((profile) => profile.id === search.profileId) ?? profiles[0]).name}`}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" aria-label={`Edit ${controlName(search, index)}`} disabled={pending || editing !== null} onClick={() => setEditing(search)}>
@@ -112,8 +119,9 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
         search={editing === "new" ? null : editing}
         suggestedQuery={suggestedQuery}
         sort={searches.reduce((max, row) => Math.max(max, row.sort + 1), 0)}
-        source={source}
+        sources={sources}
         countries={countries}
+        profiles={profiles}
         onCancel={() => setEditing(null)}
         onSave={(saved) => {
           update(saved);
@@ -147,25 +155,32 @@ export function RecurringSearches({ initial, suggestedQuery, source, countries }
   );
 }
 
-function SearchEditor({ search, suggestedQuery, sort, source, countries, onCancel, onSave }: {
+function SearchEditor({ search, suggestedQuery, sort, sources, countries, profiles, onCancel, onSave }: {
   search: SavedAgentSearch | null;
   suggestedQuery?: SearchQuery;
   sort: number;
-  source: JobSource | null;
+  /** The portals the agent asks (#517): a search goes to all of them. */
+  sources: readonly JobSource[];
   countries: readonly Country[];
+  profiles: SearchProfile[];
   onCancel: () => void;
   onSave: (search: SavedAgentSearch) => void;
 }) {
   const track = useTrackSave();
   const [name, setName] = useState(search?.name ?? "");
-  const [query, setQuery] = useState(search?.query ?? suggestedQuery ?? EMPTY_QUERY);
+  // Tied to a profile (E24-6): the first unless it says another. A new search starts with its profile's filters.
+  const [profileId, setProfileId] = useState(search?.profileId ?? profiles[0]?.id ?? null);
+  // Or every profile (E25-5): the filters stay as they are.
+  const [allProfiles, setAllProfiles] = useState(search?.allProfiles ?? false);
+  const startsWith = (id: string | null) => profiles.find((profile) => profile.id === id)?.defaults ?? {};
+  const [query, setQuery] = useState<SearchQuery>(search?.query ?? { ...(suggestedQuery ?? EMPTY_QUERY), ...startsWith(profileId) });
   const [enabled, setEnabled] = useState(search?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const patch = (change: Partial<SearchQuery>) => setQuery((current) => ({ ...current, ...change }));
   return <form aria-label={search ? `Edit ${search.name}` : "New recurring search"} className="flex flex-col gap-4 border-t border-line pt-4" onSubmit={(event) => {
     event.preventDefault();
-    const input = { name, query, enabled, sort: search?.sort ?? sort };
+    const input = { name, query, enabled, sort: search?.sort ?? sort, profileId, allProfiles };
     const parsed = agentSearchInputSchema.safeParse(input);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
@@ -185,10 +200,34 @@ function SearchEditor({ search, suggestedQuery, sort, source, countries, onCance
     <fieldset disabled={pending} className="flex min-w-0 flex-col gap-4">
       <legend className="mb-3 text-field font-medium">{search ? "Edit search" : "Add recurring search"}</legend>
        <Input label="Search name" value={name} maxLength={100} autoFocus onChange={(event) => setName(event.target.value)} />
+       {profiles.length > 1 && (
+         <Select
+           label="Profile"
+           hint={
+             allProfiles
+               ? "Scores each posting once per profile, so 3 profiles cost 3 times as much. Drafts use the profile that scored best."
+               : "It scores and drafts with this profile. Choosing one fills in its levels and where it wants to work; change them as you like."
+           }
+           value={allProfiles ? "all" : (profileId ?? "")}
+           onChange={(event) => {
+             if (event.target.value === "all") return setAllProfiles(true);
+             setAllProfiles(false);
+             setProfileId(event.target.value);
+             patch(startsWith(event.target.value));
+           }}
+         >
+           {profiles.map((profile) => (
+             <option key={profile.id} value={profile.id}>
+               {profile.name}
+             </option>
+           ))}
+           <option value="all">All profiles</option>
+         </Select>
+       )}
        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-         <SearchFields value={query} onChange={patch} source={source} countries={countries} />
+         <SearchFields value={query} onChange={patch} sources={sources} countries={countries} />
        </div>
-      <RemoteOnlyField value={query} onChange={patch} source={source} />
+      <RemoteOnlyField value={query} onChange={patch} sources={sources} />
       <Toggle label="Enable this search" checked={enabled} onCheckedChange={setEnabled} />
        {error && <p role="alert" className="text-meta text-error">{error}</p>}
        <div className="flex flex-wrap gap-2">

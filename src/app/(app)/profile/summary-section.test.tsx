@@ -23,6 +23,6 @@ describe("SummarySection", () => {
     render(<Harness />);
     await user.type(screen.getByLabelText("A few lines about you"), "Designs calm tools");
     await user.tab();
-    await waitFor(() => expect(saveBasics).toHaveBeenLastCalledWith({ name: "Jane Doe", summary: "Designs calm tools" }));
+    await waitFor(() => expect(saveBasics).toHaveBeenLastCalledWith({ profileId: "", name: "Jane Doe", summary: "Designs calm tools" }));
   });
 });

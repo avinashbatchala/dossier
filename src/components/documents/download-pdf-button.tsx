@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { toast } from "@/components/toast";
+import { cn } from "@/lib/cn";
 import { buttonClassName, type ButtonSize, type ButtonVariant } from "@/components/ui/button";
 import { messages } from "@/lib/messages";
 import { downloadFrom, saveFile } from "@/lib/save-file";
@@ -32,6 +33,7 @@ export function DownloadPdfButton({
   variant = "primary",
   size = "md",
   progress = "Rendering your PDF on the server. It'll download in a moment.",
+  className,
   children,
 }: {
   href: string;
@@ -45,6 +47,7 @@ export function DownloadPdfButton({
   size?: ButtonSize;
   /** The toast while it renders, e.g. "Rendering your cover letter as a PDF…". */
   progress?: string;
+  className?: string;
   children: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
@@ -80,7 +83,7 @@ export function DownloadPdfButton({
         event.preventDefault();
         if (!busy) void download();
       }}
-      className={buttonClassName(variant, size, variant === "primary" ? "hover:text-on-primary" : undefined)}
+      className={buttonClassName(variant, size, cn(variant === "primary" && "hover:text-on-primary", className))}
     >
       {busy ? "Rendering…" : children}
     </a>

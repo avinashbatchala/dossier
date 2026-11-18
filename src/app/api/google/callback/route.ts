@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { saveGoogleAccount } from "@/lib/google/account";
 import { GoogleError } from "@/lib/google/errors";
-import { emailFromIdToken, exchangeCode, redirectUri, verifyState } from "@/lib/google/oauth";
+import { CALLBACK_PATH, emailFromIdToken, exchangeCode, PKCE_COOKIE, redirectUri, verifyState } from "@/lib/google/oauth";
 import { publicOrigin } from "@/lib/google/origin";
 import { logServerError } from "@/lib/log";
 
@@ -21,6 +21,8 @@ export async function GET(request: NextRequest): Promise<Response> {
     url.searchParams.set("google", outcome);
     const response = NextResponse.redirect(url);
     response.headers.set("cache-control", "private, no-store");
+    // The PKCE verifier is used once.
+    response.cookies.set(PKCE_COOKIE, "", { path: CALLBACK_PATH, maxAge: 0 });
     return response;
   };
 
@@ -32,9 +34,12 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (params.get("error")) return back(params.get("error") === "access_denied" ? "denied" : "failed");
   const code = params.get("code");
   if (!code) return back("failed");
+  // Started in another browser, or more than ten minutes ago (#358).
+  const verifier = request.cookies.get(PKCE_COOKIE)?.value;
+  if (!verifier) return back("expired");
 
   try {
-    const tokens = await exchangeCode(code, redirectUri(origin));
+    const tokens = await exchangeCode(code, redirectUri(origin), verifier);
     const email = emailFromIdToken(tokens.id_token);
     if (!email) return back("failed");
     await saveGoogleAccount({ email, refreshToken: tokens.refresh_token, scopes: tokens.scope });

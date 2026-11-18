@@ -6,6 +6,7 @@ import { jobSearchError } from "./errors";
 import {
   defaultSearch,
   describeSearch,
+  experienceRangeAskedFor,
   EMPTY_QUERY,
   foundPostingSchema,
   latestRole,
@@ -37,6 +38,19 @@ describe("search in the URL", () => {
     expect(queryFromParams({ q: "nurse", level: "senior" })).toMatchObject({ experience: "senior" });
     expect(queryFromParams({ q: "nurse", level: "boss" })).not.toHaveProperty("experience");
     expect(describeSearch({ ...EMPTY_QUERY, keywords: "nurse", experience: "intern" }, "Germany")).toBe("nurse · Germany · Internship");
+  });
+
+  it("keeps a range of levels in the URL and the line (E24-6)", () => {
+    const range = { ...EMPTY_QUERY, keywords: "nurse", experience: "senior" as const, experienceTo: "lead" as const };
+    expect(searchHref(range)).toBe("/jobs?q=nurse&level=senior&levelTo=lead");
+    expect(queryFromParams({ q: "nurse", level: "senior", levelTo: "lead" })).toMatchObject({ experience: "senior", experienceTo: "lead" });
+    // "Up to" the same level, or without a level, is no range.
+    expect(queryFromParams({ q: "nurse", level: "senior", levelTo: "senior" })).not.toHaveProperty("experienceTo");
+    expect(queryFromParams({ q: "nurse", levelTo: "lead" })).not.toHaveProperty("experienceTo");
+    expect(describeSearch(range, "Germany")).toMatch(/^nurse · Germany · Senior to Lead/);
+    // Either way round.
+    expect(experienceRangeAskedFor({ experience: "lead", experienceTo: "mid" })).toEqual(["mid", "senior", "lead"]);
+    expect(experienceRangeAskedFor({ experience: "any", experienceTo: "lead" })).toBeNull();
   });
 
   it("reads the view from the URL (E14-7)", () => {
@@ -104,7 +118,9 @@ describe("postings", () => {
   it("checks postings sent back from the screen", () => {
     expect(foundPostingSchema.parse(posting)).toEqual(posting);
     expect(foundPostingSchema.parse({ ...posting, url: "" }).url).toBe("");
-    expect(foundPostingSchema.safeParse({ ...posting, source: "MONSTER" }).success).toBe(false);
+    // A stored id from a source that's no longer listed still reads back (#269); one that isn't an id doesn't.
+    expect(foundPostingSchema.safeParse({ ...posting, source: "MONSTER" }).success).toBe(true);
+    expect(foundPostingSchema.safeParse({ ...posting, source: "monster board" }).success).toBe(false);
     expect(foundPostingSchema.safeParse({ ...posting, url: "javascript:alert(1)" }).success).toBe(false);
   });
 

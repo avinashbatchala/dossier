@@ -9,7 +9,7 @@ import type { AiConfig } from "./config";
  * What's saved in Settings → AI provider, key included, read the way the app
  * reads it: `.env` (DOSSIER_SECRET decrypts the key), then the database.
  */
-export async function savedAiConfig(): Promise<AiConfig> {
+async function savedAiConfig(): Promise<AiConfig> {
   // Keeps what's set already, such as the DATABASE_URL Compose gives the container.
   process.loadEnvFile(".env");
   const { loadAiConfig } = await import("./config");

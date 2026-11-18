@@ -97,5 +97,122 @@
     "required": [
       "announcements"
     ]
+  },
+  "portals": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "portals": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "countries": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "access": {
+              "type": "string",
+              "enum": [
+                "official-api",
+                "public-feed",
+                "unofficial"
+              ]
+            },
+            "needsKey": {
+              "type": "boolean"
+            },
+            "builtIn": {
+              "type": "boolean"
+            },
+            "termsUrl": {
+              "type": "string"
+            },
+            "config": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "name",
+            "description",
+            "countries",
+            "kinds",
+            "access",
+            "needsKey",
+            "builtIn",
+            "termsUrl",
+            "config"
+          ]
+        }
+      },
+      "withdrawn": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "withdrawnAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            }
+          },
+          "required": [
+            "id",
+            "reason",
+            "withdrawnAt"
+          ]
+        }
+      },
+      "commit": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "portals",
+      "withdrawn",
+      "commit"
+    ]
   }
 }

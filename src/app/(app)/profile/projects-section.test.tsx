@@ -129,7 +129,7 @@ describe("ProjectsSection (PRO-13)", () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith("Removed “Churn predictor”.", expect.anything()));
     const { action } = vi.mocked(toast).mock.calls.at(-1)![1]!;
     await act(async () => action!.onClick());
-    expect(restoreProject).toHaveBeenCalledWith(churn);
+    expect(restoreProject).toHaveBeenCalledWith({ ...churn, profileId: "" });
     expect(latest.projects.map((entry) => entry.id)).toEqual(["p1", "p2"]);
   });
 
@@ -137,6 +137,6 @@ describe("ProjectsSection (PRO-13)", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getAllByRole("button", { name: /Move .* down/ })[0]);
-    await waitFor(() => expect(reorderEntries).toHaveBeenCalledWith({ section: "project", ids: ["p2", "p1"] }));
+    await waitFor(() => expect(reorderEntries).toHaveBeenCalledWith({ profileId: "", section: "project", ids: ["p2", "p1"] }));
   });
 });

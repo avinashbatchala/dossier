@@ -15,6 +15,7 @@ import { displayLink } from "@/lib/resume-content";
 import { createPublication, removePublication, reorderPublications, restorePublication, savePublication } from "./actions";
 import { EntryList } from "./entry-list";
 import type { UpdateProfile } from "./skills-section";
+import { useProfileId } from "./profile-id";
 
 const markButton =
   "grid size-7 place-items-center rounded-[6px] border border-line-input bg-input text-sm text-ink hover:bg-hover focus-visible:outline-offset-1";
@@ -150,20 +151,21 @@ function PublicationForm({
  * order. Resumes show them word for word; the AI never rewrites them.
  */
 export function PublicationsSection({ profile, update }: { profile: ProfileData; update: UpdateProfile }) {
+  const profileId = useProfileId();
   return (
     <EntryList
       items={profile.publications}
       setItems={(change) => update((current) => ({ ...current, publications: change(current.publications) }))}
       addLabel="Add a publication"
-      ordering={{ mode: "manual", save: (ids) => reorderPublications({ ids }) }}
+      ordering={{ mode: "manual", save: (ids) => reorderPublications({ profileId, ids }) }}
       summary={(entry) => ({
         title: citationExcerpt(entry.citation, 80) || "New publication",
         subtitle: displayLink(publicationLink(entry.link)) || (entry.citation.trim() ? "No link" : ""),
         meta: entry.onResumes ? undefined : "Not on resumes",
       })}
-      create={() => createPublication({})}
+      create={() => createPublication({ profileId })}
       remove={(entry) => removePublication({ id: entry.id })}
-      restore={(entry) => restorePublication(entry)}
+      restore={(entry) => restorePublication({ ...entry, profileId })}
       renderForm={(entry, { onChange, autoFocus }) => (
         <PublicationForm entry={entry} onChange={onChange} autoFocus={autoFocus} />
       )}

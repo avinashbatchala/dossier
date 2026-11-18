@@ -26,6 +26,7 @@ export const FETCH_MESSAGES = {
   notPage: "That link isn't a web page. Paste the posting instead.",
   unreadable:
     "There's no posting text on that page that Dossier can read: the site probably builds it in the browser. Paste the posting instead.",
+  doubtful: "That page's text looks like menus or links rather than a job posting: the site probably builds the posting in the browser.",
 };
 
 const TIMEOUT_MS = 10_000;
@@ -33,8 +34,15 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 /** Less than this isn't a posting: a cookie wall, an error page or a script shell. */
 const MIN_CHARACTERS = 200;
+/** When more of a page's text than this is inside links, it's a menu or a list of links, not a posting (#232). */
+const MAX_LINK_SHARE = 0.5;
 
-export type FetchedPosting = { ok: true; text: string; source: "structured" | "page"; url: string } | { ok: false; error: string };
+/**
+ * A page's text. `doubtful` when what's left looks like menus or links
+ * rather than a posting (#232): Fetch shows it with a warning, and the
+ * paths nobody sees use the portal's own snippet instead.
+ */
+export type FetchedPosting = { ok: true; text: string; source: "structured" | "page"; url: string; doubtful: boolean } | { ok: false; error: string };
 
 // ─── Where requests may go ───────────────────────────────────────────────────
 
@@ -229,20 +237,35 @@ function decode(body: Buffer, contentType: string): string {
 
 // ─── Reading the page ────────────────────────────────────────────────────────
 
-/** The posting's text from a page: its JobPosting data if it has any, else its main text. */
-export function postingFromHtml(html: string): { text: string; source: "structured" | "page" } | null {
+/** Consent banners and dialogs, in any language (#232): known ids and classes, and what's marked as a dialog. */
+const CONSENT = /cookie|consent|onetrust|cookiebot|didomi|usercentrics|gdpr/i;
+const isConsent = (element: HTMLElement) =>
+  ["dialog", "alertdialog"].includes(element.getAttribute("role") ?? "") ||
+  element.getAttribute("aria-modal") === "true" ||
+  CONSENT.test(element.getAttribute("id") ?? "") ||
+  CONSENT.test(element.getAttribute("class") ?? "");
+
+/**
+ * The posting's text from a page: its JobPosting data if it has any, else
+ * its main text, without menus, forms and consent banners. `doubtful` when
+ * most of what's left is link text (#232).
+ */
+export function postingFromHtml(html: string): { text: string; source: "structured" | "page"; doubtful: boolean } | null {
   const root = parse(html, { blockTextElements: { script: true, style: false, noscript: false, pre: true } });
   for (const script of root.querySelectorAll('script[type="application/ld+json"]')) {
     const posting = jobPostingIn(parseJson(script.rawText));
     const text = posting && jobPostingText(posting);
-    if (text && text.length >= MIN_CHARACTERS) return { text, source: "structured" };
+    if (text && text.length >= MIN_CHARACTERS) return { text, source: "structured", doubtful: false };
   }
   for (const noise of root.querySelectorAll("script, style, noscript, template, svg, nav, header, footer, aside, form, iframe, button")) {
     noise.remove();
   }
+  for (const banner of root.querySelectorAll("*").filter(isConsent)) banner.remove();
   const main = root.querySelector("main") ?? root.querySelector("article") ?? root.querySelector('[role="main"]') ?? root.querySelector("body") ?? root;
   const text = textOf(main);
-  return text.length >= MIN_CHARACTERS ? { text, source: "page" } : null;
+  if (text.length < MIN_CHARACTERS) return null;
+  const links = main.querySelectorAll("a").reduce((sum, link) => sum + link.text.replace(/\s+/g, " ").trim().length, 0);
+  return { text, source: "page", doubtful: links / text.length > MAX_LINK_SHARE };
 }
 
 function parseJson(text: string): unknown {

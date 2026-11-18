@@ -1,12 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveProfileSettings } from "@/lib/profiles";
 
 import { applyStatusChange } from "@/lib/status-changes";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import {
   addApplicationSection,
   addMatchSkill,
   addNote,
+  forgetKnownGap,
+  markKnownGap,
   deleteNote,
   followBaseSections,
   leaveOutUnit,
@@ -16,12 +19,21 @@ import {
   restoreNote,
   restoreUnit,
   restoreVersion,
+  goBackTo,
   saveUnit,
   sendMessage,
   setApplicationSections,
   setApplicationTheme,
   setFollowThemeLayout,
   setInterviewDate,
+  startPreparing,
+  tickPrep,
+  updateInterview,
+  addInterviewRound,
+  saveOffer,
+  startWritingMessage,
+  saveMessageDraft,
+  markMessageSent,
   setShowPhoto,
   startRegenerating,
   startWritingEmail,
@@ -118,7 +130,7 @@ describe("an application's sections (#297)", () => {
   });
 
   it("adds a section in the profile's own words, keeping what's there", async () => {
-    await prisma().certification.create({ data: { id: "c1", name: "Accessibility Specialist" } });
+    await prisma().certification.create({ data: { profileId: TEST_PROFILE_ID, id: "c1", name: "Accessibility Specialist" } });
     expect(await addApplicationSection({ id: "app-1", key: "certifications" })).toEqual({ ok: true, data: null });
     const units = await unitsOf();
     expect(units.find((unit) => unit.id === "certification:c1")?.text).toBe("Accessibility Specialist");
@@ -147,7 +159,7 @@ describe("an application's sections (#297)", () => {
     beforeEach(async () => {
       await prisma().profileField.create({ data: { key: "name", value: "Jane" } });
       await applyStatusChange(prisma(), "app-1", "SENT");
-      await prisma().certification.create({ data: { id: "c1", name: "Specialist" } });
+      await prisma().certification.create({ data: { profileId: TEST_PROFILE_ID, id: "c1", name: "Specialist" } });
       await prisma().profileField.update({ where: { key: "name" }, data: { value: "Changed" } });
     });
 
@@ -166,7 +178,7 @@ describe("an application's sections (#297)", () => {
     });
 
     it("takes the base resume's order once, rather than following it", async () => {
-      await prisma().setting.create({ data: { key: "resumeSections", value: JSON.stringify({ order: ["skills"], off: [] }) } });
+      await saveProfileSettings(TEST_PROFILE_ID, { resumeSections: { order: ["skills"], off: [] } }, prisma());
       await followBaseSections({ id: "app-1" });
       expect(await sectionsOf()).toEqual({ order: ["skills"], off: [] });
     });
@@ -201,8 +213,8 @@ describe("an application's sections (#297)", () => {
     });
 
     it("adds new items to a draft, which has no copy", async () => {
-      await prisma().experience.create({ data: { id: "e1", role: "Designer", company: "Northwind", startYear: 2020 } });
-      await prisma().experience.create({ data: { id: "e2", role: "Lead", company: "Acme", startYear: 2024, bullets: "Built the team" } });
+      await prisma().experience.create({ data: { profileId: TEST_PROFILE_ID, id: "e1", role: "Designer", company: "Northwind", startYear: 2020 } });
+      await prisma().experience.create({ data: { profileId: TEST_PROFILE_ID, id: "e2", role: "Lead", company: "Acme", startYear: 2024, bullets: "Built the team" } });
       const result = await updateFromProfile({ id: "app-1" });
       if (!result.ok || !result.data) throw new Error("not updated");
       expect(result.data.profile).toBeNull();
@@ -217,7 +229,7 @@ describe("an application's sections (#297)", () => {
   });
 
   it("takes an added part off the list of what was left out", async () => {
-    await prisma().certification.create({ data: { id: "c1", name: "Specialist" } });
+    await prisma().certification.create({ data: { profileId: TEST_PROFILE_ID, id: "c1", name: "Specialist" } });
     await prisma().document.update({
       where: { applicationId_kind: { applicationId: "app-1", kind: "RESUME" } },
       data: { trimmed: [{ kind: "unit", unit: { id: "certification:c1", label: "Specialist", text: "Specialist" }, index: 2 }] },
@@ -468,6 +480,13 @@ describe("sendMessage (E8-5)", () => {
     ]);
   });
 
+  it("starts an answer for a question in Ask, about no part, on any tab (E30-10)", async () => {
+    const result = await sendMessage({ id: "app-1", text: "What matters most?", viewing: null, target: { document: "RESUME", unitId: "summary" }, mode: "ask" });
+    const job = await prisma().job.findUniqueOrThrow({ where: { id: result.ok && result.data.jobId ? result.data.jobId : "" } });
+    expect(job.input).toMatchObject({ request: "What matters most?", target: null, viewing: null, mode: "ask" });
+    expect((await messages()).map(({ role, text, targetUnit }) => [role, text, targetUnit])).toEqual([["USER", "What matters most?", null]]);
+  });
+
   it("waits for the reply that's on its way", async () => {
     await sendMessage({ id: "app-1", text: "Shorter", viewing: "RESUME", target: null });
     expect(await sendMessage({ id: "app-1", text: "Longer", viewing: "RESUME", target: null })).toEqual({
@@ -551,7 +570,7 @@ describe("addMatchSkill (E8-7)", () => {
   });
 
   it("adds the skill to the profile and marks the requirement partly covered", async () => {
-    expect(await addMatchSkill({ id: "app-1", index: 0 })).toEqual({ ok: true, data: { name: "Kubernetes" } });
+    expect(await addMatchSkill({ id: "app-1", index: 0 })).toEqual({ ok: true, data: { name: "Kubernetes", where: "", experienceId: null } });
     expect(await prisma().skill.findMany({ select: { name: true } })).toEqual([{ name: "Kubernetes" }]);
     const { match } = await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } });
     expect(match).toMatchObject({ items: [{ result: "partial", skill: "Kubernetes", note: "In your skills, but not linked to a role yet" }, { result: "gap" }] });
@@ -560,6 +579,133 @@ describe("addMatchSkill (E8-7)", () => {
   it("refuses a requirement that isn't a skill", async () => {
     expect(await addMatchSkill({ id: "app-1", index: 1 })).toMatchObject({ ok: false });
     expect(await prisma().skill.count()).toBe(0);
+  });
+
+  it("links it to the role it was used in, with what was done as a new line (E30-5)", async () => {
+    const { profileId } = await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } });
+    const role = await prisma().experience.create({ data: { profileId: profileId ?? TEST_PROFILE_ID, company: "Northwind", role: "Designer", bullets: "Led the portal" } });
+    const result = await addMatchSkill({ id: "app-1", index: 0, experienceId: role.id, did: " Designed the deploy dashboard " });
+    expect(result).toEqual({ ok: true, data: { name: "Kubernetes", where: "Northwind", experienceId: role.id } });
+    const skill = await prisma().skill.findFirstOrThrow({ where: { name: "Kubernetes" } });
+    expect(await prisma().experienceSkill.findMany()).toEqual([{ experienceId: role.id, skillId: skill.id }]);
+    expect((await prisma().experience.findUniqueOrThrow({ where: { id: role.id } })).bullets).toBe("Led the portal\nDesigned the deploy dashboard");
+    const { match } = await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } });
+    expect(match).toMatchObject({ items: [{ result: "covered", skill: "Kubernetes", experienceIds: [role.id], note: "At Northwind" }, { result: "gap" }] });
+  });
+
+  it("refuses a role from another profile", async () => {
+    const other = await prisma().profile.create({ data: { name: "Other" } });
+    const role = await prisma().experience.create({ data: { profileId: other.id, company: "Elsewhere" } });
+    expect(await addMatchSkill({ id: "app-1", index: 0, experienceId: role.id })).toMatchObject({ ok: false });
+    expect(await prisma().skill.count()).toBe(0);
+  });
+
+  // The engine's rows (E25-7) don't line up with the extracted requirements (#439).
+  describe("in a match from the scoring engine", () => {
+    beforeEach(async () => {
+      await prisma().application.update({
+        where: { id: "app-1" },
+        data: {
+          match: {
+            items: [
+              { ...item("Fintech or payments experience", "gap"), mustHave: false, addable: null },
+              { ...item("Experience with Docker", "gap"), mustHave: true, addable: "Docker" },
+            ],
+          },
+        },
+      });
+    });
+
+    it("adds the row's own skill, not the extracted requirement's at that place", async () => {
+      expect(await addMatchSkill({ id: "app-1", index: 1 })).toEqual({ ok: true, data: { name: "Docker", where: "", experienceId: null } });
+      expect(await prisma().skill.findMany({ select: { name: true } })).toEqual([{ name: "Docker" }]);
+      const { match } = await prisma().application.findUniqueOrThrow({ where: { id: "app-1" } });
+      expect(match).toMatchObject({ items: [{ result: "gap" }, { result: "partial", skill: "Docker" }] });
+    });
+
+    it("refuses a row with nothing to add, even where the extracted list has a skill", async () => {
+      expect(await addMatchSkill({ id: "app-1", index: 0 })).toMatchObject({ ok: false });
+      expect(await prisma().skill.count()).toBe(0);
+    });
+  });
+});
+
+describe("interviews (E30-6)", () => {
+  const rounds = () => prisma().interview.findMany({ where: { applicationId: "app-1" }, orderBy: { round: "asc" } });
+
+  it("fills a round from the interview date", async () => {
+    await setInterviewDate({ id: "app-1", at: "2030-12-03T10:00:00.000Z", calendar: false });
+    expect((await rounds()).map((round) => [round.round, round.at?.toISOString()])).toEqual([[1, "2030-12-03T10:00:00.000Z"]]);
+  });
+
+  it("starts Prepare for the round to come, giving an application without one round 1", async () => {
+    const result = await startPreparing({ id: "app-1" });
+    const [round] = await rounds();
+    expect(round).toMatchObject({ round: 1, at: null });
+    const job = await prisma().job.findUniqueOrThrow({ where: { id: result.ok ? result.data : "" } });
+    expect(job).toMatchObject({ type: "prepare-interview", key: "prepare:app-1", input: { applicationId: "app-1", interviewId: round.id } });
+    // Asking again follows the same job.
+    expect(await startPreparing({ id: "app-1" })).toEqual(result);
+  });
+
+  it("needs an AI provider for Prepare", async () => {
+    ai.ready = false;
+    expect(await startPreparing({ id: "app-1" })).toMatchObject({ ok: false, error: expect.stringMatching(/needs an AI provider/) });
+  });
+
+  it("ticks an item with when, saves a round's details, and adds the next round once it's past", async () => {
+    const round = await prisma().interview.create({ data: { applicationId: "app-1", round: 1, at: new Date("2020-01-01T10:00:00Z"), prep: [{ text: "Reread the posting", why: "From the posting", done: false }] } });
+    expect(await tickPrep({ id: "app-1", interviewId: round.id, index: 0, done: true })).toEqual({ ok: true, data: null });
+    expect((await rounds())[0].prep).toEqual([{ text: "Reread the posting", why: "From the posting", done: true, doneAt: expect.any(String) }]);
+    expect(await tickPrep({ id: "app-1", interviewId: round.id, index: 5, done: true })).toMatchObject({ ok: false });
+
+    await updateInterview({ id: "app-1", interviewId: round.id, minutes: 45, place: "Google Meet", people: "Lotte de Vries", notes: "Went well." });
+    expect((await rounds())[0]).toMatchObject({ minutes: 45, place: "Google Meet", people: "Lotte de Vries", notes: "Went well." });
+
+    expect(await addInterviewRound({ id: "app-1" })).toMatchObject({ ok: true, data: { round: 2 } });
+    expect(await addInterviewRound({ id: "app-1" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("the offer and drafted messages (E30-7, E30-8)", () => {
+  const application = () => prisma().application.findUniqueOrThrow({ where: { id: "app-1" }, include: { offer: true } });
+
+  it("saves the offer by hand, its dates as calendar days", async () => {
+    expect(await saveOffer({ id: "app-1", salary: "€82,000", decideBy: "2026-12-11", startDate: null, holidays: "27 days", office: "Hybrid" })).toEqual({ ok: true, data: null });
+    await saveOffer({ id: "app-1", salary: "€85,000", decideBy: "2026-12-11", startDate: "2027-02-01", holidays: "27 days", office: "Hybrid" });
+    expect((await application()).offer).toMatchObject({ salary: "€85,000", decideBy: new Date("2026-12-11T00:00:00Z"), startDate: new Date("2027-02-01T00:00:00Z") });
+  });
+
+  it("starts a draft on the click, one at a time", async () => {
+    const result = await startWritingMessage({ id: "app-1", kind: "accept" });
+    const job = await prisma().job.findUniqueOrThrow({ where: { id: result.ok ? result.data : "" } });
+    expect(job).toMatchObject({ type: "write-message", key: "message:app-1", input: { applicationId: "app-1", kind: "accept" } });
+    expect(await startWritingMessage({ id: "app-1", kind: "decline" })).toMatchObject({ ok: false });
+  });
+
+  it("edits a draft, and \"I sent it\" lets it go and restarts Quiet for", async () => {
+    const draft = { kind: "follow-up", to: "", subject: "Following up", body: "Hi!", writtenWith: "write-message@1", at: "2026-11-17T10:00:00.000Z" };
+    await prisma().application.update({ where: { id: "app-1" }, data: { messageDraft: draft } });
+    await saveMessageDraft({ id: "app-1", subject: "Checking in", body: "Hello again." });
+    expect((await application()).messageDraft).toEqual({ ...draft, subject: "Checking in", body: "Hello again." });
+    expect(await markMessageSent({ id: "app-1" })).toEqual({ ok: true, data: null });
+    const after = await application();
+    expect(after.messageDraft).toBeNull();
+    expect(after.contactedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("known gaps (E30-5)", () => {
+  it("marks a gap as known once, and Undo forgets it", async () => {
+    expect(await markKnownGap({ id: "app-1", requirement: "Experience with Kubernetes" })).toEqual({ ok: true, data: null });
+    expect(await markKnownGap({ id: "app-1", requirement: "Experience with Kubernetes" })).toEqual({ ok: true, data: null });
+    expect(await prisma().knownGap.findMany({ select: { applicationId: true, requirement: true } })).toEqual([{ applicationId: "app-1", requirement: "Experience with Kubernetes" }]);
+    expect(await forgetKnownGap({ id: "app-1", requirement: "Experience with Kubernetes" })).toEqual({ ok: true, data: null });
+    expect(await prisma().knownGap.count()).toBe(0);
+  });
+
+  it("says so for an application that's gone", async () => {
+    expect(await markKnownGap({ id: "gone", requirement: "Kubernetes" })).toMatchObject({ ok: false });
   });
 });
 
@@ -709,6 +855,16 @@ describe("versions (E8-10)", () => {
     await prisma().document.update({ where: { id: documentId }, data: { trimmed: [{ kind: "unit", unit: full[2], index: 2 }] } });
     await restoreVersion({ id: "app-1", versionId: written.id });
     expect((await document()).trimmed).toBeNull();
+  });
+
+  it("goes back to versions in several documents at once, skipping one that's already so (E30-11)", async () => {
+    const { id: documentId } = await document();
+    const letterDocument = await prisma().document.create({ data: { applicationId: "app-1", kind: "COVER_LETTER", units: [{ id: "paragraph:1", label: "Opening", text: "Now." }] } });
+    const resumeThen = await prisma().documentVersion.create({ data: { documentId, units: resume, cause: "WRITTEN" } });
+    const letterThen = await prisma().documentVersion.create({ data: { documentId: letterDocument.id, units: [{ id: "paragraph:1", label: "Opening", text: "Then." }], cause: "WRITTEN" } });
+    expect(await goBackTo({ id: "app-1", versionIds: [resumeThen.id, letterThen.id] })).toEqual({ ok: true, data: ["COVER_LETTER"] });
+    expect((await prisma().document.findUniqueOrThrow({ where: { id: letterDocument.id } })).units).toEqual([{ id: "paragraph:1", label: "Opening", text: "Then." }]);
+    expect(await goBackTo({ id: "app-1", versionIds: [resumeThen.id] })).toEqual({ ok: false, error: "That's how it is now already." });
   });
 
   it("only shows an application's own versions", async () => {

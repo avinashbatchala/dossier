@@ -22,7 +22,9 @@ vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/time-zone", () => ({ lastKnownTimeZone: async () => "Europe/Berlin" }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
 vi.mock("@/lib/job-search/config", () => ({
-  loadJobSearchConfig: async () => ({ source: "JSEARCH", saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
+  loadJobSearchConfig: async () => ({ saved: true, freehire: { url: "https://freehire.me" }, portals: [{ id: "JSEARCH", on: true, offered: true, fields: {}, keys: {}, acceptedAt: null }] }),
+  enabledPortals: (config: { portals: { id: string; on: boolean }[] }) => config.portals.filter((portal) => portal.on).map((portal) => portal.id),
+  agentPortal: (config: { portals: { id: string; on: boolean }[] }) => config.portals.find((portal) => portal.on && portal.id !== "ARBEITSAGENTUR")?.id ?? null,
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),
 }));
 
@@ -56,7 +58,7 @@ describe("the Agent screen's data (E16-6)", () => {
       { at: "2026-10-20T05:00:00Z", manual: false, message: "Done", sourceRequests: 1, searches: [result] },
     ] });
     expect(await loadAgentView(now)).toMatchObject({
-      sourceRequestsUsed: 3, nextEligibility: "Wed 21 Oct, 07:00", timeZone: "Europe/Berlin", limitReached: true,
+      budget: [{ portal: "JSEARCH", name: "JSearch", used: 3 }], nextEligibility: "Wed 21 Oct, 07:00", timeZone: "Europe/Berlin", limitReached: true,
       searchHistory: [expect.objectContaining({ searchId: first.id, error: "Offline", at: "Tue 20 Oct, 11:00" }), { ...result, at: "Tue 20 Oct, 07:00" }],
     });
   });
@@ -67,7 +69,7 @@ describe("the Agent screen's data (E16-6)", () => {
     expect(view.lastRun?.message).toContain("interrupted");
     expect(view.lastRun?.message).toContain("All 3 reserved source requests still count");
     expect(view.lastRun?.message).toContain("including any not sent");
-    expect(view.sourceRequestsUsed).toBe(3);
+    expect(view.budget).toEqual([{ portal: "JSEARCH", name: "JSearch", used: 3 }]);
     expect(view.limitReached).toBe(true);
     // Rendering must not take execution ownership or mutate its ledger.
     expect((await prisma().setting.findUniqueOrThrow({ where: { key: "agentRuns" } })).value).toContain('"message":null');
@@ -85,34 +87,43 @@ describe("the Agent screen's data (E16-6)", () => {
       expect((await loadAgentView(now)).lastRun?.message).toBeNull();
     });
   });
-  it("splits the queue into drafts, scored postings and those below the minimum, best first", async () => {
+  it("shows the drafts to review, and counts what waits in Positions (E22-8)", async () => {
     const application = await prisma().application.create({ data: { origin: "AGENT", awaitingReview: true } });
     await candidate("draft", 90, { status: "DRAFTED", applicationId: application.id });
-    const good = await candidate("good", 75);
+    // What waits goes by coverage (E32-2): two thirds or more, from the 0–100 minimum of 70.
+    const good = await candidate("good", 75, { covered: 2, requirements: 3 });
     const search = await prisma().agentSearch.findFirstOrThrow();
     await prisma().agentCandidateSearch.create({ data: { candidateId: good.id, searchId: search.id, searchName: "Original search name" } });
-    await candidate("better", 88);
-    await candidate("low", 30);
+    await candidate("better", 88, { covered: 3, requirements: 3 });
+    await candidate("low", 30, { covered: 1, requirements: 3 });
     await candidate("gone", 95, { status: "DISMISSED" });
     await candidate("kept", 95, { status: "APPROVED" });
-    const job = await prisma().job.create({ data: { type: "agent-draft", key: `agent-candidate:${good.id}`, input: { candidateId: good.id } } });
+    await candidate("unscored", 0, { skipReason: "budget" });
 
     const view = await loadAgentView(now);
+    // Best finds, best fit first, and what it skipped, with why (E32-5).
+    expect(view.finds.map((entry) => entry.title)).toEqual(["Posting better", "Posting good"]);
+    expect(view.skipped.map((entry) => [entry.title, entry.why])).toEqual(
+      expect.arrayContaining([
+        ["Posting low", "Covers 1 of 3: under your cut-off (at least two thirds)"],
+        ["Posting unscored", "Past the run's scoring limit: it stays in Positions unscored"],
+      ]),
+    );
+    expect(view.skipped).toHaveLength(2);
     expect(view.drafts.map((entry) => entry.title)).toEqual(["Posting draft"]);
-    expect(view.scored.map((entry) => entry.title)).toEqual(["Posting better", "Posting good"]);
-    expect(view.belowMinimum.map((entry) => entry.title)).toEqual(["Posting low"]);
-    expect(view.scored[1]).toMatchObject({ facts: "Berlin · Remote", origin: "Posted 2 days ago · via LinkedIn on JSearch", draftJobId: job.id, searches: [{ searchId: search.id, searchName: "Original search name" }] });
+    expect(view.drafts[0]).toMatchObject({ facts: "Berlin · Remote", origin: "Posted 2 days ago · via LinkedIn on JSearch", applicationId: application.id });
     expect(view).toMatchObject({
+      waiting: 2,
       searches: [expect.objectContaining({ id: search.id, enabled: true })],
-      sourceRequestsUsed: 1,
+      budget: [{ portal: "JSEARCH", name: "JSearch", used: 1 }],
       nextEligibility: "Now",
       setupProblem: null,
       limitReached: false,
       lastRun: { at: "Tue 20 Oct, 07:00", message: "2 new postings are waiting for a look." },
       nextRun: "Wed 21 Oct, 07:00",
     });
-    // The badge: scored at or above the minimum, and drafts.
-    expect(await countAgentQueue()).toBe(3);
+    // The badge: drafts to review; what's scored waits in Positions.
+    expect(await countAgentQueue()).toBe(1);
   });
 
   it("says what's missing, and when the day's runs are used up", async () => {

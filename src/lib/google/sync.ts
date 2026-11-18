@@ -7,6 +7,7 @@ import { getAiProvider } from "@/lib/ai";
 import { isAiConfigured } from "@/lib/ai/config";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { classifyReply } from "@/lib/ai/tasks";
+import { emit } from "@/lib/notifications/notify";
 import { unitsSchema } from "@/lib/application-data";
 import { emailParts } from "@/lib/application-email";
 import { logServerError } from "@/lib/log";
@@ -58,9 +59,11 @@ async function knownThreads(): Promise<Map<string, string>> {
     prisma.emailMessage.findMany({ where: { applicationId: { not: null } }, select: { threadId: true, applicationId: true }, distinct: ["threadId"] }),
     prisma.application.findMany({ where: { emailThreadId: { not: null } }, select: { id: true, emailThreadId: true } }),
   ]);
+  // Mail already linked comes last, so a thread moved to another
+  // application by hand (public #134) stays there, even the one it was sent from.
   return new Map([
-    ...linked.map((entry) => [entry.threadId, entry.applicationId!] as const),
     ...sent.map((entry) => [entry.emailThreadId!, entry.id] as const),
+    ...linked.map((entry) => [entry.threadId, entry.applicationId!] as const),
   ]);
 }
 
@@ -76,11 +79,13 @@ export type SyncResult = {
  * One check. Returns what it did; a failure is kept on the account, so
  * Settings can show it, and cleared by the next success.
  */
-export async function syncInbox({ signal }: { signal?: AbortSignal } = {}): Promise<SyncResult> {
+export async function syncInbox({ signal, notify = false }: { signal?: AbortSignal; notify?: boolean } = {}): Promise<SyncResult> {
   const [account, settings] = await Promise.all([loadGoogleAccount(), loadSettings()]);
   if (!account) throw new GoogleError("not-connected", "Connect your Google account in Settings → Google first.");
   try {
     const result = await runSync(account.historyId, account.email, settings.gmailScope, signal);
+    // The scheduled check says who replied, about which application, never what they wrote (E26-6).
+    if (notify) await notifyReplies(result.replies);
     const { unread } = result.counts;
     const problem = unread ? `${unread} ${unread === 1 ? "message" : "messages"} couldn't be read from Gmail. The next check tries again.` : null;
     await prisma.googleAccount.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncProblem: problem, historyId: result.historyId } });
@@ -109,7 +114,7 @@ async function runSync(historyId: string | null, ownAddress: string, scope: "kno
   const seen = new Set((await prisma.emailMessage.findMany({ where: { gmailId: { in: ids } }, select: { gmailId: true } })).map((entry) => entry.gmailId));
   const fresh = ids.filter((id) => !seen.has(id));
   const counts: SyncResult = { fetched: fresh.length, kept: 0, read: 0, unread: 0 };
-  if (fresh.length === 0) return { historyId: next, counts };
+  if (fresh.length === 0) return { historyId: next, counts, replies: [] as string[] };
 
   const [applications, threads, aiReady] = await Promise.all([matchables(), knownThreads(), isAiConfigured()]);
   const kept: { id: string; tentative: boolean }[] = [];
@@ -178,7 +183,22 @@ async function runSync(historyId: string | null, ownAddress: string, scope: "kno
       }
     }
   }
-  return { historyId: counts.unread ? historyId : next, counts };
+  // Replies about an application, for "A reply arrived" (E26-6).
+  return { historyId: counts.unread ? historyId : next, counts, replies: kept.map((entry) => entry.id) };
+}
+
+/** "A reply arrived" for each kept reply still linked to an application once read: who, and about which. */
+async function notifyReplies(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const replies = await prisma.emailMessage.findMany({
+    where: { id: { in: [...ids] }, applicationId: { not: null }, direction: EmailDirection.INCOMING },
+    select: { fromName: true, fromAddress: true, application: { select: { id: true, title: true, role: true, company: true } } },
+  });
+  for (const reply of replies) {
+    if (!reply.application) continue;
+    const { id, title, role, company } = reply.application;
+    await emit("reply.arrived", { applicationId: id, from: reply.fromName.trim() || reply.fromAddress, title: role.trim() || title.trim() || "your application", company: company.trim() });
+  }
 }
 
 /**
@@ -209,6 +229,13 @@ export async function readReply(emailId: string, signal?: AbortSignal, { tentati
   );
   const current = email.application?.status ?? ApplicationStatus.SENT;
   const unlink = tentative && email.applicationId !== null && data.unrelated;
+  // One suggestion per application, the newest mail's (#358): this one replaces older ones, and a newer one wins over it.
+  const suggests = !unlink && email.application !== null && worthSuggesting(current, data.suggestedStatus);
+  const newerSuggestion =
+    suggests && email.applicationId
+      ? await prisma.emailMessage.count({ where: { applicationId: email.applicationId, id: { not: emailId }, suggestedStatus: { not: null }, sentAt: { gt: email.sentAt } } })
+      : 0;
+  const suggested = suggests && newerSuggestion === 0 ? data.suggestedStatus : null;
   await prisma.$transaction([
     prisma.emailMessage.update({
       where: { id: emailId },
@@ -217,13 +244,20 @@ export async function readReply(emailId: string, signal?: AbortSignal, { tentati
         kind: data.kind,
         summary: data.summary,
         questions: data.questions,
-        suggestedStatus: !unlink && email.application && worthSuggesting(current, data.suggestedStatus) ? data.suggestedStatus : null,
+        suggestedStatus: suggested,
         confirmedAt: data.confirmedAt,
         classifiedWith: promptVersion,
         // Acknowledgements and rejections need no answer.
         ...(data.kind === "ACKNOWLEDGEMENT" || data.kind === "REJECTION" ? { handledAt: new Date() } : {}),
       },
     }),
+    // An offer fills in the application's, unless it has one already (E30-7).
+    ...(data.offer && email.applicationId && !unlink
+      ? [prisma.offer.upsert({ where: { applicationId: email.applicationId }, create: { applicationId: email.applicationId, ...data.offer, fromEmailId: emailId }, update: {} })]
+      : []),
+    ...(suggested && email.applicationId
+      ? [prisma.emailMessage.updateMany({ where: { applicationId: email.applicationId, id: { not: emailId }, suggestedStatus: { not: null } }, data: { suggestedStatus: null } })]
+      : []),
     // The thread was linked through this mail, so the rest of it goes with it.
     ...(unlink ? [prisma.emailMessage.updateMany({ where: { threadId: email.threadId, applicationId: email.applicationId }, data: { applicationId: null, suggestedStatus: null } })] : []),
   ]);
@@ -241,7 +275,7 @@ async function scheduledCheck(): Promise<void> {
   try {
     // Interviews moved or deleted in Google Calendar, whether or not mail is read.
     await pullInterviewEvents().catch((error) => logServerError("calendar check", error));
-    if (connection.canRead && settings.gmailRead) await syncInbox();
+    if (connection.canRead && settings.gmailRead) await syncInbox({ notify: true });
   } finally {
     globalForSync.inboxRunning = false;
   }

@@ -49,7 +49,7 @@ export function WriteMissingDocument({
     });
 
   return (
-    <div className="flex flex-1 justify-center overflow-auto bg-canvas px-10 pt-16 pb-16">
+    <div className="flex flex-1 justify-center overflow-auto bg-canvas px-10 pt-16 pb-[var(--composer-space,4rem)]">
       <div className="flex max-w-[420px] flex-col items-center gap-4 text-center">
         <p className="text-muted">
           {busy

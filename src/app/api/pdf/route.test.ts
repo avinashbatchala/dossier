@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth/session";
 import { renderPdf } from "@/lib/pdf/render";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
+import { profileSettingsFrom } from "@/lib/profile-settings";
+import { loadProfileSettings } from "@/lib/profiles";
 import { settingsFromRows } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
 
@@ -15,6 +17,7 @@ vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/pdf/render", () => ({ renderPdf: vi.fn() }));
 vi.mock("@/lib/profile-data", () => ({ loadProfileName: vi.fn() }));
 vi.mock("@/lib/settings-data", () => ({ loadSettings: vi.fn() }));
+vi.mock("@/lib/profiles", () => ({ loadProfileSettings: vi.fn(), profileIdOr: async (id: string | null) => id ?? "first" }));
 vi.mock("@/lib/prisma", () => ({ prisma: { application: { findUnique: vi.fn() } } }));
 
 const get = (query: string) => GET(new NextRequest(`http://localhost:3000/api/pdf${query}`), undefined);
@@ -34,6 +37,7 @@ beforeEach(() => {
   vi.mocked(loadProfileName).mockResolvedValue("Jane Doe");
   // The defaults, with the pattern "{name} – {company} – {doc}".
   vi.mocked(loadSettings).mockResolvedValue(settingsFromRows([]));
+  vi.mocked(loadProfileSettings).mockResolvedValue(profileSettingsFrom({}));
   vi.mocked(renderPdf).mockClear();
   // An application with both documents.
   vi.mocked(prisma.application.findUnique).mockReset().mockResolvedValue({
@@ -47,7 +51,7 @@ describe("GET /api/pdf", () => {
   it("downloads the base resume, named by the file-name pattern (RES-5, SET-8)", async () => {
     const response = await get("?doc=base");
     expect(response.status).toBe(200);
-    expect(renderPdf).toHaveBeenCalledWith("/print/base");
+    expect(renderPdf).toHaveBeenCalledWith("/print/base?profile=first");
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("content-disposition")).toBe(
       "attachment; filename=\"Jane Doe - Resume.pdf\"; filename*=UTF-8''Jane%20Doe%20%E2%80%93%20Resume.pdf",
@@ -58,21 +62,21 @@ describe("GET /api/pdf", () => {
 
   it("squeezes the base resume a step at a time until it fits one page, when Fit to one page is on (public issue 69)", async () => {
     const pages = (count: number) => new TextEncoder().encode(`%PDF ${"/Type /Page ".repeat(count)}`);
-    vi.mocked(loadSettings).mockResolvedValue(settingsFromRows([{ key: "fitBaseResume", value: "true" }]));
-    vi.mocked(renderPdf).mockImplementation(async (path) => (path === "/print/base?fit=2" ? pages(1) : pages(2)));
+    vi.mocked(loadProfileSettings).mockResolvedValue(profileSettingsFrom({ fitBaseResume: "true" }));
+    vi.mocked(renderPdf).mockImplementation(async (path) => (path === "/print/base?profile=first&fit=2" ? pages(1) : pages(2)));
     expect((await get("?doc=base")).status).toBe(200);
-    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base", "/print/base?fit=1", "/print/base?fit=2"]);
+    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base?profile=first", "/print/base?profile=first&fit=1", "/print/base?profile=first&fit=2"]);
 
     // At its tightest it may still run over: the last try is what's sent.
     vi.mocked(renderPdf).mockClear().mockResolvedValue(pages(2));
     expect((await get("?doc=base")).status).toBe(200);
-    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base", "/print/base?fit=1", "/print/base?fit=2", "/print/base?fit=3", "/print/base?fit=4"]);
+    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base?profile=first", "/print/base?profile=first&fit=1", "/print/base?profile=first&fit=2", "/print/base?profile=first&fit=3", "/print/base?profile=first&fit=4"]);
 
     // Off: one render, pages or not.
-    vi.mocked(loadSettings).mockResolvedValue(settingsFromRows([]));
+    vi.mocked(loadProfileSettings).mockResolvedValue(profileSettingsFrom({}));
     vi.mocked(renderPdf).mockClear().mockResolvedValue(pages(2));
     await get("?doc=base");
-    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base"]);
+    expect(vi.mocked(renderPdf).mock.calls.map(([path]) => path)).toEqual(["/print/base?profile=first"]);
   });
 
   it("answers 404 for documents it doesn't know", async () => {

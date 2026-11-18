@@ -4,7 +4,7 @@ import path from "node:path";
 // What the app remembers between launches: which mode, and which server. It
 // holds no data of the user's, and nothing else reads it.
 
-export type Mode = "local" | "server";
+type Mode = "local" | "server";
 export type Preferences = { mode: Mode | null; serverOrigin: string | null };
 
 const NOTHING: Preferences = { mode: null, serverOrigin: null };

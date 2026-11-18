@@ -13,7 +13,7 @@ import localFont from "next/font/local";
 // back to 400.
 
 /** UI text. */
-export const geist = localFont({
+const geist = localFont({
   src: [
     { path: "./geist/Geist-Regular.woff2", weight: "400" },
     { path: "./geist/Geist-Medium.woff2", weight: "500" },
@@ -25,7 +25,7 @@ export const geist = localFont({
 });
 
 /** Page and section titles; also a resume theme font. */
-export const newsreader = localFont({
+const newsreader = localFont({
   src: [
     { path: "./newsreader/Newsreader-Regular.woff2", weight: "400" },
     { path: "./newsreader/Newsreader-Medium.woff2", weight: "500" },
@@ -44,7 +44,7 @@ export const newsreader = localFont({
 // The remaining fonts are only used on some screens (code-like values, resume
 // themes), so they load when a page uses them instead of being preloaded.
 
-export const plexSans = localFont({
+const plexSans = localFont({
   src: [
     { path: "./ibm-plex-sans/IBMPlexSans-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans/IBMPlexSans-Medium.woff2", weight: "500" },
@@ -56,7 +56,7 @@ export const plexSans = localFont({
   preload: false,
 });
 
-export const plexMono = localFont({
+const plexMono = localFont({
   src: [
     { path: "./ibm-plex-mono/IBMPlexMono-Regular.woff2", weight: "400", style: "normal" },
     { path: "./ibm-plex-mono/IBMPlexMono-Medium.woff2", weight: "500", style: "normal" },
@@ -69,7 +69,7 @@ export const plexMono = localFont({
   preload: false,
 });
 
-export const ebGaramond = localFont({
+const ebGaramond = localFont({
   src: [
     { path: "./eb-garamond/EBGaramond-Regular.woff2", weight: "400" },
     { path: "./eb-garamond/EBGaramond-Medium.woff2", weight: "500" },
@@ -84,7 +84,7 @@ export const ebGaramond = localFont({
 
 // More resume theme fonts: serifs, then sans, then mono.
 
-export const sourceSerif = localFont({
+const sourceSerif = localFont({
   src: [
     { path: "./source-serif-4/SourceSerif4-Regular.woff2", weight: "400" },
     { path: "./source-serif-4/SourceSerif4-Medium.woff2", weight: "500" },
@@ -97,7 +97,7 @@ export const sourceSerif = localFont({
   preload: false,
 });
 
-export const lora = localFont({
+const lora = localFont({
   src: [
     { path: "./lora/Lora-Regular.woff2", weight: "400" },
     { path: "./lora/Lora-Medium.woff2", weight: "500" },
@@ -110,7 +110,7 @@ export const lora = localFont({
   preload: false,
 });
 
-export const libreCaslon = localFont({
+const libreCaslon = localFont({
   src: [
     { path: "./libre-caslon-text/LibreCaslonText-Regular.woff2", weight: "400" },
     { path: "./libre-caslon-text/LibreCaslonText-Medium.woff2", weight: "500" },
@@ -123,7 +123,7 @@ export const libreCaslon = localFont({
   preload: false,
 });
 
-export const playfair = localFont({
+const playfair = localFont({
   src: [
     { path: "./playfair-display/PlayfairDisplay-Regular.woff2", weight: "400" },
     { path: "./playfair-display/PlayfairDisplay-Medium.woff2", weight: "500" },
@@ -136,7 +136,7 @@ export const playfair = localFont({
   preload: false,
 });
 
-export const fraunces = localFont({
+const fraunces = localFont({
   src: [
     { path: "./fraunces/Fraunces-Regular.woff2", weight: "400" },
     { path: "./fraunces/Fraunces-Medium.woff2", weight: "500" },
@@ -149,7 +149,7 @@ export const fraunces = localFont({
   preload: false,
 });
 
-export const inter = localFont({
+const inter = localFont({
   src: [
     { path: "./inter/Inter-Regular.woff2", weight: "400" },
     { path: "./inter/Inter-Medium.woff2", weight: "500" },
@@ -161,7 +161,7 @@ export const inter = localFont({
   preload: false,
 });
 
-export const manrope = localFont({
+const manrope = localFont({
   src: [
     { path: "./manrope/Manrope-Regular.woff2", weight: "400" },
     { path: "./manrope/Manrope-Medium.woff2", weight: "500" },
@@ -173,7 +173,7 @@ export const manrope = localFont({
   preload: false,
 });
 
-export const workSans = localFont({
+const workSans = localFont({
   src: [
     { path: "./work-sans/WorkSans-Regular.woff2", weight: "400" },
     { path: "./work-sans/WorkSans-Medium.woff2", weight: "500" },
@@ -185,7 +185,7 @@ export const workSans = localFont({
   preload: false,
 });
 
-export const spaceGrotesk = localFont({
+const spaceGrotesk = localFont({
   src: [
     { path: "./space-grotesk/SpaceGrotesk-Regular.woff2", weight: "400" },
     { path: "./space-grotesk/SpaceGrotesk-Medium.woff2", weight: "500" },
@@ -197,7 +197,7 @@ export const spaceGrotesk = localFont({
   preload: false,
 });
 
-export const jetbrainsMono = localFont({
+const jetbrainsMono = localFont({
   src: [
     { path: "./jetbrains-mono/JetBrainsMono-Regular.woff2", weight: "400" },
     { path: "./jetbrains-mono/JetBrainsMono-Medium.woff2", weight: "500" },
@@ -219,7 +219,7 @@ export const jetbrainsMono = localFont({
 // (next/font only takes literal options, so the ranges are spelled out.)
 
 /** Greek for serif themes: Newsreader has none, EB Garamond does. */
-export const greekSerif = localFont({
+const greekSerif = localFont({
   src: [
     { path: "./eb-garamond/EBGaramond-Regular.woff2", weight: "400" },
     { path: "./eb-garamond/EBGaramond-Medium.woff2", weight: "500" },
@@ -233,7 +233,7 @@ export const greekSerif = localFont({
 });
 
 /** Greek for sans and mono themes: Geist and Plex Mono have none, Plex Sans does. */
-export const greekSans = localFont({
+const greekSans = localFont({
   src: [
     { path: "./ibm-plex-sans/IBMPlexSans-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans/IBMPlexSans-Medium.woff2", weight: "500" },
@@ -247,7 +247,7 @@ export const greekSans = localFont({
 });
 
 /** Arabic and Persian. */
-export const plexSansArabic = localFont({
+const plexSansArabic = localFont({
   src: [
     { path: "./ibm-plex-sans-arabic/IBMPlexSansArabic-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-arabic/IBMPlexSansArabic-Medium.woff2", weight: "500" },
@@ -260,7 +260,7 @@ export const plexSansArabic = localFont({
 });
 
 /** Hindi. */
-export const plexSansDevanagari = localFont({
+const plexSansDevanagari = localFont({
   src: [
     { path: "./ibm-plex-sans-devanagari/IBMPlexSansDevanagari-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-devanagari/IBMPlexSansDevanagari-Medium.woff2", weight: "500" },
@@ -273,7 +273,7 @@ export const plexSansDevanagari = localFont({
 });
 
 /** Japanese: kana and the JIS kanji. */
-export const plexSansJp = localFont({
+const plexSansJp = localFont({
   src: [
     { path: "./ibm-plex-sans-jp/IBMPlexSansJP-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-jp/IBMPlexSansJP-Medium.woff2", weight: "500" },
@@ -286,7 +286,7 @@ export const plexSansJp = localFont({
 });
 
 /** Korean: every Hangul syllable. */
-export const plexSansKr = localFont({
+const plexSansKr = localFont({
   src: [
     { path: "./ibm-plex-sans-kr/IBMPlexSansKR-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-kr/IBMPlexSansKR-Medium.woff2", weight: "500" },
@@ -301,7 +301,7 @@ export const plexSansKr = localFont({
 });
 
 /** Simplified Chinese: the GB 2312 characters, regular and semibold (see README.md). */
-export const notoSansSc = localFont({
+const notoSansSc = localFont({
   src: [
     { path: "./noto-sans-sc/NotoSansSC-Regular.woff2", weight: "400" },
     { path: "./noto-sans-sc/NotoSansSC-SemiBold.woff2", weight: "600" },
@@ -310,6 +310,17 @@ export const notoSansSc = localFont({
   adjustFontFallback: false,
   preload: false,
   declarations: [{ prop: "unicode-range", value: "U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF" }],
+});
+
+/**
+ * The dashboard's daily note (E27-1, #523): Caveat, hand-written. UI only,
+ * never in a document, so it's a Latin subset and isn't preloaded (see README.md).
+ */
+const caveat = localFont({
+  src: [{ path: "./caveat/Caveat-Medium.woff2", weight: "500" }],
+  variable: "--typeface-caveat",
+  fallback: ["cursive"],
+  preload: false,
 });
 
 /** Class names that define every --typeface-* variable; set on <html>. */
@@ -336,6 +347,7 @@ export const fontVariables = [
   plexSansJp,
   plexSansKr,
   notoSansSc,
+  caveat,
 ]
   .map((font) => font.variable)
   .join(" ");

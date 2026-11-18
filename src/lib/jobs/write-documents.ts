@@ -10,7 +10,7 @@ import { extractedSchema, matchSchema, unitsSchema } from "@/lib/application-dat
 import { loadProfile } from "@/lib/profile-data";
 import { withoutSectionsOff } from "@/lib/resume-sections";
 import { DOCUMENTS_TO_WRITE } from "@/lib/settings";
-import { loadSettings } from "@/lib/settings-data";
+import { loadProfileSettings } from "@/lib/profiles";
 
 import { WRITE_DOCUMENTS_STEPS } from "./application-steps";
 import { defineJob } from "./runner";
@@ -36,11 +36,13 @@ export const writeDocumentsJob = defineJob({
     note: z.string().max(2000),
     /** Which documents to write (#367); the job agent and the connector write both. */
     write: z.enum(DOCUMENTS_TO_WRITE).default("both"),
+    /** The profile it's tailored from (E24-6); the first when it's missing. */
+    profileId: z.string().min(1).optional(),
   }),
   result: z.object({ resume: unitsSchema, resumeWith: z.string(), letter: unitsSchema, letterWith: z.string() }),
-  async run({ posting, extracted, match, tone, note, write }, { step, signal }) {
+  async run({ posting, extracted, match, tone, note, write, profileId }, { step, signal }) {
     await step(write === "letter" ? WRITE_DOCUMENTS_STEPS[1] : WRITE_DOCUMENTS_STEPS[0]);
-    const [provider, options, fullProfile, settings] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(), loadSettings()]);
+    const [provider, options, fullProfile, settings] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(profileId), loadProfileSettings(profileId)]);
     // A section that's off on the base resume isn't written about (#297).
     const profile = withoutSectionsOff(fullProfile, settings.resumeSections);
     // "Anything I should know?" is the application's first fact (APP-15).
@@ -59,5 +61,4 @@ export const writeDocumentsJob = defineJob({
   },
 });
 
-export type WriteDocumentsInput = z.infer<typeof writeDocumentsJob.input>;
 export type WriteDocumentsResult = z.infer<typeof writeDocumentsJob.result>;

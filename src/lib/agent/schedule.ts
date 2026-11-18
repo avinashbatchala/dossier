@@ -11,8 +11,8 @@ import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
 
 import { AGENT_JOB_KEY, agentScanJob } from "./jobs";
+import { agentSlots } from "./run";
 import { nextSourceBudgetAt, runLimitProblem } from "./runs";
-import { listAgentSearches } from "./searches";
 
 // The job agent's daily run (E16-4): a timer in this process, like the
 // nightly backups and the inbox check, so it's only right with one instance.
@@ -40,18 +40,18 @@ export function scheduledRunDue(now: Date, hour: number, timeZone: string, runs:
  * enabled-search batch fits the rolling budget. The daily hour/timezone is
  * unchanged; a defer is not a second schedule and never runs a subset.
  */
-export function nextAgentRun(now: Date, hour: number, timeZone: string, runs: readonly AgentRun[], requests = 1): Date {
+export function nextAgentRun(now: Date, hour: number, timeZone: string, runs: readonly AgentRun[], slots: readonly string[] = []): Date {
   const today = dayOf(now, timeZone);
   if (!ranToday(runs, now, timeZone)) {
     const due = dueOn(today, hour, timeZone);
     // Overdue: the next check starts it.
-    const eligible = nextSourceBudgetAt(runs, now, requests);
+    const eligible = nextSourceBudgetAt(runs, now, slots);
     // Budget expiry has its own wake-up, not another full 15-minute tick.
     if (eligible > now) return new Date(Math.max(due.getTime(), eligible.getTime()));
     return due > now ? due : new Date(Math.ceil(now.getTime() / EVERY_MS) * EVERY_MS);
   }
   const due = dueOn(addDays(today, 1), hour, timeZone);
-  const eligible = nextSourceBudgetAt(runs, due, requests);
+  const eligible = nextSourceBudgetAt(runs, due, slots);
   return new Date(Math.max(due.getTime(), eligible.getTime()));
 }
 
@@ -60,8 +60,8 @@ export async function startDueRun(now = new Date()): Promise<string | null> {
   const settings = await loadSettings();
   if (!settings.agentEnabled) return null;
   if (!scheduledRunDue(now, settings.agentHour, await lastKnownTimeZone(), settings.agentRuns)) return null;
-  const requests = (await listAgentSearches()).filter((search) => search.enabled).length;
-  if (!requests || runLimitProblem(settings.agentRuns, now, { manual: false, requests })) return null;
+  const slots = await agentSlots();
+  if (slots.length === 0 || runLimitProblem(settings.agentRuns, now, { manual: false, slots })) return null;
   if ((await findUnfinishedJobs(AGENT_JOB_KEY)).length > 0) return null;
   return startJob(agentScanJob, { manual: false }, { key: AGENT_JOB_KEY });
 }
@@ -89,8 +89,7 @@ export async function checkAgentSchedule(): Promise<void> {
   const now = new Date();
   const settings = await loadSettings();
   if (!settings.agentEnabled || !scheduledRunDue(now, settings.agentHour, await lastKnownTimeZone(), settings.agentRuns)) return;
-  const requests = (await listAgentSearches()).filter((search) => search.enabled).length;
-  const wait = nextSourceBudgetAt(settings.agentRuns, now, requests).getTime() - now.getTime();
+  const wait = nextSourceBudgetAt(settings.agentRuns, now, await agentSlots()).getTime() - now.getTime();
   if (wait > 0 && wait <= EVERY_MS) {
     globalForAgent.agentBudgetTimer = setTimeout(() => void checkAgentSchedule().catch((error: unknown) => logServerError("job agent schedule", error)), wait);
     globalForAgent.agentBudgetTimer.unref?.();

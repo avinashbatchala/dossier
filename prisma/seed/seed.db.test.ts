@@ -12,7 +12,11 @@ import { DemoRefused, seedDemo } from "./demo";
 const db = createTestClient();
 const now = new Date("2026-10-10T08:00:00Z");
 const DAY = 86_400_000;
-const basics = async () => basicsFromFields(await db.profileField.findMany());
+// The shared basics, with the first profile's headline and summary (E24-1).
+const basics = async () => {
+  const { headline, summary } = await db.profile.findFirstOrThrow({ orderBy: { sort: "asc" } });
+  return { ...basicsFromFields(await db.profileField.findMany()), headline, summary };
+};
 
 beforeEach(async () => {
   await resetDatabase(db);

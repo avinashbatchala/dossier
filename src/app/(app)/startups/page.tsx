@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { isAiConfigured } from "@/lib/ai/config";
 import { findUnfinishedJobs } from "@/lib/jobs/runner";
 import { loadProfile } from "@/lib/profile-data";
+import { listProfiles } from "@/lib/profiles";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 import { placeOf } from "@/lib/startups/place";
 import { STARTUPS_JOB_KEY } from "@/lib/startups/refresh";
@@ -23,7 +24,7 @@ const VIEW_MARK_MS = 60 * 60 * 1000;
  */
 export default async function StartupsPage({ searchParams }: PageProps<"/startups">) {
   const filter = startupFilterFromParams(await searchParams);
-  const [profile, settings, aiReady, [running]] = await Promise.all([loadProfile(), loadSettings(), isAiConfigured(), findUnfinishedJobs(STARTUPS_JOB_KEY)]);
+  const [profile, settings, aiReady, [running], profiles] = await Promise.all([loadProfile(), loadSettings(), isAiConfigured(), findUnfinishedJobs(STARTUPS_JOB_KEY), listProfiles()]);
   const place = placeOf(profile.basics);
   const now = new Date();
   if (!settings.startupsViewedAt || now.getTime() - Date.parse(settings.startupsViewedAt) > VIEW_MARK_MS) {
@@ -40,6 +41,7 @@ export default async function StartupsPage({ searchParams }: PageProps<"/startup
       headline={profile.basics.headline.trim()}
       aiReady={aiReady}
       today={now.toISOString()}
+      profileNames={profiles.length > 1 ? Object.fromEntries(profiles.map((entry) => [entry.id, entry.name])) : {}}
     />
   );
 }

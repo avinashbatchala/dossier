@@ -29,6 +29,12 @@ describe("LoginForm", () => {
     expect(screen.getByRole("checkbox", { name: "Keep me signed in for 30 days" })).not.toBeChecked();
   });
 
+  it("doesn't offer to keep the sign-in in the desktop app, which always does (#359)", () => {
+    render(<LoginForm keepsSession />);
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
   it("names its fields, so the browser can post them before scripts run", () => {
     const { container } = render(<LoginForm next="/profile" />);
     expect(screen.getByLabelText("Password")).toHaveAttribute("name", "password");

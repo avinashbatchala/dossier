@@ -10,7 +10,7 @@ function describe(item: Trimmed[number]): string {
 }
 
 /** Whether the page limit left it out (E10-10), rather than "Leave out" (#217). */
-export const byPageLimit = (item: Trimmed[number]) => item.kind === "bullets" || !item.byHand;
+const byPageLimit = (item: Trimmed[number]) => item.kind === "bullets" || !item.byHand;
 
 /**
  * What was left out of the resume, each with "Put back": to fit its page

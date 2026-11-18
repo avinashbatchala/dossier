@@ -1,4 +1,5 @@
 import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
+import { SCORER_USAGE } from "@/lib/scoring/scorers";
 
 // Tokens used per AI task (#290): the categories the Usage screen lists, and
 // its figures from what AiUsage holds (src/lib/usage-data.ts).
@@ -6,8 +7,9 @@ import { DASHBOARD_PERIODS, type DashboardPeriod } from "@/lib/dashboard";
 /** Everything that asks the AI model, or Jev, for an answer, in the order the screen lists them at rest. */
 export const USAGE_TASKS = [
   { task: "extract-profile", label: "Importing a profile", hint: "A resume read into your profile" },
-  { task: "score-posting", label: "Scoring postings", hint: "Score in Find jobs, and the job agent" },
-  { task: "score-posting-jev", label: "Scoring postings with Jev", hint: "The same, by TypeSafe's Jev" },
+  { task: "guess-levels", label: "Guessing levels", hint: "Guess with AI on a profile's levels" },
+  // One row per scoring model (E25-2).
+  ...SCORER_USAGE,
   { task: "extract-posting", label: "Reading postings", hint: "What a posting asks for, when you start an application" },
   { task: "match-requirements", label: "Matching requirements", hint: "Your profile against what a posting asks for" },
   { task: "tailor-resume", label: "Writing resumes", hint: "Each application's tailored resume" },
@@ -15,8 +17,12 @@ export const USAGE_TASKS = [
   { task: "write-email", label: "Writing emails", hint: "The email to send with an application" },
   { task: "regenerate-unit", label: "Rewriting parts", hint: "One part of a resume or letter, written again" },
   { task: "refine-chat", label: "Refining in chat", hint: "Changes you ask for in an application's chat" },
+  { task: "answer-question", label: "Answering questions", hint: "Questions you ask about an application (Ask)" },
+  { task: "prepare-interview", label: "Getting ready", hint: "The checklist Prepare writes for an interview" },
+  { task: "write-message", label: "Drafting messages", hint: "Follow-ups, and answers to an offer" },
   { task: "classify-reply", label: "Reading replies", hint: "Employers' mail from Gmail, read in the background" },
   { task: "draft-reply", label: "Drafting answers", hint: "Your answers to employers' replies" },
+  { task: "daily-note", label: "Daily notes", hint: "The dashboard's note, once a day" },
   { task: "connection-check", label: "Connection checks", hint: "Test connection in Settings" },
 ] as const;
 
@@ -51,7 +57,7 @@ export type UsageGroup = {
 export type TokenSum = { tokens: number | null; unreported: number };
 
 export type UsageTotals = { requests: number; input: TokenSum; output: TokenSum; total: number | null };
-export type UsageRow = UsageTotals & { task: UsageTask; label: string; hint: string };
+type UsageRow = UsageTotals & { task: UsageTask; label: string; hint: string };
 export type UsageFigures = { rows: UsageRow[]; total: UsageTotals };
 
 const DAY_MS = 86_400_000;

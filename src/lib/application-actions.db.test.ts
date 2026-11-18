@@ -56,6 +56,14 @@ describe("setArchived (E9-5)", () => {
   it("says so when the application is gone", async () => {
     expect(await setArchived({ id: "gone", archived: true })).toEqual({ ok: false, error: "That application no longer exists." });
   });
+
+  it("clears its mail's status suggestions when archived (#358)", async () => {
+    await prisma().emailMessage.create({
+      data: { gmailId: "m1", threadId: "t1", direction: "INCOMING", fromName: "", fromAddress: "hr@acme.example", subject: "Re: Application", body: "Could we talk?", sentAt: new Date(), applicationId: "app-1", suggestedStatus: "INTERVIEW" },
+    });
+    await setArchived({ id: "app-1", archived: true });
+    expect(await prisma().emailMessage.findUniqueOrThrow({ where: { gmailId: "m1" } })).toMatchObject({ applicationId: "app-1", suggestedStatus: null });
+  });
 });
 
 describe("deleteApplication (E9-5)", () => {

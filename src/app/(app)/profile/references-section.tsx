@@ -8,6 +8,7 @@ import { createReference, removeReference, restoreReference, saveReference } fro
 import { EntryList } from "./entry-list";
 import { useTrackSave } from "@/components/save-tracker";
 import type { UpdateProfile } from "./skills-section";
+import { useProfileId } from "./profile-id";
 
 function ReferenceForm({
   entry,
@@ -67,6 +68,7 @@ function ReferenceForm({
  * Settings allows it (E10-3), and only then are they sent to the AI (PRD §7).
  */
 export function ReferencesSection({ profile, update }: { profile: ProfileData; update: UpdateProfile }) {
+  const profileId = useProfileId();
   return (
     <EntryList
       items={profile.references}
@@ -77,9 +79,9 @@ export function ReferencesSection({ profile, update }: { profile: ProfileData; u
         subtitle: [entry.relation, entry.company].filter((part) => part.trim()).join(" · "),
         meta: entry.email.trim() || undefined,
       })}
-      create={() => createReference({})}
+      create={() => createReference({ profileId })}
       remove={(entry) => removeReference({ id: entry.id })}
-      restore={(entry) => restoreReference(entry)}
+      restore={(entry) => restoreReference({ ...entry, profileId })}
       renderForm={(entry, { onChange, autoFocus }) => (
         <ReferenceForm entry={entry} onChange={onChange} autoFocus={autoFocus} />
       )}

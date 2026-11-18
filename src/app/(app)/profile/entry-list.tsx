@@ -13,7 +13,19 @@ import type { EntryOrder } from "@/lib/profile";
 import { AddEntryButton, DragHandle, EmptyEntries, EntryCard, type Reorder } from "./entry-card";
 import { useTrackSave } from "@/components/save-tracker";
 
-type Summary = { title: string; subtitle: string; meta?: string; footnote?: string };
+type Summary = {
+  title: string;
+  subtitle: string;
+  meta?: string;
+  footnote?: string;
+  /** On the open card's header (E33-2): "Used in 6 of 7 resumes", green when used. */
+  usage?: string;
+  used?: boolean;
+  /** A last line on the closed card: "3 lines · used in 5 resumes". */
+  note?: string;
+  /** Something to fix, with a warning border on the closed card: "No lines yet: …". */
+  warning?: string;
+};
 
 /** How a list can be reordered (E4-9): by date until an entry is moved, then by hand. */
 export type Ordering = {

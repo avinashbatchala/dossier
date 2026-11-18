@@ -5,22 +5,24 @@ import { startupAddress, startupFilterFromParams, startupFilterHref, startupFilt
 describe("the Startups screen's filter in its address (#222)", () => {
   it("reads the filter, with defaults for what's missing or wrong", () => {
     expect(startupFilterFromParams({})).toEqual(startupFilterSchema.parse({}));
-    expect(startupFilterFromParams({ q: ["android", "x"], place: "remote", source: "yc", min: "70", email: "1", view: "saved", sort: "newest" })).toEqual({
+    expect(startupFilterFromParams({ q: ["android", "x"], place: "remote", source: "yc", email: "1", view: "saved", sort: "newest" })).toEqual({
       q: "android",
       place: "remote",
       source: "YC",
-      minScore: 70,
       withEmail: true,
-      status: "SAVED",
+      view: "SAVED",
       sort: "newest",
     });
     expect(startupFilterFromParams({ place: "mars" })).toEqual(startupFilterSchema.parse({}));
+    // Hiring now by default; Contacted from before is Applied for (PL1).
+    expect(startupFilterFromParams({}).view).toBe("HIRING");
+    expect(startupFilterFromParams({ view: "contacted" }).view).toBe("APPLIED");
   });
 
   it("writes it back, leaving out the defaults", () => {
     expect(startupFilterHref(startupFilterSchema.parse({}))).toBe("/startups");
-    const filter = startupFilterSchema.parse({ q: "fintech", place: "country", source: "HN", minScore: 50, withEmail: true, status: "DISMISSED", sort: "newest" });
-    expect(startupFilterHref(filter)).toBe("/startups?q=fintech&place=country&source=hn&min=50&email=1&view=dismissed&sort=newest");
+    const filter = startupFilterSchema.parse({ q: "fintech", place: "country", source: "HN", withEmail: true, view: "DISMISSED", sort: "newest" });
+    expect(startupFilterHref(filter)).toBe("/startups?q=fintech&place=country&source=hn&email=1&view=dismissed&sort=newest");
     expect(startupFilterFromParams(Object.fromEntries(new URL(`https://x${startupFilterHref(filter)}`).searchParams))).toEqual(filter);
   });
 });

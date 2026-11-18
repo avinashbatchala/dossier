@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { DocumentKind } from "@/generated/prisma/enums";
+import { lineText } from "@/lib/changed-lines";
 
 // Schemas for the JSON columns of Application, Document and ChatMessage
 // (prisma/schema.prisma). The AI tasks (src/lib/ai/tasks) produce these
@@ -22,6 +23,12 @@ export const unitSchema = z.object({
    * profile or the posting, shown as "check this" (E8-3). Absent when fine.
    */
   unverified: z.array(z.string()).optional(),
+  /**
+   * Which of the posting's requirements each line serves (E30-4), from the
+   * writing: a line as it reads on the page, and the requirements' texts.
+   * A line edited since no longer matches; documents from before have none.
+   */
+  serves: z.array(z.object({ line: z.string(), requirements: z.array(z.string()) })).optional(),
 });
 export type Unit = z.infer<typeof unitSchema>;
 
@@ -106,10 +113,10 @@ export function extractedOf(application: {
  * a role), partial (the skill is in the profile but not attached to a role)
  * or gap (not in the profile).
  */
-export const matchResults = ["covered", "partial", "gap"] as const;
+const matchResults = ["covered", "partial", "gap"] as const;
 export type MatchResult = (typeof matchResults)[number];
 
-export const matchItemSchema = z.object({
+const matchItemSchema = z.object({
   requirement: z.string(),
   result: z.enum(matchResults),
   /** The profile skill or language the requirement maps to, if any. */
@@ -118,11 +125,44 @@ export const matchItemSchema = z.object({
   experienceIds: z.array(z.string()),
   /** A short explanation, e.g. "Nothing in your profile for this yet". Older matches may promise the letter addresses it. */
   note: z.string().nullable(),
+  /** From the scoring engine (E25-7): a must-have, or a nice-to-have. Missing in matches from before. */
+  mustHave: z.boolean().optional(),
+  /** From the scoring engine: the skill "+ Add to profile" adds for a missing one, or null for none. Missing in matches from before, which use the extracted requirement's. */
+  addable: z.string().nullable().optional(),
 });
 
 /** Application.match */
 export const matchSchema = z.object({ items: z.array(matchItemSchema) });
 export type Match = z.infer<typeof matchSchema>;
+
+/**
+ * How you match from the scoring engine's requirements (E25-7): each covered
+ * with what covers it, or missing, a must-have or a nice-to-have.
+ */
+export function matchFromRequirements(requirements: readonly { text: string; mustHave: boolean; covered: boolean; evidence: string | null; skill?: string | null }[]): Match {
+  return {
+    items: requirements.map((requirement) => ({
+      requirement: requirement.text,
+      result: requirement.covered ? "covered" : "gap",
+      skill: null,
+      experienceIds: [],
+      note: requirement.covered ? requirement.evidence : null,
+      mustHave: requirement.mustHave,
+      addable: requirement.covered ? null : (requirement.skill ?? null),
+    })),
+  };
+}
+
+/**
+ * The skill "+ Add to profile" adds for a requirement (NEW-5): the one the
+ * scoring engine named (E25-7), or, in a match from before, the extracted
+ * requirement's at the same place. Null when there's none to add. The
+ * button and the server action both ask this, so they never disagree (#439).
+ */
+export function addableSkill(item: Match["items"][number], requirement: Requirement | undefined): string | null {
+  if (item.addable !== undefined) return item.addable;
+  return requirement?.kind === "skill" ? requirement.skill : null;
+}
 
 /** A gap after its skill was added to the profile (NEW-5): in the profile, not yet used in a role. */
 export function withSkillAdded(item: Match["items"][number], skill: string): Match["items"][number] {
@@ -137,8 +177,24 @@ export function matchScore(match: Match): { hit: number; total: number } {
   };
 }
 
+/**
+ * The words beside the coverage ring (E30-1): "Strong fit" from how many
+ * requirements are covered, never a score out of 100. A must-have that's
+ * missing keeps it from "Strong fit".
+ */
+export function coverageBand(match: Match): string {
+  const { hit, total } = matchScore(match);
+  if (total === 0) return "Not checked yet";
+  const share = hit / total;
+  const mustHaveMissing = match.items.some((item) => item.result === "gap" && item.mustHave === true);
+  if (share >= 0.7 && !mustHaveMissing) return "Strong fit";
+  if (share >= 0.5) return "Good fit";
+  if (share >= 0.3) return "Partial fit";
+  return "Long shot";
+}
+
 /** One unit change made from the chat, with the text it replaced so it can be undone (APP-8). */
-export const unitEditSchema = z.object({
+const unitEditSchema = z.object({
   document: z.enum(DocumentKind),
   unitId: z.string().min(1),
   text: z.string(),
@@ -147,7 +203,22 @@ export const unitEditSchema = z.object({
   unverified: z.array(z.string()).optional(),
   /** The fact guard's hints on the text it replaced, which Undo brings back. */
   previousUnverified: z.array(z.string()).optional(),
+  /** The requirements the new text serves (E30-12), by their text. */
+  serves: z.array(z.string()).optional(),
 });
+
+/**
+ * A unit's `serves` after an edit (E30-12): its lines still there keep
+ * theirs, and the new lines serve what the edit says.
+ */
+export function servesAfterEdit(unit: Unit, text: string, serves: readonly string[] | undefined): Unit["serves"] {
+  const lines = text.split("\n").map((line) => lineText(line)).filter(Boolean);
+  const before = new Set(unit.text.split("\n").map((line) => lineText(line)));
+  const kept = (unit.serves ?? []).filter((entry) => lines.includes(entry.line));
+  const added = serves && serves.length > 0 ? lines.filter((line) => !before.has(line)).map((line) => ({ line, requirements: [...serves] })) : [];
+  const all = [...kept, ...added];
+  return all.length > 0 ? all : undefined;
+}
 
 /**
  * Document.trimmed (E10-10): what was left out of a tailored resume to fit

@@ -13,6 +13,7 @@ import { frozenProfile, readFrozenCopy } from "@/lib/frozen-copy";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
 import { sectionLayoutSchema } from "@/lib/resume-sections";
+import { loadProfileSettings } from "@/lib/profiles";
 import { loadSettings } from "@/lib/settings-data";
 import { loadTheme, THEME_FIELDS } from "@/lib/theme-data";
 import { BUILT_IN_THEMES, type ThemeData } from "@/lib/themes";
@@ -26,11 +27,14 @@ export const loadApplication = cache(async (id: string) => {
   const application = await prisma.application.findUnique({
     where: { id },
     include: {
-      documents: { include: { theme: { select: THEME_FIELDS } } },
+      documents: { include: { theme: { select: THEME_FIELDS }, _count: { select: { versions: true } } } },
       messages: { orderBy: { createdAt: "asc" } },
       notes: true,
       events: { select: { id: true, to: true, at: true } },
       facts: { select: { id: true, text: true }, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] },
+      knownGaps: { select: { requirement: true } },
+      interviews: { orderBy: { round: "asc" } },
+      offer: true,
     },
   });
   if (!application) notFound();
@@ -59,8 +63,10 @@ export type DocumentData = { units: Unit[]; theme: ThemeData; trimmed?: Trimmed 
  * the same for the page and for printing (E8-8).
  */
 export async function loadDocuments(id: string) {
-  const [application, liveProfile, liveSettings] = await Promise.all([loadApplication(id), loadProfile(), loadSettings()]);
-  const baseTheme = (await loadTheme(liveSettings.baseThemeId)) ?? BUILT_IN_THEMES[0];
+  const application = await loadApplication(id);
+  // Drawn from the profile it was made from (E24-6), or the first when that's gone.
+  const [liveProfile, liveSettings, own] = await Promise.all([loadProfile(application.profileId), loadSettings(), loadProfileSettings(application.profileId)]);
+  const baseTheme = (await loadTheme(own.baseThemeId)) ?? BUILT_IN_THEMES[0];
   // Once it was sent, it's drawn from what it was sent with (#299).
   const copy = readFrozenCopy(application.frozen);
   const profile = copy ? frozenProfile(copy, liveProfile) : liveProfile;
@@ -74,7 +80,7 @@ export async function loadDocuments(id: string) {
   };
   const extracted = readJson(extractedSchema, application.extracted);
   const ownSections = readJson(sectionLayoutSchema, application.sections);
-  const sections = ownSections ?? liveSettings.resumeSections;
+  const sections = ownSections ?? own.resumeSections;
   return {
     application,
     profile,
@@ -83,6 +89,8 @@ export async function loadDocuments(id: string) {
     /** It was sent, so it's drawn from its copy. */
     sent: copy !== null,
     settings,
+    /** The Base resume's theme, which a document without its own uses. */
+    baseThemeId: own.baseThemeId,
     extracted,
     resume: documentData(DocumentKind.RESUME),
     letter: documentData(DocumentKind.COVER_LETTER),

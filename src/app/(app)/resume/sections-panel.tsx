@@ -8,6 +8,7 @@ import { CUSTOM_SECTION_FORMATS, type ProfileData } from "@/lib/profile";
 import { resumeContent, sectionsWithContent } from "@/lib/resume-content";
 import { arrangedSections, customKey, inSidebar, sectionHeading, sectionName, withHeading, withMoved, type SectionLayout } from "@/lib/resume-sections";
 
+import { useProfileId } from "../profile/profile-id";
 import { sectionHref } from "../profile/sections";
 
 /**
@@ -29,6 +30,7 @@ export function SectionsPanel({
   sidebar: boolean;
   onChange: (next: SectionLayout) => void;
 }) {
+  const profileId = useProfileId();
   const { customSections } = profile;
   const customKeys = customSections.map((section) => customKey(section.id));
   const withContent = sectionsWithContent(resumeContent(profile, { includeReferences }));
@@ -54,7 +56,7 @@ export function SectionsPanel({
 
   const editLink = ({ key, name }: SectionRow) =>
     customOf(key) && (
-      <Link href={sectionHref(key as `custom:${string}`)} className={buttonClassName("text", "sm")}>
+      <Link href={sectionHref(key as `custom:${string}`, profileId)} className={buttonClassName("text", "sm")}>
         Edit <span className="sr-only">{name}</span>
       </Link>
     );
@@ -77,7 +79,7 @@ export function SectionsPanel({
         onRename={(key, title) => onChange(withHeading(sections, key, title))}
         actions={(entry) => editLink(entry) || null}
       />
-      <Link href={sectionHref("new")} className={buttonClassName("secondary", "sm", "self-start")}>
+      <Link href={sectionHref("new", profileId)} className={buttonClassName("secondary", "sm", "self-start")}>
         Add a section on your Profile
       </Link>
       {off.length > 0 && (

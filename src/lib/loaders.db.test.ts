@@ -40,14 +40,14 @@ afterAll(() => prisma().$disconnect());
 describe("loadApplicationRows (E9-1)", () => {
   it("lists applications as the board and table show them, archived ones only when asked", async () => {
     await prisma().application.updateMany({ where: { company: "Quill & Co" }, data: { archivedAt: now } });
-    const rows = await loadApplicationRows({ archived: false, sort: DEFAULT_SORT }, now);
+    const rows = await loadApplicationRows({ archived: false, sort: DEFAULT_SORT }, { now, quietDays: 7, timeZone: "Europe/Berlin" });
     expect(rows).toHaveLength(8);
     expect(rows.some((row) => row.company === "Quill & Co")).toBe(false);
     expect(rows.find((row) => row.company === "Oaken Studio")).toMatchObject({ status: "OFFER", sent: expect.stringMatching(/^\d+ \w{3}$/), match: { hit: expect.any(Number), total: expect.any(Number) } });
     expect(rows.find((row) => row.company === "Brightline Transit")).toMatchObject({ status: "DRAFT", sent: null, deadline: expect.stringMatching(/2026$/) });
     expect(rows.map((row) => row.updatedAt)).toEqual([...rows.map((row) => row.updatedAt)].sort((a, b) => b - a));
 
-    const all = await loadApplicationRows({ archived: true, sort: DEFAULT_SORT }, now);
+    const all = await loadApplicationRows({ archived: true, sort: DEFAULT_SORT }, { now, quietDays: 7, timeZone: "Europe/Berlin" });
     expect(all.find((row) => row.company === "Quill & Co")).toMatchObject({ archived: true });
   });
 });

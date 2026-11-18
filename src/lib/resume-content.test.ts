@@ -226,7 +226,7 @@ describe("custom sections (#298)", () => {
   };
   const withSection = (format: "ENTRIES" | "LINES" | "INLINE", items = [item]) => ({
     ...demoProfile(),
-    customSections: [{ id: "s1", title: " Awards ", format, items }],
+    customSections: [{ id: "s1", title: " Awards ", format, countsAs: "EXTRA_ACTIVITIES" as const, items }],
   });
 
   it("shows items with their fields, without the link's scheme", () => {

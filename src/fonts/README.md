@@ -24,8 +24,11 @@ All fonts are licensed under the SIL Open Font License 1.1; each folder has its 
 | `ibm-plex-sans-jp` | IBM Plex Sans JP | 400, 500, 600 | `ofl/ibmplexsansjp/IBMPlexSansJP-{Regular,Medium,SemiBold}.ttf` |
 | `ibm-plex-sans-kr` | IBM Plex Sans KR | 400, 500, 600 | `ofl/ibmplexsanskr/IBMPlexSansKR-{Regular,Medium,SemiBold}.ttf` |
 | `noto-sans-sc` | Noto Sans SC | 400, 600, GB 2312 subset | `ofl/notosanssc/NotoSansSC[wght].ttf` |
+| `caveat` | Caveat | 500, Latin subset | `ofl/caveat/Caveat[wght].ttf` |
 
-The first five were downloaded on 27 September 2026, the script fonts on 28 September 2026, the theme fonts from Source Serif 4 to JetBrains Mono on 3 October 2026, and IBM Plex Mono SemiBold on 4 November 2026. They keep every script the originals cover (the OFL allows this without renaming fonts with a Reserved Font Name such as Plex). The one exception is Noto Sans SC, below.
+The first five were downloaded on 27 September 2026, the script fonts on 28 September 2026, the theme fonts from Source Serif 4 to JetBrains Mono on 3 October 2026, IBM Plex Mono SemiBold on 4 November 2026, and Caveat on 18 November 2026. They keep every script the originals cover (the OFL allows this without renaming fonts with a Reserved Font Name such as Plex). The exceptions are Noto Sans SC, below, and Caveat.
+
+Caveat is only for the dashboard's daily note, never a document (it replaced Kalam in 1.15, #523). It's the variable font pinned at weight 500, then its Cyrillic left out: the file keeps Basic Latin, Latin-1, Latin Extended-A and general punctuation (54 KB instead of 404 KB), made with `fontTools.subset --unicodes="U+0000-017F,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2190-2193,U+2212,U+2215" --layout-features='*' --flavor=woff2`.
 
 ## Static faces, not variable fonts
 

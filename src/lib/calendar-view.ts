@@ -43,9 +43,9 @@ export function addDays(day: Day, count: number): Day {
 }
 
 /** 1 = Monday … 7 = Sunday. */
-export const weekday = (day: Day) => ((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+const weekday = (day: Day) => ((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 
-export const startOfWeek = (day: Day) => addDays(day, 1 - weekday(day));
+const startOfWeek = (day: Day) => addDays(day, 1 - weekday(day));
 
 export const startOfMonth = (day: Day) => `${day.slice(0, 7)}-01`;
 
@@ -90,10 +90,10 @@ export type CalendarItem = {
 } & ({ allDay: false; start: Date; end: Date } | { allDay: true; startDay: Day; endDay: Day });
 
 export type TimedItem = Extract<CalendarItem, { allDay: false }>;
-export type AllDayItem = Extract<CalendarItem, { allDay: true }>;
+type AllDayItem = Extract<CalendarItem, { allDay: true }>;
 
 /** Whether an all-day item covers a day; its end day is the one after it. */
-export const coversDay = (item: AllDayItem, day: Day) => item.startDay <= day && day < item.endDay;
+const coversDay = (item: AllDayItem, day: Day) => item.startDay <= day && day < item.endDay;
 
 /** A day's items: all-day ones first, then by start. One over midnight is on both days. */
 export function itemsOnDay(items: readonly CalendarItem[], day: Day, timeZone: string): CalendarItem[] {

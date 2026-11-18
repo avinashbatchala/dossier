@@ -6,10 +6,10 @@ import type { Unit } from "@/lib/application-data";
 // the history like the resume's and the letter's parts.
 
 export const EMAIL_UNITS = ["to", "subject", "body"] as const;
-export type EmailUnitId = (typeof EMAIL_UNITS)[number];
+type EmailUnitId = (typeof EMAIL_UNITS)[number];
 
 /** The units' labels, as the toolbar, the chat ("About: Subject") and the history name them. */
-export const EMAIL_LABELS: Record<EmailUnitId, string> = { to: "Recipient", subject: "Subject", body: "Message" };
+const EMAIL_LABELS: Record<EmailUnitId, string> = { to: "Recipient", subject: "Subject", body: "Message" };
 
 /** The parts the AI writes and can write again; the recipient comes from the posting or the user. */
 export const WRITTEN_EMAIL_UNITS: ReadonlySet<string> = new Set<EmailUnitId>(["subject", "body"]);

@@ -28,6 +28,7 @@ import { inEditorOrder, skillGroups } from "@/lib/skill-groups";
 
 import { addLanguage, addSkill, removeLanguage, removeSkill, renameSkillGroup, reorderSkills, setLanguageLevel, setSkillGroup, setSkillOrder } from "./actions";
 import { useTrackSave } from "@/components/save-tracker";
+import { useProfileId } from "./profile-id";
 
 export type UpdateProfile = (change: (profile: ProfileData) => ProfileData) => void;
 
@@ -35,7 +36,7 @@ export type UpdateProfile = (change: (profile: ProfileData) => ProfileData) => v
 export type SkillOrder = "relevance" | "manual";
 
 /** A card on the Skills or Languages page: title, "{n} added", content. */
-export function ChipCard({
+function ChipCard({
   title,
   count,
   children,
@@ -64,6 +65,7 @@ export function ChipCard({
  * once set by hand, tailored resumes keep it. Resumes print a line per group.
  */
 function SkillsCard({ profile, update, order }: { profile: ProfileData; update: UpdateProfile; order: SkillOrder }) {
+  const profileId = useProfileId();
   const track = useTrackSave();
   // Made with "New group" and still empty: a group is only saved with its first skill.
   const [emptyGroups, setEmptyGroups] = useState<string[]>([]);
@@ -110,7 +112,7 @@ function SkillsCard({ profile, update, order }: { profile: ProfileData; update: 
     update((current) => ({ ...current, skills: current.skills.toSorted((a, b) => (position.get(a.id) ?? Infinity) - (position.get(b.id) ?? Infinity)) }));
     setMode("manual");
     setAnnouncement(`“${members[from].name}” moved to position ${to + 1} of ${members.length}.`);
-    const result = await track(reorderSkills({ ids }));
+    const result = await track(reorderSkills({ profileId, ids }));
     if (!result.ok) {
       update(() => before.profile);
       setMode(before.mode);
@@ -120,7 +122,7 @@ function SkillsCard({ profile, update, order }: { profile: ProfileData; update: 
 
   async function relevanceFirst() {
     setMode("relevance");
-    const result = await track(setSkillOrder({ order: "relevance" }));
+    const result = await track(setSkillOrder({ profileId, order: "relevance" }));
     if (!result.ok) {
       setMode("manual");
       toast(result.error);
@@ -139,7 +141,7 @@ function SkillsCard({ profile, update, order }: { profile: ProfileData; update: 
       toast(group ? `Moved “${existing.name}” to ${group}.` : `Moved “${existing.name}” out of ${existing.group}.`);
       return true;
     }
-    const result = await track(addSkill({ name, group }));
+    const result = await track(addSkill({ profileId, name, group }));
     if (!result.ok) {
       toast(result.error);
       return false;
@@ -157,7 +159,7 @@ function SkillsCard({ profile, update, order }: { profile: ProfileData; update: 
     }
     const before = profile;
     update((current) => ({ ...current, skills: current.skills.map((skill) => (skill.group === from ? { ...skill, group: to } : skill)) }));
-    const result = await track(renameSkillGroup({ from, to }));
+    const result = await track(renameSkillGroup({ profileId, from, to }));
     if (!result.ok) {
       update(() => before);
       toast(result.error);

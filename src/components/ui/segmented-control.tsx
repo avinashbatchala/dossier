@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
-export type SegmentedOption<T extends string> = { value: T; label: ReactNode };
+type SegmentedOption<T extends string> = { value: T; label: ReactNode; disabled?: boolean };
 
 export type SegmentedControlProps<T extends string> = Omit<
   RadioGroup.RadioGroupProps,
@@ -48,6 +48,7 @@ export function SegmentedControl<T extends string>({
         <RadioGroup.Item
           key={option.value}
           value={option.value}
+          disabled={option.disabled}
           className={cn(
             // The border marks the choice at 3:1 (WCAG 1.4.11); the fill alone is about 1.1:1 on the track.
             "border border-transparent text-ink disabled:cursor-not-allowed disabled:text-muted data-[state=checked]:border-primary data-[state=checked]:bg-card data-[state=checked]:shadow-raised",

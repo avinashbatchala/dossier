@@ -7,16 +7,14 @@ import { ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
 import { approveCandidate } from "@/lib/agent/draft";
 import { isAiUsable } from "@/lib/ai/config";
 import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
-import { scoreFrom } from "@/lib/ai/tasks/score-posting";
 import { unitsSchema } from "@/lib/application-data";
-import { fitBand } from "@/lib/fit";
+import { fitBand, fitFrom } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
 import {
   DEFAULT_RADIUS_KM,
   EXPERIENCE_LEVELS,
   experienceAskedFor,
-  foundPostingSchema,
   POSTED_WITHIN,
   postingText,
   RADII_KM,
@@ -28,21 +26,30 @@ import {
 } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
 import { withoutPrivateParts } from "@/lib/letter-frame";
-import { fetchPosting } from "@/lib/posting-fetch";
+import { FETCH_MESSAGES, fetchPosting } from "@/lib/posting-fetch";
 import { saveScore } from "@/lib/posting-scores";
+import { postingsOfSearch } from "@/lib/library";
 import { loadSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { foundFromPosting, storePosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
 import { withoutSectionsOff } from "@/lib/resume-sections";
-import { loadSettings } from "@/lib/settings-data";
+import { listProfiles, loadProfileSettings, profileNamed } from "@/lib/profiles";
 import { statusInfo } from "@/lib/status";
 import { applyStatusChange } from "@/lib/status-changes";
 import { appVersion } from "@/lib/version";
 
 import { connectorDraftJob } from "./draft";
 import { readPastedPosting } from "./handoff";
-import { saveWrittenApplication, WRITTEN_IN_CLAUDE, writtenDetailsSchema, writtenLetterSchema, writtenMatchSchema, writtenResumeSchema } from "./write";
+import {
+  reviseWrittenApplication,
+  saveWrittenApplication,
+  WRITTEN_IN_CLAUDE,
+  writtenDetailsSchema,
+  writtenLetterSchema,
+  writtenMatchSchema,
+  writtenResumeSchema,
+} from "./write";
 
 // The Claude connector's tools (#221, src/app/api/mcp), adapted from Anirudh
 // Sharma's fork of Dossier: search for jobs, read the profile and the
@@ -122,8 +129,8 @@ async function resolvePosting(source: PostingSource): Promise<ResolvedPosting | 
     return { text: pasted.text, url: pasted.url, postingId: null };
   }
   if (source.search_id) {
-    const search = await prisma.postingSearch.findUnique({ where: { id: source.search_id }, select: { postings: true } });
-    const kept = foundPostingSchema.array().catch([]).parse(search?.postings ?? []);
+    // Numbered in the order the search found them, as search_jobs listed them (E22-5).
+    const kept = await postingsOfSearch(source.search_id);
     const found = source.number ? kept[source.number - 1] : undefined;
     if (!found) return { error: "There's no such posting in that search. Use a number from search_jobs." };
     const description = (await fullText(found)) ?? found.description;
@@ -142,10 +149,15 @@ async function resolvePosting(source: PostingSource): Promise<ResolvedPosting | 
   if (source.posting_url) {
     const fetched = await fetchPosting(source.posting_url);
     if (!fetched.ok) return { error: `${fetched.error} Paste the posting's text as posting_text instead.` };
+    // Menus or links rather than a posting (#232): nothing to write from.
+    if (fetched.doubtful) return { error: `${FETCH_MESSAGES.doubtful} Paste the posting's text as posting_text instead.` };
     return { text: fetched.text, url: fetched.url, postingId: null };
   }
   return { error: "Give posting_id, paste_id, search_id and number, posting_url, or posting_text." };
 }
+
+/** Which of the user's profiles a tool reads (E24-6), by name or id. */
+const profileInput = z.string().max(200).optional().describe("The profile's name, as get_profile lists them; the first profile when left out");
 
 /** Dossier as an MCP server, for one request; `origin` is the address links in answers point to. */
 export function createDossierServer(origin: string): McpServer {
@@ -154,7 +166,7 @@ export function createDossierServer(origin: string): McpServer {
     { name: "dossier", title: "Dossier", version: appVersion },
     {
       instructions:
-        "Dossier is the user's own job search app: one profile, tailored resumes and cover letters, and every application tracked. " +
+        "Dossier is the user's own job search app: their profiles (one per kind of job they look for), tailored resumes and cover letters, and every application tracked. " +
         "Search jobs with search_jobs (in the profile's city and country unless the user says otherwise), " +
         "and when the user wants to know which fit best, score them against the profile and save the scores with save_job_scores. " +
         "To draft an application, you write it yourself: call get_profile and get_posting, write a tailored resume and cover letter " +
@@ -169,12 +181,21 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Read the profile",
       description:
-        "The user's profile in Dossier: headline, summary, facts about them, skills, languages, experience, projects, education, certifications, publications and sections they made, with the ids save_application uses. Contact details and links are left out.",
+        "The user's profile in Dossier: headline, summary, facts about them, skills, languages, experience, projects, education, certifications, publications and sections they made, with the ids save_application uses. Contact details and links are left out. " +
+        "The user can have several profiles, one per kind of job; the answer names them all. Without profile it's the first.",
+      inputSchema: z.object({ profile: profileInput }),
       annotations: { readOnlyHint: true },
     },
-    async () => {
-      const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
-      return text({ ...JSON.parse(profileForPrompt(withoutSectionsOff(profile, settings.resumeSections))), link: linkTo("/profile") });
+    async (input) => {
+      const chosen = await profileNamed(input.profile);
+      if ("error" in chosen) return failure(chosen.error);
+      const [profile, own, all] = await Promise.all([loadProfile(chosen.id), loadProfileSettings(chosen.id), listProfiles()]);
+      return text({
+        profile: chosen.name,
+        ...(all.length > 1 ? { profiles: all.map((entry) => entry.name) } : {}),
+        ...JSON.parse(profileForPrompt(withoutSectionsOff(profile, own.resumeSections))),
+        link: linkTo(`/profile?profile=${chosen.id}`),
+      });
     },
   );
 
@@ -217,7 +238,7 @@ export function createDossierServer(origin: string): McpServer {
         // Left out rather than "any", as Find jobs does (public issue 100).
         ...(input.experience ? { experience: input.experience } : {}),
       };
-      const ran = await runSearch(query);
+      const ran = await runSearch(query, { wait: true });
       if (!ran.ok) return failure(ran.message);
       const search = await loadSearch(ran.id);
       if (!search) return failure("The search ran, but couldn't be read back. Try again.");
@@ -243,7 +264,7 @@ export function createDossierServer(origin: string): McpServer {
     async ({ search_id }) => {
       const before = await prisma.postingSearch.findUnique({ where: { id: search_id }, select: { found: true } });
       if (!before) return failure("That search is no longer kept. Search again.");
-      const more = await showMoreFor(search_id);
+      const more = await showMoreFor(search_id, { wait: true });
       if (!more.ok) return failure(more.message);
       return text({
         search_id,
@@ -279,13 +300,17 @@ export function createDossierServer(origin: string): McpServer {
           )
           .min(1)
           .max(50),
+        profile: profileInput.describe("The profile from get_profile the scores are against; the first when left out"),
       }),
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ search_id, scores }) => {
-      const search = search_id ? await prisma.postingSearch.findUnique({ where: { id: search_id }, select: { postings: true } }) : null;
+    async ({ search_id, scores, profile }) => {
+      // Each posting keeps a score per profile (E25-5).
+      const chosen = await profileNamed(profile);
+      if ("error" in chosen) return failure(chosen.error);
+      const search = search_id ? await prisma.postingSearch.findUnique({ where: { id: search_id }, select: { id: true } }) : null;
       if (search_id && !search) return failure("That search is no longer kept. Search again.");
-      const kept = foundPostingSchema.array().catch([]).parse(search?.postings ?? []);
+      const kept = search ? await postingsOfSearch(search.id) : [];
       const saved: { number?: number; posting_id?: string; title: string; score: number; band: string }[] = [];
       const missing: (number | string)[] = [];
       for (const entry of scores) {
@@ -295,8 +320,8 @@ export function createDossierServer(origin: string): McpServer {
           missing.push(entry.posting_id ?? entry.number ?? "?");
           continue;
         }
-        const fit = scoreFrom({ score: entry.score, reasons: entry.reasons, redFlags: entry.red_flags });
-        await saveScore(posting, fit, WRITTEN_IN_CLAUDE);
+        const fit = fitFrom({ score: entry.score, reasons: entry.reasons, redFlags: entry.red_flags });
+        await saveScore(posting, fit, WRITTEN_IN_CLAUDE, chosen.id);
         saved.push({ number: entry.number, posting_id: entry.posting_id, title: posting.title, score: fit.score, band: fitBand(fit.score) });
       }
       return text({ saved, not_found: missing.length > 0 ? missing : undefined, link: linkTo(search_id ? `/jobs?search=${search_id}` : "/jobs?view=saved") });
@@ -414,7 +439,7 @@ export function createDossierServer(origin: string): McpServer {
       description:
         "Saves a tailored resume and cover letter you wrote as a Draft application in Dossier, where the user can review, edit and download them as PDFs. " +
         "Give the posting (posting_id or paste_id when Dossier handed it over, search_id and number, posting_url or posting_text), its details, the resume (by the ids from get_profile) and the letter. " +
-        "Only use facts from the profile. Nothing is sent.",
+        "Only use facts from the profile. Nothing is sent. To change an application already saved, use update_application instead of saving it again.",
       inputSchema: z.object({
         ...postingSource,
         details: writtenDetailsSchema,
@@ -422,13 +447,17 @@ export function createDossierServer(origin: string): McpServer {
         cover_letter: writtenLetterSchema,
         match: writtenMatchSchema.describe("What the posting asks for and whether the profile covers it, partly covers it, or has a gap; Dossier shows it as the application's match"),
         note: z.string().max(2000).optional().describe("What the user asked to stress, kept with the application"),
+        profile: profileInput.describe("The profile from get_profile the resume was written from; the first when left out"),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
-    async ({ details, resume, cover_letter, match, note, ...source }) => {
+    async ({ details, resume, cover_letter, match, note, profile, ...source }) => {
+      const chosen = await profileNamed(profile);
+      if ("error" in chosen) return failure(chosen.error);
       const posting = await resolvePosting(source);
       if ("error" in posting) return failure(posting.error);
       const saved = await saveWrittenApplication({
+        profileId: chosen.id,
         posting: posting.text.slice(0, 100_000),
         postingUrl: posting.url.slice(0, 2000),
         postingId: posting.postingId,
@@ -449,22 +478,66 @@ export function createDossierServer(origin: string): McpServer {
   );
 
   server.registerTool(
+    "update_application",
+    {
+      title: "Change a draft application",
+      description:
+        "Replaces the resume, the cover letter or the match of a Draft application, for changes the user asks for after save_application. " +
+        "Read it with get_application first and keep what the user changed by hand. Give only the parts that change, each whole, in save_application's form; the rest stays. " +
+        "Only a Draft can be changed. Only use facts from the profile. Nothing is sent.",
+      inputSchema: z.object({
+        application_id: z.string().min(1).max(100),
+        change: z.string().trim().min(1).max(200).describe("What the user asked to change, in a few words, e.g. 'Shorter first bullet'; shown in the document's history"),
+        resume: writtenResumeSchema.optional(),
+        cover_letter: writtenLetterSchema.optional(),
+        // Without save_application's default: a match left out stays as it is.
+        match: writtenMatchSchema.unwrap().optional(),
+      }),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    },
+    async ({ application_id, change, resume, cover_letter, match }) => {
+      if (!resume && !cover_letter && !match) return failure("Give the resume, cover_letter or match to change.");
+      const revised = await reviseWrittenApplication(application_id, { resume, letter: cover_letter, match, change });
+      if ("error" in revised) return failure(revised.error);
+      return text({
+        application_id,
+        status: "Draft",
+        link: linkTo(`/applications/${application_id}`),
+        check_these: revised.unverified.length > 0 ? revised.unverified : undefined,
+        next: revised.unverified.length > 0 ? "Dossier marked names or numbers it couldn't find in the profile or posting; tell the user to check them." : undefined,
+      });
+    },
+  );
+
+  server.registerTool(
     "draft_application",
     {
       title: "Have Dossier draft an application",
       description:
         "Has Dossier's own AI model draft the application, only when an AI provider is set up in Dossier's settings. " +
         "Without one, write it yourself with get_profile, get_posting and save_application. Takes one to three minutes: follow it with check_draft.",
-      inputSchema: z.object({ ...postingSource, note: z.string().max(2000).optional().describe("Anything the documents should stress, in the user's words") }),
+      inputSchema: z.object({
+        ...postingSource,
+        note: z.string().max(2000).optional().describe("Anything the documents should stress, in the user's words"),
+        profile: profileInput.describe("The profile to write it from; the first when left out"),
+      }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
-    async ({ note, ...source }) => {
+    async ({ note, profile, ...source }) => {
       if (!(await isAiUsable())) {
         return failure("Dossier has no AI model of its own set up. Write the application yourself: get_profile, get_posting, then save_application.");
       }
+      const chosen = await profileNamed(profile);
+      if ("error" in chosen) return failure(chosen.error);
       const posting = await resolvePosting(source);
       if ("error" in posting) return failure(posting.error);
-      const jobId = await startJob(connectorDraftJob, { posting: posting.text.slice(0, 100_000), postingUrl: posting.url.slice(0, 2000), note: note ?? "", postingId: posting.postingId });
+      const jobId = await startJob(connectorDraftJob, {
+        posting: posting.text.slice(0, 100_000),
+        postingUrl: posting.url.slice(0, 2000),
+        note: note ?? "",
+        postingId: posting.postingId,
+        profileId: chosen.id,
+      });
       return text({ draft_id: jobId, status: "started", next: "Call check_draft with this draft_id in a minute or so." });
     },
   );

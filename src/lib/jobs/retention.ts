@@ -11,7 +11,7 @@ import { removeOldZips } from "./zip-pdfs";
 // for Undo on its toast, for a resume reading or a New application draft
 // still waiting to be used. What it holds (a posting, a resume's text,
 // drafts) is either in an application by then or was never used, so it's
-// deleted once it's older than "Keep task data for" in Settings → Your data.
+// deleted once it's older than "Keep task data for" in Settings → Data and backups.
 // A plain timer in this process, like the nightly backups.
 
 const HOUR_MS = 60 * 60 * 1000;

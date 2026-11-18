@@ -11,7 +11,7 @@ import { timedFetch } from "./timed-fetch";
 import { OpenAICompatibleProvider } from "./openai-compatible";
 
 /** The context Dossier's prompts need, as for Ollama. */
-export const LMSTUDIO_CONTEXT_TOKENS = 16_384;
+const LMSTUDIO_CONTEXT_TOKENS = 16_384;
 
 /** Room for a model to think before it writes; the thinking counts towards `max_tokens`. */
 const THINKING_TOKENS = 4_096;

@@ -17,18 +17,18 @@ vi.mock("./actions", () => ({
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
-const local: AiSettingsView = { provider: "LOCAL", baseUrl: "http://ollama:11434", model: "qwen2.5:3b", keyState: "none", timeoutSeconds: null, envTimeoutSeconds: null };
+const local: AiSettingsView = { provider: "LOCAL", baseUrl: "http://ollama:11434", model: "qwen2.5:3b", keyState: "none", keyEnding: null, test: null, timeoutSeconds: null, envTimeoutSeconds: null };
 
 beforeEach(() => {
-  vi.mocked(saveAiProvider).mockReset().mockResolvedValue({ ok: true, data: { keyState: "none" } });
-  vi.mocked(saveApiKey).mockReset().mockResolvedValue({ ok: true, data: { keyState: "set" } });
+  vi.mocked(saveAiProvider).mockReset().mockResolvedValue({ ok: true, data: { keyState: "none", keyEnding: null } });
+  vi.mocked(saveApiKey).mockReset().mockResolvedValue({ ok: true, data: { keyState: "set", keyEnding: "3f9a" } });
   vi.mocked(saveAiTimeout).mockReset().mockImplementation(async ({ seconds }) => ({ ok: true, data: { seconds } }));
   vi.mocked(listAiModels).mockReset().mockResolvedValue({ ok: true, data: { models: ["llama3.1:8b", "qwen2.5:3b"], problem: null } });
-  vi.mocked(testAiConnection).mockReset().mockResolvedValue({ ok: true, data: { connected: true, model: "qwen2.5:3b", seconds: 1.4 } });
+  vi.mocked(testAiConnection).mockReset().mockResolvedValue({ ok: true, data: { connected: true, model: "qwen2.5:3b", seconds: 1.4, at: "2026-11-17T10:00:00.000Z" } });
 });
 
 describe("AiProviderSection", () => {
-  it("shows the providers as a radio group, and the fields for the chosen one (SET-1)", async () => {
+  it("shows the providers as a radio group with where each runs, and the fields for the chosen one (SET-1, E34-4)", async () => {
     render(<AiProviderSection initial={local} />);
     expect(screen.getByRole("heading", { name: "AI provider" })).toBeInTheDocument();
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("aria-label"))).toEqual([
@@ -39,56 +39,77 @@ describe("AiProviderSection", () => {
       "Mistral",
     ]);
     expect(screen.getByRole("radio", { name: "Local model" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Local model" })).toHaveAccessibleDescription(/^On your hardware\. Runs on your own hardware/);
+    expect(screen.getByRole("radio", { name: "OpenAI-compatible" })).toHaveAccessibleDescription(/^Hosted or yours, by its address\./);
+    expect(screen.getByRole("radio", { name: "Anthropic" })).toHaveAccessibleDescription(/^Hosted\./);
+    expect(screen.getByRole("radio", { name: "Mistral" })).toHaveAccessibleDescription(/^Hosted, in the EU\./);
     expect(screen.getByLabelText("Server address")).toHaveValue("http://ollama:11434");
     expect(await screen.findByRole("option", { name: "llama3.1:8b" })).toBeInTheDocument();
     expect(screen.getByLabelText("Model")).toHaveValue("qwen2.5:3b");
     expect(screen.getByText("Not needed for a local model")).toBeInTheDocument();
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
-  it("fills in a hosted provider's defaults, says what's sent to it and saves at once", async () => {
+  it("counts an OpenAI-compatible server on the local network as on your hardware (ST3)", () => {
+    render(<AiProviderSection initial={{ ...local, provider: "OPENAI", baseUrl: "http://192.168.1.20:8080/v1" }} />);
+    expect(screen.getByRole("radio", { name: "OpenAI-compatible" })).toHaveAccessibleDescription(/^On your hardware\./);
+  });
+
+  it("fills in a hosted provider's defaults and saves at once", async () => {
     render(<AiProviderSection initial={local} />);
     await userEvent.click(screen.getByRole("radio", { name: "Anthropic" }));
     expect(screen.getByLabelText("Server address")).toHaveValue("https://api.anthropic.com");
-    expect(screen.getByRole("note")).toHaveTextContent(/^Anthropic receives what each task needs: your profile without contact details, .* the drafts and your chat messages\. Importing a resume sends its whole text/);
-    expect(screen.getByRole("note")).toHaveTextContent(/depend on your account with Anthropic\.$/);
     expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "Stored encrypted on your server");
     await waitFor(() =>
       expect(saveAiProvider).toHaveBeenCalledWith({ provider: "ANTHROPIC", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5" }),
     );
   });
 
-  it("fills in Mistral's address and model, and names Mistral in the note (#206)", async () => {
+  it("fills in Mistral's address and model (#206)", async () => {
     render(<AiProviderSection initial={local} />);
     await userEvent.click(screen.getByRole("radio", { name: "Mistral" }));
     expect(screen.getByLabelText("Server address")).toHaveValue("https://api.mistral.ai/v1");
-    expect(screen.getByRole("note")).toHaveTextContent(/^Mistral receives what each task needs: .* depend on your account with Mistral\.$/);
     expect(screen.getByLabelText("API key")).toBeInTheDocument();
     await waitFor(() =>
       expect(saveAiProvider).toHaveBeenCalledWith({ provider: "MISTRAL", baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-2603" }),
     );
   });
 
-  it("fills in LM Studio on the Docker host, with an optional token and no note about data leaving (#210)", async () => {
+  it("fills in LM Studio on the Docker host, with an optional token (#210)", async () => {
     render(<AiProviderSection initial={local} />);
     await userEvent.click(screen.getByRole("radio", { name: "LM Studio" }));
     expect(screen.getByLabelText("Server address")).toHaveValue("http://host.docker.internal:1234");
     expect(screen.getByText(/Serve on Local Network/)).toBeInTheDocument();
     expect(screen.getByLabelText("API token")).toBeInTheDocument();
     expect(screen.getByText("Only needed if you've turned on authentication in LM Studio's server settings.")).toBeInTheDocument();
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
     await waitFor(() => expect(saveAiProvider).toHaveBeenCalledWith({ provider: "LMSTUDIO", baseUrl: "http://host.docker.internal:1234", model: "" }));
   });
 
-  it("saves a key when you leave the field, then forgets it in the browser (E6-2)", async () => {
+  it("saves a key when you leave the field, then shows only its last four characters, with Replace (E6-2, ST4)", async () => {
+    const user = userEvent.setup();
     render(<AiProviderSection initial={{ ...local, provider: "ANTHROPIC", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5" }} />);
-    await userEvent.type(screen.getByLabelText("API key"), "sk-ant-secret");
-    await userEvent.tab();
-    expect(saveApiKey).toHaveBeenCalledWith({ provider: "ANTHROPIC", change: { action: "set", value: "sk-ant-secret" } });
-    await waitFor(() => expect(screen.getByLabelText("API key")).toHaveValue(""));
-    expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "Saved · type a new key to replace it");
-    await userEvent.click(screen.getByRole("button", { name: "Remove saved key" }));
+    await user.type(screen.getByLabelText("API key"), "sk-ant-secret-3f9a");
+    await user.tab();
+    expect(saveApiKey).toHaveBeenCalledWith({ provider: "ANTHROPIC", change: { action: "set", value: "sk-ant-secret-3f9a" } });
+    const saved = await screen.findByRole("group", { name: "API key" });
+    expect(saved).toHaveTextContent("••••••••Saved, ending in 3f9a");
+    expect(screen.queryByLabelText("API key", { selector: "input" })).not.toBeInTheDocument();
+
+    // Replace opens the field; Keep the saved key closes it again.
+    await user.click(screen.getByRole("button", { name: "Replace" }));
+    expect(screen.getByLabelText("API key")).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Keep the saved key" }));
+    expect(screen.getByRole("group", { name: "API key" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove saved key" }));
     expect(saveApiKey).toHaveBeenLastCalledWith({ provider: "ANTHROPIC", change: { action: "clear" } });
+  });
+
+  it("shows a key from DOSSIER_AI_KEY as that, with Replace to save one here", async () => {
+    render(<AiProviderSection initial={{ ...local, provider: "ANTHROPIC", baseUrl: "https://api.anthropic.com", keyState: "env" }} />);
+    expect(screen.getByRole("group", { name: "API key" })).toHaveTextContent("From DOSSIER_AI_KEY");
+    expect(screen.queryByRole("button", { name: "Remove saved key" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+    expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "Type the new key");
   });
 
   it("says when a saved key can't be read", () => {
@@ -96,15 +117,22 @@ describe("AiProviderSection", () => {
     expect(screen.getByText("Your saved API key can't be read. Please enter it again.")).toBeInTheDocument();
   });
 
-  it("tests the connection and reports the latency (SET-2)", async () => {
+  it("tests the connection and reports the latency, with Test again (SET-2, E34-4)", async () => {
     render(<AiProviderSection initial={local} />);
     expect(screen.getByRole("status")).toHaveTextContent("Not tested since your last change");
     await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
-    expect(await screen.findByText("Connected · qwen2.5:3b answered in 1.4 s")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(/^✓Connected\. qwen2\.5:3b answered in 1\.4 s · tested (today at \d\d:\d\d|on 17 Nov)/);
+    expect(screen.getByRole("button", { name: "Test again" })).toBeInTheDocument();
+  });
+
+  it("starts with the last test's result, kept on the server (E34-1)", () => {
+    render(<AiProviderSection initial={{ ...local, test: { at: "2026-11-12T09:00:00.000Z", ok: false, seconds: null, error: "Anthropic rejected the key." } }} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/^!Anthropic rejected the key\. · tested on 12 Nov/);
+    expect(screen.getByRole("button", { name: "Test again" })).toBeInTheDocument();
   });
 
   it("shows a failure in plain words, and forgets the result after any change", async () => {
-    vi.mocked(testAiConnection).mockResolvedValue({ ok: true, data: { connected: false, message: "Couldn't reach the server. Check the address and that it's running." } });
+    vi.mocked(testAiConnection).mockResolvedValue({ ok: true, data: { connected: false, message: "Couldn't reach the server. Check the address and that it's running.", at: "2026-11-17T10:00:00.000Z" } });
     render(<AiProviderSection initial={local} />);
     await userEvent.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByText(/^Couldn't reach the server/)).toBeInTheDocument();
@@ -113,7 +141,7 @@ describe("AiProviderSection", () => {
   });
 
   it("says when a new address took the saved key (public PR 107)", async () => {
-    vi.mocked(saveAiProvider).mockResolvedValue({ ok: true, data: { keyState: "none", keyRemoved: true } });
+    vi.mocked(saveAiProvider).mockResolvedValue({ ok: true, data: { keyState: "none", keyEnding: null, keyRemoved: true } });
     render(<AiProviderSection initial={{ ...local, provider: "OPENAI", baseUrl: "https://openrouter.ai/api/v1", model: "", keyState: "set" }} />);
     await userEvent.clear(screen.getByLabelText("Server address"));
     await userEvent.type(screen.getByLabelText("Server address"), "https://api.deepseek.com");

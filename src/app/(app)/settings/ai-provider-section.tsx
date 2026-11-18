@@ -14,14 +14,17 @@ import { AI_TIMEOUT_LIMITS, API_KEY_UNREADABLE, defaultTimeoutSeconds, PROVIDER_
 import { cn } from "@/lib/cn";
 import { useAutosave } from "@/hooks/use-autosave";
 
+import { formatShortDate } from "@/lib/dates";
+
 import { listAiModels, saveAiProvider, saveAiTimeout, saveApiKey, testAiConnection } from "./actions";
+import { publishAiChoice, whereItRuns } from "./ai-data-flows";
 import { SettingsSectionIntro } from "./settings-screen";
 
 type Connection =
   | { status: "untested" }
   | { status: "testing" }
-  | { status: "connected"; model: string; seconds: number }
-  | { status: "failed"; message: string };
+  | { status: "connected"; model: string; seconds: number; at: string }
+  | { status: "failed"; message: string; at: string };
 
 type ModelList = { loading: true } | { loading: false; models: string[]; problem: string | null };
 
@@ -31,14 +34,29 @@ const toModelList = (result: Awaited<ReturnType<typeof listAiModels>>): ModelLis
 const OTHER_MODEL = "__other";
 const looksLikeUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
 
-/** What a hosted model is sent (profileForPrompt and the tasks in src/lib/ai/tasks; PRIVACY.md). */
-const SENT_TO_HOSTED =
-  "your profile without contact details, your facts about you, the postings you add and the facts you give for each one, and, when you refine, the drafts and your chat messages. Importing a resume sends its whole text, contact details included. With Gmail connected, it also gets each reply it reads or answers, with earlier mail in the thread. The notes you keep on an application are never sent.";
+/** Under each provider's name (E34-4, ST3): where it runs. */
+const WHERE_WORDS = { computer: "On your hardware", network: "On your hardware", hosted: "Hosted" } as const;
+
+function whereLine(provider: AiProvider, baseUrl: string, chosen: boolean): string {
+  if (provider === "MISTRAL") return "Hosted, in the EU";
+  // An OpenAI-compatible server is either, by its address; until it's chosen, it could be.
+  if (provider === "OPENAI" && !chosen) return "Hosted or yours, by its address";
+  return WHERE_WORDS[whereItRuns(provider, baseUrl)];
+}
+
+/** The saved test's result, as the section starts (E34-1). */
+const savedConnection = (initial: AiSettingsView): Connection =>
+  !initial.test
+    ? { status: "untested" }
+    : initial.test.ok
+      ? { status: "connected", model: initial.model, seconds: initial.test.seconds ?? 0, at: initial.test.at }
+      : { status: "failed", message: initial.test.error ?? "The connection test failed.", at: initial.test.at };
 
 /**
- * Settings → AI provider (E6-3, SET-1, SET-2). Each field saves on its own:
- * picking a card or a model right away, typing once you pause. The key is
- * saved when you leave its field and never shown again.
+ * Settings → AI provider (E6-3, SET-1, SET-2, E34-4). Each field saves on
+ * its own: picking a card or a model right away, typing once you pause.
+ * A saved key shows its last four characters, and Replace opens the field
+ * (ST4). The connection test stays a button; its last result is kept.
  */
 export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
   const track = useTrackSave();
@@ -46,10 +64,12 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
   const [model, setModel] = useState(initial.model);
   const [keyState, setKeyState] = useState(initial.keyState);
+  const [keyEnding, setKeyEnding] = useState(initial.keyEnding);
+  const [replacingKey, setReplacingKey] = useState(false);
   const [keyInput, setKeyInput] = useState("");
   const [otherModel, setOtherModel] = useState(false);
   const [urlLeft, setUrlLeft] = useState(false);
-  const [connection, setConnection] = useState<Connection>({ status: "untested" });
+  const [connection, setConnection] = useState<Connection>(() => savedConnection(initial));
   const [modelList, setModelList] = useState<ModelList>({ loading: true });
   const [timeoutInput, setTimeoutInput] = useState(initial.timeoutSeconds === null ? "" : String(initial.timeoutSeconds));
   const [timeoutProblem, setTimeoutProblem] = useState(false);
@@ -77,12 +97,16 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
   // SET-2: any change to the provider fields means the last test no longer counts.
   const changed = () => setConnection({ status: "untested" });
 
+  // The column beside the section follows the provider chosen here.
+  useEffect(() => publishAiChoice({ provider, baseUrl }), [provider, baseUrl]);
+
   const fields = useMemo(() => ({ provider, baseUrl, model }), [provider, baseUrl, model]);
   const savedServer = useRef(`${initial.provider} ${initial.baseUrl}`);
   const { flush } = useAutosave(fields, async (value) => {
     const result = await track(saveAiProvider(value));
     if (result.ok) {
       setKeyState(result.data.keyState);
+      setKeyEnding(result.data.keyEnding);
       if (result.data.keyRemoved) toast("The saved key was for another server, so it's removed. Enter the key for this one.");
       // A different server may offer different models.
       const server = `${value.provider} ${value.baseUrl}`;
@@ -108,6 +132,7 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
     setOtherModel(false);
     setUrlLeft(false);
     setKeyInput("");
+    setReplacingKey(false);
     changed();
     setSaveNow((count) => count + 1);
   };
@@ -116,7 +141,9 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
     const result = toastResult(await track(saveApiKey({ provider, change })));
     if (!result.ok) return;
     setKeyState(result.data.keyState);
+    setKeyEnding(result.data.keyEnding);
     setKeyInput("");
+    setReplacingKey(false);
     changed();
     reloadModels();
   };
@@ -142,9 +169,9 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
     flush();
     setConnection({ status: "testing" });
     const result = await testAiConnection({});
-    if (!result.ok) setConnection({ status: "failed", message: result.error });
-    else if (result.data.connected) setConnection({ status: "connected", model: result.data.model, seconds: result.data.seconds });
-    else setConnection({ status: "failed", message: result.data.message });
+    if (!result.ok) setConnection({ status: "failed", message: result.error, at: new Date().toISOString() });
+    else if (result.data.connected) setConnection({ status: "connected", model: result.data.model, seconds: result.data.seconds, at: result.data.at });
+    else setConnection({ status: "failed", message: result.data.message, at: result.data.at });
   };
 
   const models = [...new Set([...(modelList.loading ? [] : modelList.models), model].filter(Boolean))];
@@ -152,14 +179,14 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
   return (
     <>
       <SettingsSectionIntro title="AI provider">
-        This is what reads job postings and writes your drafts. A local model keeps everything on your machine.
+        The model that reads postings and writes your documents. A local one keeps everything on your hardware.
       </SettingsSectionIntro>
 
       <RadioGroup.Root
         aria-label="Provider"
         value={provider}
         onValueChange={(value) => chooseProvider(value as AiProvider)}
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        className="grid grid-cols-1 gap-3 @md:grid-cols-2 @3xl:grid-cols-3"
       >
         {PROVIDER_OPTIONS.map((entry) => (
           <RadioGroup.Item
@@ -167,32 +194,25 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
             value={entry.value}
             aria-label={entry.name}
             aria-describedby={`provider-${entry.value}`}
-            className="group flex flex-col gap-1.5 rounded-card border border-line-card bg-card p-[18px] text-left hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:shadow-[0_0_0_1px_var(--color-primary)]"
+            className="group flex items-start gap-3 rounded-card border border-line-card bg-card px-4 py-3.5 text-left hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:shadow-[0_0_0_1px_var(--color-primary)]"
           >
-            <span className="flex items-center justify-between gap-2">
-              <span className="text-[15px] font-medium">{entry.name}</span>
-              <span
-                aria-hidden
-                className="grid size-4 place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-primary"
-              >
-                <RadioGroup.Indicator className="size-2 rounded-full bg-primary" />
-              </span>
+            <span
+              aria-hidden
+              className="mt-[3px] grid size-4 flex-none place-items-center rounded-full border-[1.5px] border-line-strong group-data-[state=checked]:border-primary"
+            >
+              <RadioGroup.Indicator className="size-2 rounded-full bg-primary" />
             </span>
-            <span id={`provider-${entry.value}`} className="flex flex-col gap-1.5">
-              <span className="text-meta text-muted">{entry.description}</span>
-              <span className="text-xs text-muted">{entry.tag}</span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[15px] font-medium">{entry.name}</span>
+              <span id={`provider-${entry.value}`} className="flex flex-col gap-1">
+                <span className="text-label text-muted">{whereLine(entry.value, entry.value === provider ? baseUrl : entry.defaultUrl, entry.value === provider)}</span>
+                <span className="sr-only">.</span>{" "}
+                <span className="text-label text-pretty text-muted">{entry.description}</span>
+              </span>
             </span>
           </RadioGroup.Item>
         ))}
       </RadioGroup.Root>
-
-      {!option.local && (
-        <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-          {option.vendor
-            ? `${option.vendor} receives what each task needs: ${SENT_TO_HOSTED} How long it's kept and where it's processed depend on your account with ${option.vendor}.`
-            : `This server receives what each task needs: ${SENT_TO_HOSTED} If it isn't on your own network, all this leaves your server, and how long it's kept is up to whoever runs it.`}
-        </p>
-      )}
 
       <Card className="grid grid-cols-1 gap-x-[18px] gap-y-5 sm:grid-cols-2">
         <Input
@@ -259,38 +279,73 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
         </div>
 
         {option.apiKey ? (
-          <div className="flex flex-col gap-2.5">
-            <Input
-              label={option.apiKey.label}
-              hint={keyState === "unreadable" ? undefined : option.apiKey.hint}
-              type="password"
-              autoComplete="off"
-              value={keyInput}
-              placeholder={
-                keyState === "set"
-                  ? "Saved · type a new key to replace it"
-                  : keyState === "env"
-                    ? "Using DOSSIER_AI_KEY · type one to save it here"
-                    : "Stored encrypted on your server"
-              }
-              error={keyState === "unreadable" ? API_KEY_UNREADABLE : undefined}
-              onChange={(event) => setKeyInput(event.target.value)}
-              onBlur={() => {
-                if (keyInput.trim()) void saveKey({ action: "set", value: keyInput });
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && keyInput.trim()) {
-                  event.preventDefault();
-                  void saveKey({ action: "set", value: keyInput });
-                }
-              }}
-            />
-            {(keyState === "set" || keyState === "unreadable") && (
-              <Button variant="text" size="sm" className="self-start" onClick={() => void saveKey({ action: "clear" })}>
-                Remove saved key
-              </Button>
-            )}
-          </div>
+          (keyState === "set" || keyState === "env") && !replacingKey ? (
+            // ST4: the saved key's last four characters, and Replace to type a new one.
+            <div role="group" aria-labelledby="ai-key-label" className="flex flex-col gap-[7px]">
+              <span id="ai-key-label" className="text-label font-medium">
+                {option.apiKey.label}
+              </span>
+              <div className="flex items-center gap-2 rounded-control border border-line-input bg-input py-1 pr-1 pl-3">
+                <span className="min-w-0 flex-1 truncate font-mono text-[13.5px]">
+                  {keyState === "env" ? "From DOSSIER_AI_KEY" : keyEnding ? <><span aria-hidden="true">••••••••</span><span className="sr-only">Saved, ending in </span>{keyEnding}</> : "Saved"}
+                </span>
+                <Button variant="text" size="sm" onClick={() => setReplacingKey(true)}>
+                  Replace
+                </Button>
+              </div>
+              {keyState === "set" && (
+                <Button variant="text" size="sm" className="self-start" onClick={() => void saveKey({ action: "clear" })}>
+                  Remove saved key
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              <Input
+                label={option.apiKey.label}
+                hint={keyState === "unreadable" ? undefined : option.apiKey.hint}
+                type="password"
+                autoComplete="off"
+                autoFocus={replacingKey}
+                value={keyInput}
+                placeholder={replacingKey ? "Type the new key" : "Stored encrypted on your server"}
+                error={keyState === "unreadable" ? API_KEY_UNREADABLE : undefined}
+                onChange={(event) => setKeyInput(event.target.value)}
+                onBlur={() => {
+                  if (keyInput.trim()) void saveKey({ action: "set", value: keyInput });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && keyInput.trim()) {
+                    event.preventDefault();
+                    void saveKey({ action: "set", value: keyInput });
+                  }
+                  if (event.key === "Escape" && replacingKey) {
+                    setKeyInput("");
+                    setReplacingKey(false);
+                  }
+                }}
+              />
+              {replacingKey ? (
+                <Button
+                  variant="text"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => {
+                    setKeyInput("");
+                    setReplacingKey(false);
+                  }}
+                >
+                  Keep the saved key
+                </Button>
+              ) : (
+                keyState === "unreadable" && (
+                  <Button variant="text" size="sm" className="self-start" onClick={() => void saveKey({ action: "clear" })}>
+                    Remove saved key
+                  </Button>
+                )
+              )}
+            </div>
+          )
         ) : (
           <div className="flex flex-col gap-[7px]">
             <span className="text-label text-muted">API key</span>
@@ -323,33 +378,60 @@ export function AiProviderSection({ initial }: { initial: AiSettingsView }) {
           }}
         />
 
-        <div className="flex flex-wrap items-center gap-3.5 pt-1 sm:col-span-2">
-          <Button variant="secondary" onClick={() => void test()} disabled={connection.status === "testing"}>
-            {connection.status === "testing" ? "Testing…" : "Test connection"}
-          </Button>
-          <ConnectionStatus connection={connection} />
+        <div className="sm:col-span-2">
+          <ConnectionStatus connection={connection} onTest={() => void test()} />
         </div>
       </Card>
     </>
   );
 }
 
-function ConnectionStatus({ connection }: { connection: Connection }) {
-  const [dot, text, message] =
-    connection.status === "connected"
-      ? ["bg-success", "text-success", `Connected · ${connection.model} answered in ${connection.seconds.toLocaleString("en-US")} s`]
-      : connection.status === "failed"
-        ? ["bg-error", "text-error", connection.message]
-        : connection.status === "testing"
-          ? ["bg-status-offer", "text-muted", "Sending a short test prompt…"]
-          : ["bg-faint", "text-muted", "Not tested since your last change"];
+/** "today at 14:02", or "on 12 Nov": when the shown test ran. */
+function testedWhen(at: string): string {
+  const date = new Date(at);
+  const now = new Date();
+  return date.toDateString() === now.toDateString() ? `today at ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : `on ${formatShortDate(date, now)}`;
+}
+
+/**
+ * The connection test (SET-2, E34-4): a button until it's run; then its
+ * result in one line, success or error, with when and Test again. It's
+ * kept, so it's still there next time, until the provider changes.
+ */
+function ConnectionStatus({ connection, onTest }: { connection: Connection; onTest: () => void }) {
+  if (connection.status === "untested" || connection.status === "testing") {
+    const testing = connection.status === "testing";
+    return (
+      <div className="flex flex-wrap items-center gap-3.5 pt-1">
+        <Button variant="secondary" onClick={onTest} disabled={testing}>
+          {testing ? "Testing…" : "Test connection"}
+        </Button>
+        <p role="status" className="text-control text-muted">
+          {testing ? "Sending a short test prompt…" : "Not tested since your last change"}
+        </p>
+      </div>
+    );
+  }
+  const ok = connection.status === "connected";
   return (
-    <p role="status" className={cn("flex items-start gap-2 text-control", text)}>
-      {/* One line high, so the dot stays by the first line when the message wraps. */}
-      <span aria-hidden className="flex h-lh flex-none items-center">
-        <span className={cn("size-2 rounded-full", dot)} />
-      </span>
-      {message}
-    </p>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-control border px-4 py-3",
+        ok ? "border-success/30 bg-success/8 text-success" : "border-error/30 bg-error/8 text-error",
+      )}
+    >
+      <p role="status" className="flex min-w-0 flex-[1_1_280px] items-start gap-2 text-control text-pretty">
+        <span aria-hidden="true" className="flex-none">
+          {ok ? "✓" : "!"}
+        </span>
+        <span>
+          {ok ? `Connected. ${connection.model} answered in ${connection.seconds.toLocaleString("en-US")} s` : connection.message}
+          <span className="text-muted"> · tested {testedWhen(connection.at)}</span>
+        </span>
+      </p>
+      <Button variant="text" size="sm" onClick={onTest}>
+        Test again
+      </Button>
+    </div>
   );
 }

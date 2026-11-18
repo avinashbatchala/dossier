@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
 import type { EntryOrder, ExperienceItem, ProfileData } from "@/lib/profile";
+import type { RoleUsage } from "@/lib/role-usage-count";
 
 import {
   attachNewSkill,
@@ -51,7 +52,18 @@ const northwind: ExperienceItem = {
 const fieldnote: ExperienceItem = { ...northwind, id: "e2", role: "Product Designer", company: "Fieldnote", current: false, startYear: 2018, startMonth: 6, endYear: 2021, endMonth: 2, skillIds: [] };
 
 let latest: ProfileData;
-function Harness({ order = "date", volunteering = false }: { order?: EntryOrder; volunteering?: boolean }) {
+const noUsage: RoleUsage = { resumes: 0, roles: {} };
+function Harness({
+  order = "date",
+  volunteering = false,
+  usage = noUsage,
+  roles = [northwind, fieldnote],
+}: {
+  order?: EntryOrder;
+  volunteering?: boolean;
+  usage?: RoleUsage;
+  roles?: ExperienceItem[];
+}) {
   const [state, setState] = useState<ProfileData>({
     basics: {} as ProfileData["basics"],
     skills: [
@@ -59,7 +71,7 @@ function Harness({ order = "date", volunteering = false }: { order?: EntryOrder;
       { id: "s2", name: "Figma", group: "" },
     ],
     languages: [],
-    experience: [northwind, fieldnote],
+    experience: roles,
     projects: [],
     education: [],
     certifications: [],
@@ -72,7 +84,7 @@ function Harness({ order = "date", volunteering = false }: { order?: EntryOrder;
   useEffect(() => {
     latest = state;
   });
-  return <ExperienceSection key={String(volunteering)} order={order} profile={state} update={(change) => setState(change)} volunteering={volunteering} />;
+  return <ExperienceSection key={String(volunteering)} order={order} profile={state} update={(change) => setState(change)} usage={usage} volunteering={volunteering} />;
 }
 
 const header = (name: RegExp | string) => screen.getByRole("button", { name, expanded: false });
@@ -140,13 +152,13 @@ describe("ExperienceSection", () => {
     vi.mocked(createExperience).mockResolvedValue({ ok: true, data: { ...northwind, id: "e3", role: "", company: "", volunteering: true, skillIds: [] } });
     render(<Harness volunteering />);
     await user.click(screen.getByRole("button", { name: "+ Add volunteering" }));
-    expect(createExperience).toHaveBeenCalledWith({ volunteering: true });
+    expect(createExperience).toHaveBeenCalledWith({ profileId: "", volunteering: true });
     expect(latest.experience.map((entry) => entry.id)).toContain("e1");
 
     vi.mocked(createExperience).mockResolvedValue({ ok: true, data: { ...northwind, id: "e4", role: "Treasurer", company: "", volunteering: true, skillIds: [] } });
     await user.click(screen.getByRole("button", { name: "+ Add volunteering" }));
     await user.click(screen.getByRole("button", { name: "Move “Treasurer” up" }));
-    expect(reorderEntries).toHaveBeenLastCalledWith({ section: "experience", ids: ["e4", "e3", "e1", "e2"] });
+    expect(reorderEntries).toHaveBeenLastCalledWith({ profileId: "", section: "experience", ids: ["e4", "e3", "e1", "e2"] });
   });
 
   it("adds a blank role and opens it with the cursor in Role", async () => {
@@ -171,14 +183,14 @@ describe("ExperienceSection", () => {
 
     const { action } = vi.mocked(toast).mock.calls.at(-1)![1]!;
     await act(async () => action!.onClick());
-    expect(restoreExperience).toHaveBeenCalledWith(northwind);
+    expect(restoreExperience).toHaveBeenCalledWith({ ...northwind, profileId: "" });
     expect(latest.experience.map((entry) => entry.id)).toEqual(["e1", "e2"]);
   });
 
   it("shows the empty state", () => {
     function Empty() {
       const [state, setState] = useState<ProfileData>({ basics: {} as ProfileData["basics"], skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null });
-      return <ExperienceSection order="date" profile={state} update={(change) => setState(change)} />;
+      return <ExperienceSection order="date" profile={state} update={(change) => setState(change)} usage={noUsage} />;
     }
     render(<Empty />);
     expect(screen.getByText("Nothing here yet. Add your first one below.")).toBeInTheDocument();
@@ -268,7 +280,7 @@ describe("reordering roles (E4-9)", () => {
     const down = screen.getByRole("button", { name: "Move “Senior Product Designer” down" });
     await user.click(down);
     expect(titles()).toEqual(["Product Designer", "Senior Product Designer"]);
-    expect(reorderEntries).toHaveBeenLastCalledWith({ section: "experience", ids: ["e2", "e1"] });
+    expect(reorderEntries).toHaveBeenLastCalledWith({ profileId: "", section: "experience", ids: ["e2", "e1"] });
     expect(screen.getByText("“Senior Product Designer” moved to position 2 of 2.")).toHaveAttribute("role", "status");
     expect(screen.getByText("In your own order.")).toBeInTheDocument();
     // Focus stays on the button, now at the end and marked unavailable.
@@ -282,7 +294,7 @@ describe("reordering roles (E4-9)", () => {
     render(<Harness order="manual" />);
     await user.click(screen.getByRole("button", { name: "Move “Senior Product Designer” down" }));
     await user.click(screen.getByRole("button", { name: "Sort by date" }));
-    expect(sortEntriesByDate).toHaveBeenCalledWith({ section: "experience" });
+    expect(sortEntriesByDate).toHaveBeenCalledWith({ profileId: "", section: "experience" });
     expect(titles()).toEqual(["Senior Product Designer", "Product Designer"]);
     expect(screen.getByText(/^Newest first/)).toBeInTheDocument();
   });
@@ -305,3 +317,32 @@ describe("reordering roles (E4-9)", () => {
   });
 });
 
+
+describe("ExperienceSection's usage and empty roles (E33-2)", () => {
+  it("says how many resumes use each role: on the closed card with its lines, and on the open one's header", async () => {
+    const user = userEvent.setup();
+    render(<Harness usage={{ resumes: 7, roles: { e1: 6 } }} />);
+    expect(header(/^Senior Product Designer/)).toHaveTextContent("1 line · used in 6 resumes");
+    expect(header(/^Product Designer/)).toHaveTextContent("1 line · not used in a resume yet");
+    await user.click(header(/^Senior Product Designer/));
+    expect(screen.getByRole("button", { name: /^Senior Product Designer/, expanded: true })).toHaveTextContent("Used in 6 of 7 resumes");
+  });
+
+  it("leaves the usage out before the first tailored resume", () => {
+    render(<Harness />);
+    expect(header(/^Senior Product Designer/)).toHaveTextContent("1 line");
+    expect(header(/^Senior Product Designer/)).not.toHaveTextContent("resume");
+  });
+
+  it("warns on a paid role with no lines, but not on volunteering", () => {
+    const bare = { ...fieldnote, bullets: " " };
+    const { unmount } = render(<Harness roles={[northwind, bare]} />);
+    const card = header(/^Product Designer/);
+    expect(card).toHaveTextContent("No lines yet: add one or two so the AI has something to work with");
+    expect(card.closest(".border-warning-line")).not.toBeNull();
+    expect(header(/^Senior Product Designer/).closest(".border-warning-line")).toBeNull();
+    unmount();
+    render(<Harness volunteering roles={[{ ...bare, volunteering: true }]} />);
+    expect(header(/^Product Designer/)).not.toHaveTextContent("No lines yet");
+  });
+});

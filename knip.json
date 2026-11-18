@@ -1,0 +1,56 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "tags": [
+    "-lintignore"
+  ],
+  "ignore": [
+    "design/**"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "prisma/seed.ts",
+        "prisma7.config.ts",
+        "docker/studio-proxy.mjs",
+        "playwright.readme.config.ts",
+        "e2e/setup.ts",
+        "e2e/readme-{images,video}.ts",
+        "site/main.js",
+        "site/style.css",
+        "telemetry/src/server.ts",
+        "telemetry/vitest.config.mts"
+      ],
+      "ignoreDependencies": [
+        "@prisma/client"
+      ]
+    },
+    "desktop": {
+      "entry": [
+        "src/{main,preload,bar-preload}.ts",
+        "scripts/*.mjs",
+        "server-tools/*.mjs",
+        "start/*.{js,css}",
+        "bar/*.{js,css}"
+      ],
+      "ignoreDependencies": [
+        "electron-builder"
+      ],
+      "ignoreBinaries": [
+        "electron-builder"
+      ],
+      "ignoreUnresolved": [
+        "./server.js"
+      ]
+    },
+    "desktop/dev": {
+      "entry": [
+        "e2e/**/*.spec.ts",
+        "test/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "openssl",
+        "xdotool"
+      ]
+    }
+  }
+}

@@ -1,8 +1,9 @@
+import { loadProfileSettings, saveProfileSettings } from "@/lib/profiles";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LanguageLevel } from "@/generated/prisma/enums";
 import type { ImportedProfile } from "@/lib/profile-import";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { applyImportedProfile } from "./profile-import-apply";
 
@@ -20,6 +21,7 @@ afterAll(() => prisma().$disconnect());
 const noDates = { startYear: null, startMonth: null, endYear: null, endMonth: null, current: false };
 const imported: ImportedProfile = {
   leftOut: [],
+  levels: null,
   basics: { name: "John Doe", city: "Utrecht" },
   skills: [
     { name: "figma", found: true },
@@ -52,24 +54,24 @@ const imported: ImportedProfile = {
 /** A profile with a name, email, two skills, Dutch at C1, the Fieldnote role and a reference. */
 async function existingProfile() {
   await prisma().profileField.createMany({ data: [{ key: "name", value: "John D." }, { key: "email", value: "john@example.com" }] });
-  const figma = await prisma().skill.create({ data: { name: "Figma", sort: 0 } });
-  await prisma().skill.create({ data: { name: "Prototyping", sort: 1 } });
+  const figma = await prisma().skill.create({ data: { profileId: TEST_PROFILE_ID, name: "Figma", sort: 0 } });
+  await prisma().skill.create({ data: { profileId: TEST_PROFILE_ID, name: "Prototyping", sort: 1 } });
   await prisma().language.create({ data: { name: "Dutch", level: LanguageLevel.C1, sort: 0 } });
   await prisma().experience.create({
-    data: { role: "Product Designer", company: "Fieldnote", bullets: "My own bullets", startYear: 2018, sort: 0, skills: { create: [{ skillId: figma.id }] } },
+    data: { profileId: TEST_PROFILE_ID, role: "Product Designer", company: "Fieldnote", bullets: "My own bullets", startYear: 2018, sort: 0, skills: { create: [{ skillId: figma.id }] } },
   });
-  await prisma().reference.create({ data: { name: "jane doe", relation: "", company: "Fieldnote", sort: 0 } });
-  await prisma().project.create({ data: { name: "Payout simulator", bullets: "My own project bullets", startYear: 2023, sort: 0 } });
-  await prisma().publication.create({ data: { citation: "**Doe, J.** (2024). *Calm payouts.*", onResumes: false, sort: 0 } });
+  await prisma().reference.create({ data: { profileId: TEST_PROFILE_ID, name: "jane doe", relation: "", company: "Fieldnote", sort: 0 } });
+  await prisma().project.create({ data: { profileId: TEST_PROFILE_ID, name: "Payout simulator", bullets: "My own project bullets", startYear: 2023, sort: 0 } });
+  await prisma().publication.create({ data: { profileId: TEST_PROFILE_ID, citation: "**Doe, J.** (2024). *Calm payouts.*", onResumes: false, sort: 0 } });
   await prisma().certification.create({
-    data: { name: "Certified Accessibility Specialist", issuer: "Inclusive Design Institute", year: 2022, month: 6, expiryYear: 2028, expiryMonth: 6, onResumes: false, sort: 0 },
+    data: { profileId: TEST_PROFILE_ID, name: "Certified Accessibility Specialist", issuer: "Inclusive Design Institute", year: 2022, month: 6, expiryYear: 2028, expiryMonth: 6, onResumes: false, sort: 0 },
   });
 }
 
 describe("applyImportedProfile (E4-10)", () => {
   it("merges: the file wins where it says something, the rest is kept and the new is added", async () => {
     await existingProfile();
-    await applyImportedProfile(prisma(), imported, "merge");
+    await applyImportedProfile(prisma(), TEST_PROFILE_ID, imported, "merge");
 
     const fields = Object.fromEntries((await prisma().profileField.findMany()).map((field) => [field.key, field.value]));
     expect(fields).toEqual({ name: "John Doe", email: "john@example.com", city: "Utrecht" });
@@ -125,28 +127,29 @@ describe("applyImportedProfile (E4-10)", () => {
 
   it("puts new entries first in a section ordered by hand", async () => {
     await existingProfile();
-    await prisma().setting.create({ data: { key: "experienceOrder", value: "manual" } });
-    await applyImportedProfile(prisma(), imported, "merge");
+    await saveProfileSettings(TEST_PROFILE_ID, { experienceOrder: "manual" }, prisma());
+    await applyImportedProfile(prisma(), TEST_PROFILE_ID, imported, "merge");
     const roles = await prisma().experience.findMany({ orderBy: { sort: "asc" } });
     expect(roles.map((role) => role.company)).toEqual(["Acme Payments", "fieldnote"]);
   });
 
   it("replaces: only what the file holds, in date order", async () => {
     await existingProfile();
-    await prisma().setting.create({ data: { key: "experienceOrder", value: "manual" } });
-    await prisma().setting.create({ data: { key: "projectOrder", value: "manual" } });
+    await saveProfileSettings(TEST_PROFILE_ID, { experienceOrder: "manual" }, prisma());
+    await saveProfileSettings(TEST_PROFILE_ID, { projectOrder: "manual" }, prisma());
     await prisma().profileField.create({ data: { key: "showAge", value: "false" } });
     // A resume's text has no photo, so the profile's stays (#224).
     await prisma().profileField.createMany({ data: [{ key: "photo", value: "data:image/png;base64,iVBORw0KGgo=" }, { key: "photoOnResumes", value: "false" }] });
-    await applyImportedProfile(prisma(), imported, "replace");
+    await applyImportedProfile(prisma(), TEST_PROFILE_ID, imported, "replace");
 
     const fields = Object.fromEntries((await prisma().profileField.findMany()).map((field) => [field.key, field.value]));
-    expect(fields).toEqual({ name: "John Doe", city: "Utrecht", showAge: "false", photo: "data:image/png;base64,iVBORw0KGgo=", photoOnResumes: "false" });
+    // The shared basics take what the file says and keep the rest: other profiles use them too (E24-1).
+    expect(fields).toEqual({ name: "John Doe", email: "john@example.com", city: "Utrecht", showAge: "false", photo: "data:image/png;base64,iVBORw0KGgo=", photoOnResumes: "false" });
     expect((await prisma().skill.findMany()).map((skill) => skill.name).sort()).toEqual(["User research", "figma"]);
     expect((await prisma().experience.findMany()).map((role) => role.company).sort()).toEqual(["Acme Payments", "fieldnote"]);
-    expect((await prisma().setting.findUnique({ where: { key: "experienceOrder" } }))?.value).toBe("date");
+    expect((await loadProfileSettings(TEST_PROFILE_ID, prisma())).experienceOrder).toBe("date");
     expect((await prisma().project.findMany()).map((project) => project.name).sort()).toEqual(["Design tokens CLI", "payout simulator"]);
-    expect((await prisma().setting.findUnique({ where: { key: "projectOrder" } }))?.value).toBe("date");
+    expect((await loadProfileSettings(TEST_PROFILE_ID, prisma())).projectOrder).toBe("date");
     expect((await prisma().publication.findMany({ orderBy: { sort: "asc" } })).map((entry) => entry.citation)).toEqual([
       "Doe, J. (2024). Calm payouts.",
       "Doe, J. (2025). A new one.",
@@ -157,9 +160,9 @@ describe("applyImportedProfile (E4-10)", () => {
 
 describe("sections the user made (#298)", () => {
   it("stay when the profile is replaced, since a resume can't bring them back", async () => {
-    await prisma().customSection.create({ data: { id: "s1", title: "Awards", items: { create: { title: "Best Paper" } } } });
-    await prisma().experience.create({ data: { role: "Old" } });
-    await applyImportedProfile(prisma(), { basics: {}, skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [] } as never, "replace");
+    await prisma().customSection.create({ data: { profileId: TEST_PROFILE_ID, id: "s1", title: "Awards", items: { create: { title: "Best Paper" } } } });
+    await prisma().experience.create({ data: { profileId: TEST_PROFILE_ID, role: "Old" } });
+    await applyImportedProfile(prisma(), TEST_PROFILE_ID, { basics: {}, skills: [], languages: [], experience: [], projects: [], education: [], certifications: [], publications: [], references: [] } as never, "replace");
     expect(await prisma().experience.count()).toBe(0);
     expect(await prisma().customItem.count()).toBe(1);
   });

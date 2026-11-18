@@ -85,7 +85,7 @@ describe("CertificationsSection (#293)", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: /^Move “First aid” up$/ }));
-    expect(reorderCertifications).toHaveBeenCalledWith({ ids: ["c2", "c1"] });
+    expect(reorderCertifications).toHaveBeenCalledWith({ profileId: "", ids: ["c2", "c1"] });
     expect(latest.certifications.map((entry) => entry.id)).toEqual(["c2", "c1"]);
   });
 });

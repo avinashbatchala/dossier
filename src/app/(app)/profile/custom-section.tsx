@@ -12,12 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import type { CustomSectionFormat } from "@/generated/prisma/enums";
 import { useAutosave } from "@/hooks/use-autosave";
 import { citationExcerpt } from "@/lib/citation";
-import { CUSTOM_SECTION_FORMATS, formatDateRange, type CustomItem, type CustomSection } from "@/lib/profile";
+import { CUSTOM_SECTION_COUNTS_AS, CUSTOM_SECTION_FORMATS, formatDateRange, type CustomItem, type CustomSection } from "@/lib/profile";
 
 import { createCustomItem, deleteCustomSection, removeCustomItem, reorderCustomItems, restoreCustomItem, restoreCustomSection, saveCustomItem, saveCustomSection } from "./actions";
 import { EntryList } from "./entry-list";
 import { MonthYearField } from "./month-year-field";
 import type { UpdateProfile } from "./skills-section";
+import { useProfileId } from "./profile-id";
 
 const optional = (label: string) => (
   <>
@@ -118,14 +119,16 @@ export function CustomSectionEditor({
   onDeleted: (section: CustomSection) => void;
   onRestored: (section: CustomSection) => void;
 }) {
+  const profileId = useProfileId();
   const track = useTrackSave();
   const [title, setTitle] = useState(section.title);
   const [quick, setQuick] = useState("");
-  const { flush } = useAutosave({ id: section.id, title, format: section.format }, (value) => track(saveCustomSection(value)));
+  const { flush } = useAutosave({ id: section.id, title, format: section.format, countsAs: section.countsAs }, (value) => track(saveCustomSection(value)));
   const setSection = (change: (current: CustomSection) => CustomSection) =>
     update((current) => ({ ...current, customSections: current.customSections.map((entry) => (entry.id === section.id ? change(entry) : entry)) }));
   const setItems = (change: (items: CustomItem[]) => CustomItem[]) => setSection((current) => ({ ...current, items: change(current.items) }));
   const format = CUSTOM_SECTION_FORMATS.find((entry) => entry.value === section.format)!;
+  const countsAs = CUSTOM_SECTION_COUNTS_AS.find((entry) => entry.value === section.countsAs) ?? CUSTOM_SECTION_COUNTS_AS[2];
 
   const remove = async () => {
     flush();
@@ -135,7 +138,7 @@ export function CustomSectionEditor({
       action: {
         label: "Undo",
         onClick: async () => {
-          if (!toastResult(await restoreCustomSection(section)).ok) return;
+          if (!toastResult(await restoreCustomSection({ ...section, profileId })).ok) return;
           onRestored(section);
           toast(`Put back “${section.title}”.`);
         },
@@ -176,6 +179,18 @@ export function CustomSectionEditor({
             onValueChange={(value) => setSection((current) => ({ ...current, format: value }))}
           />
           <p className="text-label text-muted">{format.hint} Switching keeps everything you&apos;ve written here.</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <span id={`counts-as-${section.id}`} className="text-label font-medium">
+            Counts as
+          </span>
+          <SegmentedControl
+            aria-labelledby={`counts-as-${section.id}`}
+            options={CUSTOM_SECTION_COUNTS_AS.map(({ value, label }) => ({ value, label }))}
+            value={section.countsAs}
+            onValueChange={(value) => setSection((current) => ({ ...current, countsAs: value }))}
+          />
+          <p className="text-label text-muted">{countsAs.hint} Scoring a posting weighs it there.</p>
         </div>
       </div>
       {section.format === "INLINE" && (

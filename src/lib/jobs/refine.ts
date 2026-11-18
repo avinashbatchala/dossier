@@ -5,8 +5,8 @@ import { z } from "zod";
 import { ChatRole, DocumentKind, VersionCause } from "@/generated/prisma/enums";
 import { getAiProvider } from "@/lib/ai";
 import { loadTaskOptions } from "@/lib/ai/task-options";
-import { refineChat, type ChatTurn } from "@/lib/ai/tasks";
-import { extractedOf, unitsSchema, type Unit, type UnitEdit } from "@/lib/application-data";
+import { answerQuestion, refineChat, type ChatTurn } from "@/lib/ai/tasks";
+import { extractedOf, matchSchema, servesAfterEdit, unitsSchema, type Unit, type UnitEdit } from "@/lib/application-data";
 import { updateDocuments } from "@/lib/document-units";
 import { withoutPrivateParts } from "@/lib/letter-frame";
 import { prisma } from "@/lib/prisma";
@@ -20,6 +20,12 @@ import { defineJob } from "./runner";
 export const refineJobKey = (applicationId: string) => `refine:${applicationId}`;
 
 const unitRef = z.object({ document: z.enum(DocumentKind), unitId: z.string().min(1) });
+
+/** The application's match, or null when it has none or it doesn't read. */
+const readMatch = (value: unknown) => {
+  const parsed = matchSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
 
 /** "A, B and C" */
 const listOf = (names: string[]) => (names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
@@ -41,6 +47,8 @@ export const refineJob = defineJob({
     target: unitRef.nullable(),
     /** The document on screen. */
     viewing: z.enum(DocumentKind).nullable(),
+    /** Change asks for a change; Ask only answers, from the profile, the posting and the facts (E30-10, AP5). Change unless said. */
+    mode: z.enum(["change", "ask"]).optional(),
   }),
   result: z.object({
     /** The AI's reply. */
@@ -48,7 +56,7 @@ export const refineJob = defineJob({
     /** The units it changed, to show them. */
     edited: z.array(unitRef),
   }),
-  async run({ applicationId, messageId, request, target, viewing }, { step, signal }) {
+  async run({ applicationId, messageId, request, target, viewing, mode = "change" }, { step, signal }) {
     await step("Thinking");
     const application = await prisma.application.findUniqueOrThrow({
       where: { id: applicationId },
@@ -71,7 +79,18 @@ export const refineJob = defineJob({
     );
     const targetUnit = target && unitsOf(target.document).find((unit) => unit.id === target.unitId);
 
-    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), profileOfApplication(application.frozen), loadFactTexts(applicationId)]);
+    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), profileOfApplication(application.frozen, application.profileId), loadFactTexts(applicationId)]);
+
+    if (mode === "ask") {
+      // An answer changes nothing and makes no version; the notes never go along.
+      const { data, promptVersion } = await answerQuestion(
+        provider,
+        { question: request, history, profile, extracted: extractedOf(application), facts, posting: application.postingText },
+        { ...options, language: application.language || options.language, signal },
+      );
+      const reply = await prisma.chatMessage.create({ data: { applicationId, role: ChatRole.AI, text: data, writtenWith: promptVersion }, select: { id: true } });
+      return { messageId: reply.id, edited: [] };
+    }
     const { data, promptVersion } = await refineChat(
       provider,
       {
@@ -84,6 +103,7 @@ export const refineJob = defineJob({
         email: unitsOf(DocumentKind.EMAIL),
         profile,
         extracted: extractedOf(application),
+        match: readMatch(application.match),
         tone: application.tone,
         facts,
         posting: application.postingText,
@@ -102,6 +122,10 @@ export const refineJob = defineJob({
           leftAlone.push(`the ${unitName(unit)}`);
           continue;
         }
+        // Which requirements its lines serve (E30-12): kept for lines still there, the edit's for new ones.
+        const serves = servesAfterEdit(unit, edit.text, edit.serves);
+        if (serves) unit.serves = serves;
+        else delete unit.serves;
         unit.text = edit.text;
         if (edit.unverified?.length) unit.unverified = edit.unverified;
         else delete unit.unverified;

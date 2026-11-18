@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { ScoreBadge } from "@/components/score-badge";
+import { ScoreRing } from "@/components/score-ring";
 import { StatusDot } from "@/components/ui/status-dot";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
 import type { ApplicationRow } from "@/lib/applications-data";
@@ -17,7 +17,6 @@ const COLUMNS: { key: SortKey; label: string; className: string }[] = [
   { key: "role", label: "Role", className: "w-[34%]" },
   { key: "status", label: "Status", className: "w-[168px]" },
   { key: "match", label: "Match", className: "w-[76px]" },
-  { key: "score", label: "Score", className: "w-[72px]" },
   { key: "location", label: "Location", className: "w-[18%]" },
   { key: "sent", label: "Sent", className: "w-[88px]" },
   { key: "updated", label: "Updated", className: "w-[118px]" },
@@ -115,8 +114,9 @@ export function Table({
                   </select>
                 </span>
               </td>
-              <td className="py-3.5 pr-4 text-sm tabular-nums">{row.match ? `${row.match.hit}/${row.match.total}` : "Not matched"}</td>
-              <td className="py-3.5 pr-4 text-sm">{row.score !== null ? <ScoreBadge score={row.score} size="sm" /> : <span className="text-muted">Not scored</span>}</td>
+              <td className="py-3.5 pr-4 text-sm tabular-nums">
+                {row.match ? <ScoreRing hit={row.match.hit} total={row.match.total} size="sm" /> : <span className="text-muted">Not matched</span>}
+              </td>
               <td className="truncate py-3.5 pr-4 text-sm text-muted">{row.location || "Not given"}</td>
               <td className="py-3.5 pr-4 text-sm text-muted">{row.sent ?? "Not sent"}</td>
               <td className="py-3.5 pr-4 text-sm text-muted">{row.updated}</td>

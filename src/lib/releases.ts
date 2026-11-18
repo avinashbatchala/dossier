@@ -4,6 +4,10 @@
 export const RELEASES_REPOSITORY = "AienTech/dossier";
 /** The repository's page, for credits and support (the sidebar). */
 export const REPOSITORY_URL = `https://github.com/${RELEASES_REPOSITORY}`;
+/** The maintainer's Buy Me a Coffee page, for donations (the sidebar). */
+export const COFFEE_URL = "https://buymeacoffee.com/aientech";
+/** The invite to Dossier's Discord server, where job seekers help each other (the sidebar). */
+export const DISCORD_URL = "https://discord.gg/4pfxADVSf9";
 /** How to update, in the wiki. */
 export const UPGRADE_GUIDE_URL = `${REPOSITORY_URL}/wiki/Upgrading`;
 

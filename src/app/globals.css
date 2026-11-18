@@ -59,9 +59,15 @@
   --color-line-popover: light-dark(rgb(29 28 26 / 0.12), rgb(240 237 231 / 0.12)); /* menus */
   --color-line-strong: light-dark(rgb(29 28 26 / 0.2), rgb(240 237 231 / 0.24)); /* upcoming steps */
 
+  /* Links that act inside a panel, such as a gap's "Add to profile" (E30-3): 4.5:1 on cards and the surface. */
+  --color-link: light-dark(oklch(0.47 0.12 250), oklch(0.74 0.09 250));
+
   /* Tints for hover, selection and tracks */
   --color-hover: light-dark(rgb(29 28 26 / 0.05), rgb(240 237 231 / 0.07));
   --color-selected: light-dark(rgb(29 28 26 / 0.07), rgb(240 237 231 / 0.1));
+  /* The sidebar's current page: a raised card in the light scheme, a lighter chip with a line in the dark one. */
+  --color-nav-active: light-dark(#fbfaf7, #2f2d29);
+  --color-line-nav-active: light-dark(transparent, rgb(240 237 231 / 0.1));
   --color-track: light-dark(rgb(29 28 26 / 0.06), rgb(240 237 231 / 0.08));
   --color-toggle-off: light-dark(rgb(29 28 26 / 0.5), rgb(240 237 231 / 0.42)); /* 3:1, like text fields */
 
@@ -80,6 +86,11 @@
   --color-warning-line: light-dark(oklch(0.85 0.06 85), rgb(245 158 11 / 0.4));
   --color-success: light-dark(#2f6b4a, #4ade80);
   --color-flash: light-dark(oklch(0.95 0.05 90), rgb(240 200 90 / 0.16)); /* briefly marks content that changed */
+  /* A change landing in a document (E30): a light green mark with an outline, for about 4 seconds. */
+  --color-change: light-dark(oklch(0.94 0.06 150), rgb(74 222 128 / 0.16));
+  --color-change-line: light-dark(oklch(0.75 0.09 150), rgb(74 222 128 / 0.5));
+  /* The dashboard's daily note, in the hand-written face. */
+  --color-note: light-dark(#6b5a3a, #eadfc6);
 
   /* Application statuses (dots and bars; the label next to them is ink) */
   --color-status-draft: light-dark(#a29d94, #827c73);
@@ -136,6 +147,8 @@
   --animate-notice-ping: notice-ping 1400ms ease-out 450ms 2;
   /* Only an opacity change, after a pause, so it's fine without motion-safe. */
   --animate-skeleton-in: skeleton-in 200ms ease-out 150ms both;
+  /* Today's note, word by word (#523); each word's delay is set inline. */
+  --animate-write: write 420ms ease-out both;
 
   @keyframes toast-in {
     from {
@@ -168,17 +181,12 @@
       opacity: 0;
     }
   }
-}
 
-/* Thin scrollbars in the app's colours, for areas that scroll on their own
-   inside the page, such as the board's lanes. Browsers without
-   scrollbar-color (Safari) keep their own, which are thin already. */
-@utility scrollbar-subtle {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-ink) 20%, transparent) transparent;
-
-  &:hover {
-    scrollbar-color: color-mix(in srgb, var(--color-ink) 36%, transparent) transparent;
+  @keyframes write {
+    from {
+      opacity: 0;
+      filter: blur(3px);
+    }
   }
 }
 
@@ -189,6 +197,7 @@
   --font-mono: var(--typeface-plex-mono);
   --font-plex-sans: var(--typeface-plex-sans);
   --font-garamond: var(--typeface-eb-garamond);
+  --font-hand: var(--typeface-caveat);
 }
 
 @layer base {
@@ -202,6 +211,18 @@
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
+  }
+
+  /* One scrollbar everywhere (#521), the page's and every area that scrolls
+     on its own: thin, in the app's colours, darker under the pointer.
+     Browsers without scrollbar-color (Safari) keep their own, which are
+     thin already. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-ink) 20%, transparent) transparent;
+  }
+  *:hover {
+    scrollbar-color: color-mix(in srgb, var(--color-ink) 36%, transparent) transparent;
   }
 
   /* Jumps to an anchor or a focused field stop below the page bar (97px, 119px on an application, with the 8px above it), not under it. */

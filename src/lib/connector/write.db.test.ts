@@ -6,7 +6,7 @@ import { createTestClient, resetDatabase } from "@/test/db";
 
 import { seedBuiltIns } from "../../../prisma/seed/built-ins";
 
-import { saveWrittenApplication, WRITTEN_IN_CLAUDE, type WrittenApplication } from "./write";
+import { reviseWrittenApplication, saveWrittenApplication, WRITTEN_IN_CLAUDE, type WrittenApplication } from "./write";
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
@@ -14,9 +14,16 @@ vi.mock("@/lib/prisma", async () => {
   db.client = createTestClient();
   return { prisma: db.client };
 });
-vi.mock("@/lib/profile-data", async () => {
+const loaded = vi.hoisted(() => ({ profileIds: [] as (string | null | undefined)[] }));
+vi.mock("@/lib/profile-data", async (importOriginal) => {
   const { demoProfile } = await import("@/lib/demo-profile");
-  return { loadProfile: async () => demoProfile() };
+  return {
+    ...(await importOriginal<typeof import("@/lib/profile-data")>()),
+    loadProfile: async (profileId?: string | null) => {
+      loaded.profileIds.push(profileId);
+      return demoProfile();
+    },
+  };
 });
 
 const prisma = () => db.client!;
@@ -96,5 +103,67 @@ describe("an application written in Claude chat (#221)", () => {
     const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "acme-1", title: "Designer", company: "Acme", url: "https://jobs.example/acme-design" } });
     const { applicationId } = await saveWrittenApplication(written({ postingId: posting.id }));
     expect((await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).applicationId).toBe(applicationId);
+  });
+});
+
+describe("a Draft revised in Claude chat (public issue 116)", () => {
+  const units = async (applicationId: string, kind: "RESUME" | "COVER_LETTER") =>
+    (await prisma().document.findUniqueOrThrow({ where: { applicationId_kind: { applicationId, kind } } })).units as { id: string; text: string }[];
+
+  it("replaces only the parts given, as a version of its own", async () => {
+    const { applicationId } = await saveWrittenApplication(written());
+    const letterBefore = await units(applicationId, "COVER_LETTER");
+
+    const revised = await reviseWrittenApplication(applicationId, {
+      resume: { ...written().resume, roles: [{ id: role.id, bullets: ["Redesigned the payments flow"] }] },
+      change: "Shorter first bullet",
+    });
+
+    expect(revised).toEqual({ unverified: [] });
+    expect((await units(applicationId, "RESUME")).find((unit) => unit.id === `experience:${role.id}`)?.text).toBe("Redesigned the payments flow");
+    expect(await units(applicationId, "COVER_LETTER")).toEqual(letterBefore);
+    expect(await prisma().application.count()).toBe(1);
+    const newest = await prisma().documentVersion.findFirstOrThrow({ where: { document: { applicationId, kind: "RESUME" } }, orderBy: { createdAt: "desc" } });
+    expect(newest).toMatchObject({ cause: "REFINED", detail: "Shorter first bullet" });
+  });
+
+  it("keeps the letter's sender, date and signature, and its greeting when none is written", async () => {
+    const { applicationId } = await saveWrittenApplication(written());
+    const before = await units(applicationId, "COVER_LETTER");
+
+    await reviseWrittenApplication(applicationId, {
+      letter: { recipient: "", greeting: "", paragraphs: [{ label: "", text: "A new first line." }], sign_off: "" },
+      change: "New first line",
+    });
+
+    const after = await units(applicationId, "COVER_LETTER");
+    for (const id of ["sender", "date", "greeting", "signature"]) expect(after.find((unit) => unit.id === id)).toEqual(before.find((unit) => unit.id === id));
+    expect(after.filter((unit) => unit.id.startsWith("paragraph:")).map((unit) => unit.text)).toEqual(["A new first line."]);
+  });
+
+  it("marks names and numbers the profile and posting don't back when Never invent experience is on", async () => {
+    const { applicationId } = await saveWrittenApplication(written());
+    await saveSettings({ strict: true });
+    const revised = await reviseWrittenApplication(applicationId, { resume: { ...written().resume, summary: "Led 40 engineers at Google." }, change: "New summary" });
+    expect("unverified" in revised && revised.unverified.find((entry) => entry.part === "Summary")?.items.join(" ")).toMatch(/Google|40/);
+  });
+
+  it("reads the profile the application was written from", async () => {
+    const backend = await prisma().profile.create({ data: { name: "Backend", sort: 1 } });
+    const { applicationId } = await saveWrittenApplication(written({ profileId: backend.id }));
+    loaded.profileIds = [];
+    await reviseWrittenApplication(applicationId, { resume: written().resume, change: "New summary" });
+    expect(loaded.profileIds).toEqual([backend.id]);
+  });
+
+  it("refuses an application that was sent", async () => {
+    const { applicationId } = await saveWrittenApplication(written());
+    await prisma().application.update({ where: { id: applicationId }, data: { status: "SENT" } });
+    const resumeBefore = await units(applicationId, "RESUME");
+
+    const revised = await reviseWrittenApplication(applicationId, { resume: { ...written().resume, summary: "Something else." }, change: "New summary" });
+
+    expect(revised).toMatchObject({ error: expect.stringMatching(/Only a Draft/) });
+    expect(await units(applicationId, "RESUME")).toEqual(resumeBefore);
   });
 });

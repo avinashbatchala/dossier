@@ -18,6 +18,12 @@ export const AI_API_KEY: SecretKind = { purpose: "api-key-encryption", associate
 export const JOB_SOURCE_KEY: SecretKind = { purpose: "job-source-key-encryption", associatedData: "dossier job source key v1" };
 /** The TypeSafe key Jev scores postings with (#274). */
 export const TYPESAFE_KEY: SecretKind = { purpose: "typesafe-key-encryption", associatedData: "dossier typesafe key v1" };
+/** The OpenAI key for OpenAI Decisions, a scoring model (E25-3). */
+export const DECISIONS_KEY: SecretKind = { purpose: "decisions-key-encryption", associatedData: "dossier openai decisions key v1" };
+/** A notification channel's secret (E26-2): the SMTP password, the webhook's signing secret or the ntfy token. */
+export const NOTIFICATION_SECRET: SecretKind = { purpose: "notification-secret-encryption", associatedData: "dossier notification secret v1" };
+/** The OpenRouter key for scoring (E25-4), apart from an AI provider's. */
+export const OPENROUTER_SCORING_KEY: SecretKind = { purpose: "openrouter-scoring-key-encryption", associatedData: "dossier openrouter scoring key v1" };
 /** The Google account's refresh token (E15-1). */
 export const GOOGLE_TOKEN: SecretKind = { purpose: "google-token-encryption", associatedData: "dossier google token v1" };
 /** The Google OAuth client's secret, entered in Settings → Google. */

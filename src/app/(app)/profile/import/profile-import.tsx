@@ -21,6 +21,8 @@ import { BASICS_LABELS, IMPORT_PROFILE_STEPS, importCounts, type ImportedProfile
 
 import { JobProgress, jobStep } from "../../new/job-progress";
 import { applyProfileImport, discardProfileImport } from "../actions";
+import { levelRange } from "@/lib/profile-levels";
+import { LevelsPicker, type LevelChoice } from "../levels-field";
 
 
 /**
@@ -30,16 +32,24 @@ import { applyProfileImport, discardProfileImport } from "../actions";
  * profile before; the reading is deleted once it's used or set aside.
  */
 export function ProfileImport({
+  profileId,
+  profileName,
+  needsLevels = false,
   aiReady,
   provider,
   initialJobId,
   keptFor,
   inGuide = false,
 }: {
+  /** The profile it goes into (E24-1), and its name when there's more than one to choose from (E24-2). */
+  profileId: string;
+  profileName?: string;
+  /** Whether it has no levels yet (E24-3): the reading's guess is shown to confirm, and taken. */
+  needsLevels?: boolean;
   aiReady: boolean;
   provider: AiProvider;
   initialJobId: string | null;
-  /** How long an unused reading is kept (Settings → Your data), e.g. "24 hours". */
+  /** How long an unused reading is kept (Settings → Data and backups), e.g. "24 hours". */
   keptFor: string;
   /** Inside the setup guide (E21-6): no page header, and on to the guide's last step once it's in. */
   inGuide?: boolean;
@@ -51,7 +61,11 @@ export function ProfileImport({
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const [chosenLevels, setLevels] = useState<LevelChoice | null>(null);
   const job = useJob<ImportProfileResult>(jobId, revision);
+  // The reading's guess fills the picker (E24-3) until the user changes it.
+  const guessed = job?.status === "DONE" ? job.result?.profile.levels : null;
+  const levels: LevelChoice = chosenLevels ?? guessed ?? { from: "", to: "" };
   const fileId = useId();
 
   const phase = !jobId ? "choose" : job?.status === "DONE" && job.result ? "preview" : "reading";
@@ -67,8 +81,8 @@ export function ProfileImport({
 
   const follow = (id: string | null) => {
     setJobId(id);
-    const here = inGuide ? "/welcome?step=profile" : "/profile/import";
-    router.replace(id ? `${here}${inGuide ? "&" : "?"}job=${id}` : here);
+    const here = inGuide ? "/welcome?step=profile" : `/profile/import?profile=${profileId}`;
+    router.replace(id ? `${here}&job=${id}` : here);
   };
 
   // "Choose another file": the reading goes, with the resume's text.
@@ -98,20 +112,23 @@ export function ProfileImport({
 
   async function apply(mode: ImportMode) {
     if (!jobId) return;
+    const range = levelRange(levels.from, levels.to);
+    if (needsLevels && !range) return void toast("Choose the levels this profile is for.");
     setApplying(true);
-    const result = toastResult(await applyProfileImport({ jobId, mode }));
+    const result = toastResult(await applyProfileImport({ profileId, jobId, mode, ...(needsLevels && range ? { levels: range } : {}) }));
     setApplying(false);
-    if (result.ok) router.push(inGuide ? "/welcome?step=done" : "/profile");
+    if (result.ok) router.push(inGuide ? "/welcome?step=done" : `/profile?profile=${profileId}`);
   }
 
   return (
     <>
       {!inGuide && (
         <PageHeader
+          breadcrumb={[{ label: "Profile", href: `/profile?profile=${profileId}` }, { label: "Import from a resume" }]}
           title="Import from a resume"
-          description={`Start your profile from a resume you already have. Nothing goes into your profile until you've seen what was found. The file's text is deleted once you've chosen, or after ${keptFor} if you don't.`}
+          description={`${profileName ? `Fill “${profileName}” from a resume you already have.` : "Start your profile from a resume you already have."} Nothing goes into your profile until you've seen what was found. The file's text is deleted once you've chosen, or after ${keptFor} if you don't.`}
           actions={
-            <Link href="/profile" className={buttonClassName("secondary")}>
+            <Link href={`/profile?profile=${profileId}`} className={buttonClassName("secondary")}>
               Back to your profile
             </Link>
           }
@@ -167,6 +184,15 @@ export function ProfileImport({
         {phase === "preview" && job?.result && (
           <>
             <Preview profile={job.result.profile} />
+            {needsLevels && (
+              <Card className="flex flex-col gap-3">
+                <h3 className="text-[15px] font-medium">The levels this profile is for</h3>
+                <p className="text-meta text-pretty text-muted">
+                  {job.result.profile.levels ? "Guessed from the roles in the resume. Change them if they're off." : "The resume has no roles to guess them from: choose them."}
+                </p>
+                <LevelsPicker value={levels} onChange={setLevels} />
+              </Card>
+            )}
             <Card className="flex flex-col gap-4">
               <p className="text-sm text-muted">
                 <strong className="font-medium text-ink">Merge</strong> adds all this to your profile; where your profile already has the same
@@ -189,7 +215,7 @@ export function ProfileImport({
               open={confirmReplace}
               onOpenChange={setConfirmReplace}
               title="Replace your profile?"
-              description="Your basics, skills, languages, roles, projects, education, certifications, publications and references are removed first; then your profile holds what was read from the resume. Sections you made and your facts stay. Your applications and their documents stay as they are."
+              description="This profile's headline, summary, skills, roles, projects, education, certifications, publications and references are removed first; then it holds what was read from the resume. The basics and languages your profiles share take what the resume says and keep the rest. Sections you made and your facts stay. Your applications and their documents stay as they are."
               confirmLabel="Replace my profile"
               onConfirm={() => void apply("replace")}
             />

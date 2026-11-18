@@ -11,14 +11,14 @@ import { formatDocumentDate } from "@/lib/settings";
 // paragraphs. Letters written before E8-11 don't have them: they're drawn
 // from the profile, in the letter's language, until one is edited.
 
-export const FRAME_UNITS = ["sender", "date", "recipient", "greeting", "signature"] as const;
+const FRAME_UNITS = ["sender", "date", "recipient", "greeting", "signature"] as const;
 export type FrameUnitId = (typeof FRAME_UNITS)[number];
 export type Frame = Record<FrameUnitId, string>;
 
 export const FRAME_LABELS: Frame = { sender: "Sender", date: "Date", recipient: "Recipient", greeting: "Greeting", signature: "Signature" };
 
 /** Parts with contact details: never sent to an AI model. */
-export const PRIVATE_FRAME_UNITS: ReadonlySet<string> = new Set<FrameUnitId>(["sender", "signature"]);
+const PRIVATE_FRAME_UNITS: ReadonlySet<string> = new Set<FrameUnitId>(["sender", "signature"]);
 
 /** Parts the AI writes, in the letter's language, and can write again. */
 export const WRITTEN_FRAME_UNITS: ReadonlySet<string> = new Set<FrameUnitId>(["recipient", "greeting"]);
@@ -29,7 +29,7 @@ export const isFrameUnit = (id: string): id is FrameUnitId => (FRAME_UNITS as re
 export const isParagraph = (unit: Pick<Unit, "id">) => unit.id.startsWith("paragraph:");
 
 /** The contact line as it's typed in the sender: items between " · ". */
-export const SENDER_SEPARATOR = " · ";
+const SENDER_SEPARATOR = " · ";
 
 type FrameContext = {
   basics: Basics;

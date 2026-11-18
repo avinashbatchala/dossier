@@ -6,16 +6,21 @@ import { SectionNav } from "./section-nav";
 
 vi.mock("next/link", () => ({ default: (props: React.ComponentProps<"a">) => <a {...props} /> }));
 
-const row = (id: "basics" | "skills" | "facts", label: string, count: string, optional = false) => ({ id, label, title: label, hint: "", optional, count });
-const rows = [row("basics", "Basics", "5/5"), row("skills", "Skills", "12"), row("facts", "Facts about me", "0", true)];
+type Status = "done" | "warn" | "empty";
+const row = (id: "basics" | "skills" | "facts", label: string, status: Status, note: string, optional = false, tag?: string) => ({ id, label, title: label, hint: "", optional, status, note, tag });
+const rows = [
+  row("basics", "Basics", "done", "4 of 4 filled in", false, "All profiles"),
+  row("skills", "Skills", "warn", "None yet"),
+  row("facts", "Facts about me", "empty", "Optional · none yet", true, "All profiles"),
+];
 
-describe("SectionNav", () => {
-  it("links to each section, with its count, and marks the current one", () => {
+describe("SectionNav (E33-1)", () => {
+  it("links to each section with how it stands, a note and the shared tag, and marks the current one", () => {
     render(<SectionNav rows={rows} current="skills" onMove={vi.fn()} />);
-    expect(screen.getByRole("link", { name: "Skills 12" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Skills 12" })).toHaveAttribute("href", "/profile?section=skills");
-    expect(screen.getByRole("link", { name: "Basics 5/5" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: /Facts about me/ })).toHaveTextContent("optional");
+    expect(screen.getByRole("link", { name: "Skills Needs a look: None yet" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /^Skills/ })).toHaveAttribute("href", "/profile?section=skills");
+    expect(screen.getByRole("link", { name: "Basics All profiles Done: 4 of 4 filled in" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /^Facts about me/ })).toHaveTextContent("·Facts about me All profiles Empty: Optional · none yet");
   });
 
   it("adds a section from the list", () => {

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AgentCandidateStatus } from "@/generated/prisma/enums";
 import { agentDraftJob, approveCandidate, dismissCandidate, draftJobKey, restoreCandidate } from "@/lib/agent/draft";
 import { AGENT_JOB_KEY, agentScanJob } from "@/lib/agent/jobs";
-import { agentSetupProblem } from "@/lib/agent/run";
+import { agentSetupProblem, agentSlots } from "@/lib/agent/run";
 import { runLimitProblem } from "@/lib/agent/runs";
 import { agentSearchInputSchema, agentSearchSetupProblem } from "@/lib/agent/search";
 import { deleteAgentSearch, listAgentSearches, moveAgentSearch, saveAgentSearch, setAgentSearchEnabled } from "@/lib/agent/searches";
@@ -16,6 +16,7 @@ import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
+import { COVERS } from "@/lib/posting-coverage";
 
 // The Agent screen's actions (E16). Nothing here ever sends anything:
 // approving only makes a draft a normal Draft application.
@@ -27,7 +28,8 @@ export const saveAgentSettings = action(
   z.object({
     enabled: z.boolean().optional(),
     hour: z.number().int().min(0).max(23).optional(),
-    minScore: z.number().int().min(0).max(100).optional(),
+    /** The queue's cut-off (E32-2). */
+    covers: z.enum(COVERS).optional(),
     maxScores: z.number().int().min(1).max(30).optional(),
     maxDrafts: z.number().int().min(0).max(10).optional(),
     autoDraft: z.boolean().optional(),
@@ -40,7 +42,7 @@ export const saveAgentSettings = action(
     await saveSettings({
       agentEnabled: changes.enabled,
       agentHour: changes.hour,
-      agentMinScore: changes.minScore,
+      agentCovers: changes.covers,
       agentMaxScores: changes.maxScores,
       agentMaxDrafts: changes.maxDrafts,
       agentAutoDraft: changes.autoDraft,
@@ -93,8 +95,7 @@ export const runAgentNow = action(z.object({}), async () => {
   if (setup) throw new ActionError(setup);
   const [unfinished] = await findUnfinishedJobs(AGENT_JOB_KEY);
   if (unfinished) return { jobId: unfinished.id, reused: true };
-  const requests = (await listAgentSearches()).filter((search) => search.enabled).length;
-  const limit = runLimitProblem(settings.agentRuns, new Date(), { manual: true, requests, timeZone: await lastKnownTimeZone() });
+  const limit = runLimitProblem(settings.agentRuns, new Date(), { manual: true, slots: await agentSlots(), timeZone: await lastKnownTimeZone() });
   if (limit) throw new ActionError(limit);
   const jobId = await startJob(agentScanJob, { manual: true }, { key: AGENT_JOB_KEY });
   revalidatePath("/agent");
@@ -122,7 +123,7 @@ export const prepareAgentDraft = action(z.object({ candidateId }), async ({ cand
   const [unfinished] = await findUnfinishedJobs(draftJobKey(candidateId));
   if (unfinished) return { jobId: unfinished.id, applicationId: null };
   if (candidate.status !== AgentCandidateStatus.SCORED) throw new ActionError("That posting is no longer waiting for a draft.");
-  const jobId = await startJob(agentDraftJob, { candidateId }, { key: draftJobKey(candidateId) });
+  const jobId = await startJob(agentDraftJob, { candidateId, auto: false }, { key: draftJobKey(candidateId) });
   revalidatePath("/agent");
   return { jobId, applicationId: null };
 });

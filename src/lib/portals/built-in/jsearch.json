@@ -1,0 +1,215 @@
+{
+  "format": 1,
+  "id": "JSEARCH",
+  "name": "JSearch",
+  "version": "1.0.1",
+  "description": "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs.",
+  "tag": "Most countries · free plan with a few searches a month",
+  "termsUrl": "https://www.openwebninja.com/terms",
+  "keyUrl": "https://www.openwebninja.com/api/jsearch",
+  "countries": null,
+  "kinds": [
+    "any"
+  ],
+  "radius": true,
+  "hosts": [
+    "api.openwebninja.com",
+    "jsearch.p.rapidapi.com"
+  ],
+  "fields": [
+    {
+      "name": "key",
+      "type": "secret",
+      "label": "API key"
+    },
+    {
+      "name": "host",
+      "type": "choice",
+      "label": "Key from",
+      "default": "openwebninja",
+      "options": [
+        {
+          "value": "openwebninja",
+          "label": "OpenWeb Ninja",
+          "base": "https://api.openwebninja.com/jsearch",
+          "headers": {
+            "x-api-key": "{fields.key}"
+          }
+        },
+        {
+          "value": "rapidapi",
+          "label": "RapidAPI",
+          "base": "https://jsearch.p.rapidapi.com",
+          "headers": {
+            "x-rapidapi-key": "{fields.key}",
+            "x-rapidapi-host": "jsearch.p.rapidapi.com"
+          }
+        }
+      ]
+    }
+  ],
+  "quota": {
+    "period": "this month"
+  },
+  "maps": {
+    "datePosted": {
+      "any": "all",
+      "day": "today",
+      "3days": "3days",
+      "week": "week",
+      "month": "month"
+    }
+  },
+  "kind": "json",
+  "search": {
+    "url": "{base}/search-v2",
+    "params": [
+      {
+        "name": "query",
+        "value": "{keywords} in {place}",
+        "when": "place"
+      },
+      {
+        "name": "query",
+        "value": "{keywords}",
+        "when": "!place"
+      },
+      {
+        "name": "country",
+        "value": "{country|default:us}"
+      },
+      {
+        "name": "date_posted",
+        "value": "{postedWithin|map:datePosted}"
+      },
+      {
+        "name": "radius",
+        "value": "{radiusKm}",
+        "when": [
+          "place",
+          "radiusKm"
+        ]
+      },
+      {
+        "name": "work_from_home",
+        "value": "true",
+        "when": "remoteOnly"
+      },
+      {
+        "name": "employment_types",
+        "value": "INTERN",
+        "when": "level=intern"
+      },
+      {
+        "name": "job_requirements",
+        "value": "under_3_years_experience",
+        "when": "level=junior"
+      },
+      {
+        "name": "job_requirements",
+        "value": "more_than_3_years_experience",
+        "when": "level=senior|lead"
+      },
+      {
+        "name": "cursor",
+        "value": "{cursor}"
+      }
+    ],
+    "paging": {
+      "type": "cursor",
+      "path": "data.cursor"
+    },
+    "items": "data.jobs",
+    "posting": {
+      "id": "job_id",
+      "title": "job_title",
+      "company": "employer_name",
+      "place": {
+        "first": [
+          {
+            "path": "job_location",
+            "split": "•",
+            "squash": true
+          },
+          {
+            "join": [
+              "job_city",
+              "job_state",
+              {
+                "path": "job_country",
+                "as": "countryName"
+              }
+            ],
+            "with": ", "
+          }
+        ]
+      },
+      "remote": "job_is_remote",
+      "salary": {
+        "text": {
+          "first": [
+            "job_salary",
+            "job_salary_string"
+          ]
+        },
+        "min": "job_min_salary",
+        "max": "job_max_salary",
+        "currency": "job_salary_currency",
+        "period": "job_salary_period",
+        "periods": {
+          "YEAR": "a year",
+          "MONTH": "a month",
+          "WEEK": "a week",
+          "DAY": "a day",
+          "HOUR": "an hour"
+        }
+      },
+      "postedAt": {
+        "first": [
+          {
+            "path": "job_posted_at_datetime_utc",
+            "as": "iso"
+          },
+          {
+            "path": "job_posted_at_timestamp",
+            "as": "unix"
+          }
+        ]
+      },
+      "url": {
+        "first": [
+          {
+            "find": "apply_options",
+            "where": {
+              "is_direct": true
+            },
+            "take": "apply_link",
+            "link": true
+          },
+          {
+            "path": "job_apply_link",
+            "link": true
+          },
+          {
+            "path": "apply_options.0.apply_link",
+            "link": true
+          },
+          {
+            "path": "job_google_link",
+            "link": true
+          }
+        ]
+      },
+      "via": "job_publisher",
+      "description": "job_description",
+      "complete": "description"
+    }
+  },
+  "details": {
+    "type": "none"
+  },
+  "test": {
+    "keywords": "developer",
+    "country": "us"
+  }
+}

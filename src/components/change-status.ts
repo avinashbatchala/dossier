@@ -1,6 +1,6 @@
 "use client";
 
-import type { ApplicationStatus } from "@/generated/prisma/enums";
+import type { ApplicationStatus, SentVia } from "@/generated/prisma/enums";
 import { setStatus, undoStatus } from "@/lib/status-actions";
 
 import { toast, toastResult } from "./toast";
@@ -10,8 +10,8 @@ import { toast, toastResult } from "./toast";
  * with an Undo button for mis-clicks (APP-2, decision in #26), or the error.
  * Returns whether the change went through.
  */
-export async function changeStatus(id: string, to: ApplicationStatus): Promise<boolean> {
-  const result = await setStatus({ id, to });
+export async function changeStatus(id: string, to: ApplicationStatus, sentVia?: SentVia): Promise<boolean> {
+  const result = await setStatus({ id, to, ...(sentVia ? { sentVia } : {}) });
   if (!result.ok) {
     toast(result.error);
     return false;

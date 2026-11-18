@@ -400,7 +400,7 @@ describe("ResumeDocument's sections (#297)", () => {
 
 describe("ResumeDocument's own headings (#339)", () => {
   it("draws what this resume calls a section, built-in or custom", () => {
-    const awards = { id: "a1", title: "Awards", format: "LINES" as const, items: [{ id: "i1", title: "Best Paper", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true }] };
+    const awards = { id: "a1", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [{ id: "i1", title: "Best Paper", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true }] };
     const titles = { experience: "Relevant experience", "custom:a1": "Honours" };
     render(<ResumeDocument theme={theme("editorial")} profile={{ ...profile, customSections: [awards] }} paper="A4" today={today} sections={{ order: [], off: [], titles }} />);
     expect(screen.getByRole("heading", { name: "Relevant experience" })).toBeInTheDocument();
@@ -412,7 +412,7 @@ describe("ResumeDocument's own headings (#339)", () => {
 
 describe("ResumeDocument's custom sections (#298)", () => {
   const item = { id: "i1", title: "**Best** Paper", subtitle: "CHI", startYear: 2023, startMonth: null, endYear: 2023, endMonth: null, current: false, details: "Out of 900 papers", link: "https://example.org/award", onResumes: true };
-  const withSection = (format: "ENTRIES" | "LINES" | "INLINE", items = [item]) => ({ ...profile, customSections: [{ id: "s1", title: "Awards", format, items }] });
+  const withSection = (format: "ENTRIES" | "LINES" | "INLINE", items = [item]) => ({ ...profile, customSections: [{ id: "s1", title: "Awards", format, countsAs: "EXTRA_ACTIVITIES" as const, items }] });
   const draw = (format: "ENTRIES" | "LINES" | "INLINE", themeId = "editorial", items = [item]) =>
     render(<ResumeDocument theme={theme(themeId)} profile={withSection(format, items)} paper="A4" today={today} />);
 
@@ -420,9 +420,9 @@ describe("ResumeDocument's custom sections (#298)", () => {
     const custom = {
       ...profile,
       customSections: [
-        { id: "s1", title: "Awards", format: "LINES" as const, items: [item] },
-        { id: "s2", title: "Leadership", format: "ENTRIES" as const, items: [{ ...item, id: "i2" }] },
-        { id: "s3", title: "Interests", format: "INLINE" as const, items: [{ ...item, id: "i3", title: "Chess" }] },
+        { id: "s1", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [item] },
+        { id: "s2", title: "Leadership", format: "ENTRIES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [{ ...item, id: "i2" }] },
+        { id: "s3", title: "Interests", format: "INLINE" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [{ ...item, id: "i3", title: "Chess" }] },
       ],
     };
     const { container } = render(<ResumeDocument theme={theme(themeId)} profile={custom} paper="A4" today={today} />);

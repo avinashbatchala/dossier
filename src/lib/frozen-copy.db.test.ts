@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DocumentKind } from "@/generated/prisma/enums";
 import { demoProfile } from "@/lib/demo-profile";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../prisma/seed/built-ins";
 
@@ -57,7 +57,7 @@ beforeEach(async () => {
   await resetDatabase(prisma());
   await seedBuiltIns(prisma());
   await prisma().profileField.create({ data: { key: "name", value: "Jane" } });
-  await prisma().experience.create({ data: { id: "e1", role: "Designer", company: "Northwind", startYear: 2020 } });
+  await prisma().experience.create({ data: { profileId: TEST_PROFILE_ID, id: "e1", role: "Designer", company: "Northwind", startYear: 2020 } });
 });
 
 describe("the first send (#299)", () => {
@@ -225,7 +225,7 @@ describe("withSectionFromProfile (#299)", () => {
   });
 
   it("brings in a custom section, and replaces it if it had an older one", () => {
-    const section = { id: "s1", title: "Awards", format: "LINES" as const, items: [] };
+    const section = { id: "s1", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [] };
     const copy = base();
     const once = withSectionFromProfile(copy, { ...demoProfile(), customSections: [section] }, "custom:s1");
     expect(once.profile.customSections).toEqual([section]);
@@ -244,6 +244,6 @@ describe("withSectionFromProfile (#299)", () => {
 });
 
 it("loads the profile through a transaction too", async () => {
-  const profile = await prisma().$transaction((tx) => loadProfile(tx));
+  const profile = await prisma().$transaction((tx) => loadProfile(null, tx));
   expect(profile.experience.map((entry) => entry.id)).toEqual(["e1"]);
 });

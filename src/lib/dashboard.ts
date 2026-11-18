@@ -1,5 +1,6 @@
 import { ApplicationStatus, FunnelStage } from "@/generated/prisma/enums";
-import { daysBetween, formatDateTime, formatDay, formatShortCalendarDate, formatTime } from "@/lib/dates";
+import { applicationFlag, daysQuiet, flagInLine } from "@/lib/application-flag";
+import { daysBetween, formatDay } from "@/lib/dates";
 import { FUNNEL_STAGES, STATUSES } from "@/lib/status";
 
 // Every dashboard figure (E9-6, PRD §6.7 and §8), worked out on the server
@@ -20,6 +21,10 @@ export type DashboardApplication = {
   sentAt: Date | null;
   /** The next interview, while in Interview (E9-9). */
   nextInterviewAt: Date | null;
+  /** Its latest email, either way (E29-7), or "I sent it" (E30-8); null without one. */
+  lastContactAt?: Date | null;
+  /** The offer's Decide by (E30-7), at UTC midnight. */
+  decideBy?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -44,17 +49,22 @@ export type FunnelStep = {
   stopped: Record<FunnelOutcome, number>;
 };
 
-export type AttentionItem = {
+/** One thing that needs the user (E28-4), as a row of Needs you. */
+export type NeedsYouItem = {
   id: string;
   company: string;
   role: string;
   status: ApplicationStatus;
+  /** What it's about: "Still a draft.", "Interview.", "A reply is waiting: …". */
   reason: string;
-  action: "Review" | "Finish" | "Open" | "Answer";
-  /** Where the item links to, when not the application's first tab. */
+  /** When it's due, as the row says it: "apply by Thu 1 Oct", "tomorrow at 09:30", "quiet for 14 days"; null when it has no date. */
+  due: string | null;
+  /** Due this week or overdue: drawn in the warning colour, and counted in "N things need you this week". */
+  soon: boolean;
+  /** The row's button. */
+  action: "Answer" | "Review offer" | "Prepare" | "Finish draft" | "Follow up" | "Update" | "Add the date";
+  /** Where the button opens, when not the application's first tab. */
   tab?: "conversation";
-  /** An interview today or tomorrow (E9-9). */
-  soon?: boolean;
 };
 
 /** One week of the activity chart (E9-8): applications started and sent in it. */
@@ -96,8 +106,10 @@ export type DashboardFigures = {
   /** Heard back ÷ sent, rounded; null before anything was sent. */
   heardBackPercent: number | null;
   reachedInterview: number;
-  /** "Worth a look" (DSH-5), in priority order; always about now, whatever the period. */
-  attention: AttentionItem[];
+  /** Needs you (E28-4): due this week first, then undated; always about now, whatever the period. */
+  needsYou: NeedsYouItem[];
+  /** Sent and heard back over all time, for the header, which the period doesn't scope (E28-1). */
+  overall: { sent: number; heardBack: number };
   /** The period's applications by the week they were started and sent, oldest first. */
   weeks: WeekActivity[];
 };
@@ -109,7 +121,7 @@ export const QUIET_DAYS_CHOICES = [3, 5, 7, 10, 14, 21, 30] as const;
 
 export type DashboardOptions = {
   period?: DashboardPeriod;
-  /** Days without news before "Worth a look" suggests a follow-up. */
+  /** Days without news before Needs you suggests a follow-up. */
   quietDays?: number;
   /** Per application, replies from Gmail waiting for an answer (E15-3). */
   replies?: ReadonlyMap<string, { count: number; summary: string }>;
@@ -128,9 +140,9 @@ function outcome({ status, archived }: DashboardApplication): FunnelOutcome {
 }
 
 /**
- * Counts and the "Worth a look" list (decided 28 September 2026): archived
- * applications count in the funnel and the status breakdown, but aren't
- * worth a look. With a period (E9-8, decided 29 September 2026), the funnel
+ * Counts and Needs you (decided 28 September 2026): archived
+ * applications count in the funnel and the status breakdown, but never
+ * need you. With a period (E9-8, decided 29 September 2026), the funnel
  * and the breakdown count the applications created in it.
  */
 export function dashboardFigures(
@@ -166,7 +178,11 @@ export function dashboardFigures(
     heardBack,
     heardBackPercent: sent > 0 ? Math.round((heardBack / sent) * 100) : null,
     reachedInterview: reached(FunnelStage.INTERVIEW),
-    attention: worthALook(all.filter((application) => !application.archived), now, { quietDays, timeZone, replies }),
+    needsYou: needsYou(all.filter((application) => !application.archived), now, { quietDays, timeZone, replies }),
+    overall: {
+      sent: all.filter((application) => rank(application.furthestStage) >= rank(FunnelStage.SENT)).length,
+      heardBack: all.filter((application) => rank(application.furthestStage) >= rank(FunnelStage.SCREENING)).length,
+    },
     weeks: weeklyActivity(applications, now, since),
   };
 }
@@ -202,95 +218,81 @@ function weeklyActivity(applications: readonly DashboardApplication[], now: Date
   return recent;
 }
 
+/** Days since an application last changed, or was sent: the same count as its flag's "Quiet for" (E27-2). */
+const silence = (application: DashboardApplication, now: Date) => daysQuiet(application, now);
+
 /**
- * DSH-5, in this order: interviews today or tomorrow (E9-9); offers awaiting
- * a decision; drafts, soonest deadline first; Sent or Screening with no news
- * for `quietDays` or more, longest silence first; then the other interviews:
- * upcoming by date, then the ones whose date has passed, then those without
- * a date.
+ * Sent or in Screening with no news for `quietDays` or more, the longest
+ * silence first: the dashboard's follow-up suggestions, and the "A follow-up
+ * is due" notification (E26-7).
  */
-function worthALook(
+export function quietApplications(applications: readonly DashboardApplication[], now: Date, quietDays: number): { application: DashboardApplication; days: number }[] {
+  return applications
+    .filter((application) => (application.status === ApplicationStatus.SENT || application.status === ApplicationStatus.SCREENING) && silence(application, now) >= quietDays)
+    .map((application) => ({ application, days: silence(application, now) }))
+    .sort((a, b) => b.days - a.days);
+}
+
+/** Undated items, in this order after the dated ones. */
+const UNDATED_ORDER: ApplicationStatus[] = [ApplicationStatus.OFFER, ApplicationStatus.INTERVIEW, ApplicationStatus.DRAFT];
+
+/**
+ * "Needs you" (E28-4, decided 16 November 2026): first what's due this week
+ * or overdue, soonest first, with replies waiting at the very top; then what
+ * still needs the user but has no date. One item per application. What's
+ * due when, and whether it's this week, comes from the application's flag
+ * (E27-2), as on the board; things due later than a week wait until they're
+ * close.
+ */
+function needsYou(
   applications: readonly DashboardApplication[],
   now: Date,
   { quietDays, timeZone, replies }: { quietDays: number; timeZone?: string; replies?: DashboardOptions["replies"] },
-): AttentionItem[] {
-  const item = (application: DashboardApplication, reason: string, action: AttentionItem["action"]): AttentionItem => ({
-    id: application.id,
-    company: application.company,
-    role: application.role,
-    status: application.status,
-    reason,
-    action,
-  });
-  const latestFirst = (a: DashboardApplication, b: DashboardApplication) => b.updatedAt.getTime() - a.updatedAt.getTime();
-  const inStatus = (status: ApplicationStatus) => applications.filter((application) => application.status === status);
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const silence = (application: DashboardApplication) =>
-    Math.floor((now.getTime() - (application.lastStatusChange ?? application.sentAt ?? application.updatedAt).getTime()) / DAY_MS);
+): NeedsYouItem[] {
+  const dated: { at: number; item: NeedsYouItem }[] = [];
+  const undated: { updated: number; item: NeedsYouItem }[] = [];
 
-  const offers = inStatus(ApplicationStatus.OFFER)
-    .sort(latestFirst)
-    .map((application) => item(application, "An offer is waiting on your decision.", "Review"));
+  for (const application of applications) {
+    const { id, company, role, status } = application;
+    const base = { id, company, role, status };
+    const waiting = replies?.get(id);
+    const flag = applicationFlag({ ...application, waitingReplies: waiting?.count ?? 0 }, { now, quietDays, timeZone });
+    const due = (item: Omit<NeedsYouItem, keyof typeof base | "soon" | "due">, text: string | null = flag ? flagInLine(flag.text) : null) =>
+      dated.push({ at: flag?.due?.getTime() ?? -Infinity, item: { ...base, ...item, due: text, soon: true } });
+    const later = (item: Omit<NeedsYouItem, keyof typeof base | "soon" | "due">) =>
+      undated.push({ updated: application.updatedAt.getTime(), item: { ...base, ...item, due: null, soon: false } });
 
-  const drafts = inStatus(ApplicationStatus.DRAFT)
-    .sort((a, b) => (a.deadline?.getTime() ?? Infinity) - (b.deadline?.getTime() ?? Infinity) || latestFirst(a, b))
-    .map((application) => {
-      const { deadline } = application;
-      if (!deadline) return item(application, "Still a draft. Ready when you are.", "Finish");
-      const date = formatShortCalendarDate(deadline, now);
-      return item(
-        application,
-        deadline.getTime() < today ? `Still a draft, and the deadline was ${date}.` : `Still a draft, and applications close ${date}.`,
-        "Finish",
-      );
-    });
+    if (flag?.kind === "reply" && waiting) {
+      // A reply waiting for an answer comes first, in place of the application's other item (E15-3).
+      const reason = waiting.count === 1 ? `A reply is waiting: ${waiting.summary}` : `${waiting.count} replies are waiting. ${waiting.summary}`;
+      due({ reason, action: "Answer", tab: "conversation" }, null);
+      continue;
+    }
+    // Due later than a week: not yet.
+    if (flag && !flag.soon) continue;
 
-  const quiet = applications
-    .filter(
-      (application) =>
-        (application.status === ApplicationStatus.SENT || application.status === ApplicationStatus.SCREENING) &&
-        silence(application) >= quietDays,
-    )
-    .sort((a, b) => silence(b) - silence(a))
-    .map((application) =>
-      item(application, `No news for ${silence(application)} days. A short, friendly follow-up could help.`, "Open"),
-    );
+    if (status === ApplicationStatus.OFFER) {
+      if (flag?.kind === "decide-by") due({ reason: "An offer is waiting on your decision.", action: "Review offer" });
+      else later({ reason: "An offer is waiting on your decision.", action: "Review offer" });
+    } else if (status === ApplicationStatus.DRAFT) {
+      if (flag?.kind === "apply-by") due({ reason: "Still a draft.", action: "Finish draft" });
+      else later({ reason: "Still a draft. Ready when you are.", action: "Finish draft" });
+    } else if (flag?.kind === "quiet") {
+      const reason =
+        status === ApplicationStatus.SENT && application.sentAt ? `Sent ${formatDay(application.sentAt, timeZone, now)}, no reply.` : "No news since it moved to screening.";
+      due({ reason, action: "Follow up" });
+    } else if (status === ApplicationStatus.INTERVIEW) {
+      const at = application.nextInterviewAt;
+      if (!at) later({ reason: "You're interviewing. Add the next interview's date.", action: "Add the date" });
+      else if (at.getTime() < now.getTime()) {
+        const when = daysBetween(at, now, timeZone) === 0 ? "earlier today" : `on ${formatDay(at, timeZone, now)}`;
+        due({ reason: `Your interview was ${when}. How did it go?`, action: "Update" }, null);
+      } else due({ reason: "Interview.", action: "Prepare" });
+    }
+  }
 
-  // Interviews by their date (E9-9, decided 29 September 2026).
-  const interviewing = inStatus(ApplicationStatus.INTERVIEW);
-  const at = (application: DashboardApplication) => application.nextInterviewAt!.getTime();
-  const upcoming = interviewing
-    .filter((application) => application.nextInterviewAt && at(application) >= now.getTime())
-    .sort((a, b) => at(a) - at(b))
-    .map((application) => {
-      const date = application.nextInterviewAt!;
-      const days = daysBetween(now, date, timeZone);
-      const time = formatTime(date, timeZone);
-      const when = days === 0 ? `today at ${time}` : days === 1 ? `tomorrow at ${time}` : `on ${formatDateTime(date, timeZone, now)}`;
-      return { ...item(application, `Interview ${when}. Worth re-reading your tailored letter first.`, "Open"), soon: days <= 1 };
-    });
-  const past = interviewing
-    .filter((application) => application.nextInterviewAt && at(application) < now.getTime())
-    .sort((a, b) => at(b) - at(a))
-    .map((application) => {
-      const date = application.nextInterviewAt!;
-      const when = daysBetween(date, now, timeZone) === 0 ? "earlier today" : `on ${formatDay(date, timeZone, now)}`;
-      return item(application, `Your interview was ${when}. How did it go? Move it on, or add the next round's date.`, "Open");
-    });
-  const undated = interviewing
-    .filter((application) => !application.nextInterviewAt)
-    .sort(latestFirst)
-    .map((application) => item(application, "You're interviewing. Add the next interview's date and it shows up here.", "Open"));
-
-  // Replies waiting for an answer come first, in place of the application's other item (E15-3).
-  const answering = applications.flatMap((application) => {
-    const waiting = replies?.get(application.id);
-    if (!waiting) return [];
-    const reason = waiting.count === 1 ? `A reply is waiting: ${waiting.summary}` : `${waiting.count} replies are waiting. ${waiting.summary}`;
-    return [{ ...item(application, reason, "Answer"), tab: "conversation" as const }];
-  });
-  const answered = new Set(answering.map((entry) => entry.id));
-  const soon = upcoming.filter((entry) => entry.soon);
-  const later = upcoming.filter((entry) => !entry.soon);
-  return [...answering, ...[...soon, ...offers, ...drafts, ...quiet, ...later, ...past, ...undated].filter((entry) => !answered.has(entry.id))];
+  return [
+    ...dated.sort((a, b) => a.at - b.at).map((entry) => entry.item),
+    ...undated.sort((a, b) => UNDATED_ORDER.indexOf(a.item.status) - UNDATED_ORDER.indexOf(b.item.status) || b.updated - a.updated).map((entry) => entry.item),
+  ];
 }

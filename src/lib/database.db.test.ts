@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 const db = createTestClient();
 
@@ -28,8 +28,8 @@ describe("the database client", () => {
   });
 
   it("compares skill names without case", async () => {
-    await db.skill.create({ data: { name: "TypeScript" } });
-    expect(await db.skill.findUnique({ where: { name: "typescript" } })).toMatchObject({ name: "TypeScript" });
-    await expect(db.skill.create({ data: { name: "TYPESCRIPT" } })).rejects.toThrow();
+    await db.skill.create({ data: { profileId: TEST_PROFILE_ID, name: "TypeScript" } });
+    expect(await db.skill.findUnique({ where: { profileId_name: { profileId: TEST_PROFILE_ID, name: "typescript" } } })).toMatchObject({ name: "TypeScript" });
+    await expect(db.skill.create({ data: { profileId: TEST_PROFILE_ID, name: "TYPESCRIPT" } })).rejects.toThrow();
   });
 });

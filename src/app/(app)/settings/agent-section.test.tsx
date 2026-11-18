@@ -15,17 +15,17 @@ vi.mock("../agent/actions", () => ({
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: { ok: boolean; error?: string }) => (result.ok ? result : (toast(result.error!), result)) }));
 
-const initial: AgentSettings = { enabled: false, hour: 7, minScore: 70, maxScores: 15, maxDrafts: 3, autoDraft: false };
-const search: SavedAgentSearch = { id: "one", name: "Data roles", query: { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" }, enabled: true, sort: 0, createdAt: new Date(), updatedAt: new Date() };
+const initial: AgentSettings = { enabled: false, hour: 7, covers: "two-thirds", maxScores: 15, maxDrafts: 3, autoDraft: false };
+const search: SavedAgentSearch = { id: "one", name: "Data roles", query: { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 25, remoteOnly: false, postedWithin: "any" }, enabled: true, sort: 0, profileId: null, allProfiles: false, createdAt: new Date(), updatedAt: new Date() };
 const countries = [{ code: "de", name: "Germany" }, { code: "nl", name: "Netherlands" }];
-const open = (props: Partial<Parameters<typeof AgentSection>[0]> = {}) => render(<AgentSection initial={initial} searches={[search]} source="JSEARCH" scoring={{ scorer: "AI", ready: true }} countries={countries} timeZone="Europe/Berlin" {...props} />);
+const open = (props: Partial<Parameters<typeof AgentSection>[0]> = {}) => render(<AgentSection initial={initial} searches={[search]} source="JSEARCH" sources={["JSEARCH"]} scoring={{ scorer: "AI", ready: true }} countries={countries} timeZone="Europe/Berlin" {...props} />);
 
 beforeEach(() => vi.clearAllMocks());
 
 describe("Settings → Job agent", () => {
   it("adopts refreshed search snapshots without losing an open editor draft", async () => {
     const user = userEvent.setup();
-    const props = { initial, searches: [search], source: "JSEARCH" as const, scoring: { scorer: "AI" as const, ready: true }, countries, timeZone: "Europe/Berlin" };
+    const props = { initial, searches: [search], source: "JSEARCH" as const, sources: ["JSEARCH" as const], scoring: { scorer: "AI" as const, ready: true }, countries, timeZone: "Europe/Berlin" };
     const { rerender } = render(<AgentSection {...props} />);
     await user.click(screen.getByRole("button", { name: "Edit Data roles" }));
     await user.type(screen.getByLabelText("What"), " unsaved");
@@ -65,8 +65,8 @@ describe("Settings → Job agent", () => {
     expect(saveAgentSettings).toHaveBeenLastCalledWith({ enabled: true });
     await user.selectOptions(screen.getByLabelText("Runs after"), "09:00");
     expect(saveAgentSettings).toHaveBeenLastCalledWith({ hour: 9 });
-    await user.selectOptions(screen.getByLabelText("Minimum score"), "80 of 100");
-    expect(saveAgentSettings).toHaveBeenLastCalledWith({ minScore: 80 });
+    await user.selectOptions(screen.getByLabelText("Keep postings that cover"), "All of the requirements");
+    expect(saveAgentSettings).toHaveBeenLastCalledWith({ covers: "all" });
     expect(screen.getByText(/One shared daily schedule/)).toHaveTextContent("including failed attempts. A run waits until the whole batch fits. Across all searches, each run scores up to 15 postings");
     expect(screen.getByLabelText("Drafts per run, at most")).toBeDisabled();
     await user.click(screen.getByRole("switch", { name: "Prepare drafts on its own" }));
@@ -83,12 +83,45 @@ describe("Settings → Job agent", () => {
     await user.type(screen.getByLabelText("Search name"), "Data roles");
     vi.mocked(saveRecurringSearch).mockResolvedValueOnce({ ok: true, data: search });
     await user.click(screen.getByRole("button", { name: "Save search" }));
-    expect(saveRecurringSearch).toHaveBeenCalledWith({ id: undefined, name: "Data roles", query: search.query, enabled: true, sort: 0 });
+    expect(saveRecurringSearch).toHaveBeenCalledWith({ id: undefined, name: "Data roles", query: search.query, enabled: true, sort: 0, profileId: null, allProfiles: false });
     expect(await screen.findByRole("switch", { name: "Data roles" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit Data roles" }));
     await user.clear(screen.getByLabelText("Search name"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("switch", { name: "Data roles" })).toBeInTheDocument();
+  });
+
+  it("ties a search to a profile, starting with its levels and where it works, which can be changed (E24-6)", async () => {
+    const user = userEvent.setup();
+    const profiles = [
+      { id: "first", name: "Design", defaults: { experience: "mid" as const, experienceTo: "senior" as const, place: "Berlin", country: "de", radiusKm: 50 as const, remoteOnly: false } },
+      { id: "backend", name: "Backend", defaults: { experience: "senior" as const, experienceTo: "lead" as const, place: "", country: "de", radiusKm: null, remoteOnly: true } },
+    ];
+    open({ searches: [{ ...search, profileId: "backend" }], suggestedQuery: search.query, profiles });
+    // The list says which profile each search is for.
+    expect(screen.getByText(/Data scientist · Berlin · DE · Backend/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add search" }));
+    const form = within(screen.getByRole("form", { name: "New recurring search" }));
+    expect(form.getByLabelText("Profile")).toHaveValue("first");
+    expect(form.getByLabelText("What")).toHaveValue("Data scientist");
+    expect(form.getByLabelText("Where")).toHaveValue("Berlin");
+    expect(form.getByLabelText("Level")).toHaveValue("mid");
+    expect(form.getByLabelText("Up to")).toHaveValue("senior");
+
+    await user.selectOptions(form.getByLabelText("Profile"), "backend");
+    expect(form.getByLabelText("Where")).toHaveValue("");
+    expect(form.getByLabelText("Level")).toHaveValue("senior");
+    expect(form.getByLabelText("Up to")).toHaveValue("lead");
+    expect(form.getByLabelText("Remote only")).toBeChecked();
+    // The user can change them.
+    await user.selectOptions(form.getByLabelText("Up to"), "senior");
+    await user.type(form.getByLabelText("Search name"), "Go");
+    vi.mocked(saveRecurringSearch).mockResolvedValueOnce({ ok: true, data: { ...search, id: "two", name: "Go", profileId: "backend" } });
+    await user.click(form.getByRole("button", { name: "Save search" }));
+    expect(saveRecurringSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Go", profileId: "backend", query: expect.objectContaining({ keywords: "Data scientist", place: "", experience: "senior", experienceTo: undefined, remoteOnly: true, radiusKm: null }) }),
+    );
   });
 
   it("edits a stable id, disables a search and preserves values on failed saves", async () => {

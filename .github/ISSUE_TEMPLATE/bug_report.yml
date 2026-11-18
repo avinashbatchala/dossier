@@ -83,6 +83,13 @@ body:
       placeholder: qwen2.5:7b
 
   - type: input
+    id: portal
+    attributes:
+      label: Job search portal
+      description: Only if the problem has to do with searching for postings, Positions or the job agent. The portal's name as Settings → Job search shows it; say which if it's one you added.
+      placeholder: Adzuna
+
+  - type: input
     id: browser
     attributes:
       label: Browser and system

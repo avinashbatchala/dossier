@@ -145,7 +145,7 @@ describe("withoutSectionsOff", () => {
 });
 
 describe("custom sections (#298)", () => {
-  const section = (id: string, format: "ENTRIES" | "LINES" | "INLINE" = "LINES") => ({ id, title: `Section ${id}`, format, items: [{ id: `${id}-1`, title: "One", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true }] });
+  const section = (id: string, format: "ENTRIES" | "LINES" | "INLINE" = "LINES") => ({ id, title: `Section ${id}`, format, countsAs: "EXTRA_ACTIVITIES" as const, items: [{ id: `${id}-1`, title: "One", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true }] });
 
   it("puts a new one above References, in the order they're given", () => {
     const arranged = arrangedSections(BUILT_IN_SECTIONS, ["custom:a", "custom:b"]);

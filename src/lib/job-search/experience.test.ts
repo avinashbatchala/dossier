@@ -35,5 +35,8 @@ describe("the experience level of a posting (public issue 59)", () => {
     expect([senior, intern, unsaid].filter((entry) => fitsExperience(entry, { experience: "intern" }))).toEqual([intern, unsaid]);
     expect([senior, intern, unsaid].filter((entry) => fitsExperience(entry, { experience: "any" }))).toHaveLength(3);
     expect([senior, intern, unsaid].filter((entry) => fitsExperience(entry, {}))).toHaveLength(3);
+    // A range (E24-6) keeps every level in it.
+    const mid = posting("Designer", "3+ years of experience");
+    expect([senior, intern, unsaid, mid].filter((entry) => fitsExperience(entry, { experience: "mid", experienceTo: "senior" }))).toEqual([senior, unsaid, mid]);
   });
 });

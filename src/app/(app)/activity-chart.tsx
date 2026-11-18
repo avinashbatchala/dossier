@@ -27,7 +27,7 @@ export function ActivityChart({ weeks }: { weeks: WeekActivity[] }) {
   const every = Math.max(1, Math.ceil(weeks.length / 6));
 
   return (
-    <section aria-labelledby="activity-heading" className="col-span-full flex flex-col gap-5 rounded-panel border border-line-card bg-card p-7">
+    <section aria-labelledby="activity-heading" className="flex flex-col gap-5 rounded-panel border border-line-card bg-card p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 id="activity-heading" className="font-serif text-section">

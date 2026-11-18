@@ -1,4 +1,4 @@
-import { LanguageLevel, type CustomSectionFormat } from "@/generated/prisma/enums";
+import { LanguageLevel, type CustomSectionCountsAs, type CustomSectionFormat } from "@/generated/prisma/enums";
 import type { ProfilePhoto } from "@/lib/photo";
 
 /** Proficiency levels in the order the language select lists them (PRD PRO-4). */
@@ -89,27 +89,33 @@ export type Basics = Record<BasicsField, string> & { showAge: boolean };
 
 // The basics are stored in the ProfileField table, one text row per filled-in
 // field: text as typed, the date of birth as "YYYY-MM-DD", showAge as "true".
+// The headline and summary are each profile's own (E24-1), on its Profile row.
+
+/** The basics each profile has its own of (E24-1); every other one is shared. */
+const OWN_BASICS = ["headline", "summary"] as const satisfies readonly BasicsField[];
+export const isOwnBasic = (field: string) => (OWN_BASICS as readonly string[]).includes(field);
+/** The basics every profile shares. */
+const SHARED_BASICS = BASICS_FIELDS.filter((field) => !isOwnBasic(field)) as Exclude<BasicsField, (typeof OWN_BASICS)[number]>[];
 
 /** The keys in the ProfileField table. */
-export const PROFILE_KEYS = [...BASICS_FIELDS, "showAge"] as const;
-export type ProfileKey = (typeof PROFILE_KEYS)[number];
+export type ProfileKey = (typeof SHARED_BASICS)[number] | "showAge";
 
-/** The basics from ProfileField rows; a missing key is empty, and keys it doesn't know are ignored. */
+/** The basics from ProfileField rows, without the headline and summary; a missing key is empty, and keys it doesn't know are ignored. */
 export function basicsFromFields(rows: readonly { key: string; value: string }[]): Basics {
   const values = new Map(rows.map((row) => [row.key, row.value]));
   const basics = Object.fromEntries(BASICS_FIELDS.map((field) => [field, values.get(field) ?? ""]));
   return { ...(basics as Record<BasicsField, string>), showAge: values.get("showAge") === "true" };
 }
 
-/** The value to store for each key, or null for an empty one, whose row is removed. */
+/** The value to store for each shared key, or null for an empty one, whose row is removed. The headline and summary go on the profile. */
 export function fieldsFromBasics(basics: Basics): Record<ProfileKey, string | null> {
-  const fields = Object.fromEntries(BASICS_FIELDS.map((field) => [field, basics[field] || null]));
-  return { ...(fields as Record<BasicsField, string | null>), showAge: basics.showAge ? "true" : null };
+  const fields = Object.fromEntries(SHARED_BASICS.map((field) => [field, basics[field] || null]));
+  return { ...(fields as Record<ProfileKey, string | null>), showAge: basics.showAge ? "true" : null };
 }
 
 /** `group` is the group it's printed under on resumes, empty for none (#280). */
 export type SkillItem = { id: string; name: string; group: string };
-export type LanguageItem = { id: string; name: string; level: LanguageLevel };
+type LanguageItem = { id: string; name: string; level: LanguageLevel };
 export type ExperienceItem = DateSpan & {
   id: string;
   role: string;
@@ -163,8 +169,19 @@ export const CUSTOM_SECTION_FORMATS = [
   { value: "INLINE", label: "Inline", hint: "Items share one line, like “Climbing · Chess · Film photography”." },
 ] as const satisfies readonly { value: CustomSectionFormat; label: string; hint: string }[];
 
+/**
+ * What a custom section counts as when a profile is judged (E24-5, #406), as
+ * the screens call it. An entries section that's Work experience adds its
+ * dates to the years of experience, like a paid role.
+ */
+export const CUSTOM_SECTION_COUNTS_AS = [
+  { value: "WORK_EXPERIENCE", label: "Work experience", hint: "Like a role. Its dates count toward your years of experience." },
+  { value: "EDUCATION", label: "Education", hint: "Like a degree or a course." },
+  { value: "EXTRA_ACTIVITIES", label: "Extra activities", hint: "Like projects, volunteering, certifications or publications." },
+] as const satisfies readonly { value: CustomSectionCountsAs; label: string; hint: string }[];
+
 /** A section the user made (#298), such as Awards. */
-export type CustomSection = { id: string; title: string; format: CustomSectionFormat; items: CustomItem[] };
+export type CustomSection = { id: string; title: string; format: CustomSectionFormat; countsAs: CustomSectionCountsAs; items: CustomItem[] };
 /** A fact the user tells the AI (PRO-14): about themselves, or for one application. */
 export type FactItem = { id: string; text: string };
 export type ProfileData = {
@@ -259,6 +276,23 @@ export function profileStrength(profile: {
   return { percent, hint };
 }
 
+/** What to add next, for the strength meter's hint (E33-1): the first thing missing that strength counts, or a role with no lines. */
+export function nextMissing(profile: Pick<ProfileData, "basics" | "experience" | "education" | "skills">): string | null {
+  const { basics } = profile;
+  if (!basics.name.trim()) return "Add your name in Basics.";
+  if (!basics.email.trim()) return "Add your email address in Basics.";
+  if (!basics.city.trim() || !basics.country.trim()) return "Add where you live in Basics.";
+  if (!basics.headline.trim()) return "Add a headline.";
+  if (!basics.summary.trim()) return "Write a summary.";
+  const roles = paidRoles(profile.experience);
+  if (roles.length === 0) return "Add a role: experience matters most.";
+  const bare = roles.filter((role) => !role.bullets.trim()).length;
+  if (bare > 0) return bare === 1 ? "One role has no lines yet." : `${bare} roles have no lines yet.`;
+  if (profile.education.length === 0) return "Add your education.";
+  if (profile.skills.length === 0) return "Add your skills.";
+  return null;
+}
+
 /**
  * Orders entries newest first by start date (entries without one go last),
  * then by their `sort` value.
@@ -291,10 +325,12 @@ export function paidRoles<T extends { volunteering: boolean }>(experience: reado
 }
 
 /** Months of paid experience in the profile, counting overlapping roles once; volunteering doesn't count (#294). */
-export function experienceMonths(profile: Pick<ProfileData, "experience">, today: Date): number {
+export function experienceMonths(profile: Pick<ProfileData, "experience"> & Partial<Pick<ProfileData, "customSections">>, today: Date): number {
   const now = today.getFullYear() * 12 + today.getMonth();
   const months = new Set<number>();
-  for (const entry of paidRoles(profile.experience)) {
+  // An entries section that counts as Work experience counts like a paid role (E24-5); volunteering never does (#294).
+  const workEntries = (profile.customSections ?? []).filter((section) => section.countsAs === "WORK_EXPERIENCE" && section.format === "ENTRIES").flatMap((section) => section.items);
+  for (const entry of [...paidRoles(profile.experience), ...workEntries]) {
     if (entry.startYear === null) continue;
     const start = entry.startYear * 12 + (entry.startMonth ?? 1) - 1;
     const end = entry.current

@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "id": "ARBEITSAGENTUR",
+  "name": "Bundesagentur für Arbeit",
+  "version": "1.0.0",
+  "description": "Germany's federal job board, with full postings. Unofficial: you choose it on your own responsibility.",
+  "tag": "Germany only · free, no key · unofficial",
+  "termsUrl": "https://www.arbeitsagentur.de/datei/nutzungsbedingungen_ba036575.pdf",
+  "countries": [
+    "de"
+  ],
+  "kinds": [
+    "any"
+  ],
+  "radius": true,
+  "hosts": [
+    "rest.arbeitsagentur.de"
+  ],
+  "base": "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service",
+  "credit": {
+    "text": "Source: Bundesagentur für Arbeit"
+  },
+  "consent": {
+    "note": "The Bundesagentur für Arbeit has no official API. Dossier searches it through the access its own job search uses, without its permission, and the BA's terms of use don't allow automated access. You choose this source on your own responsibility, and it can stop working at any time."
+  },
+  "postingPage": "https://www.arbeitsagentur.de/jobsuche/jobdetail/{id|url}",
+  "kind": "json",
+  "search": {
+    "url": "{base}/pc/v6/jobs",
+    "headers": {
+      "X-API-Key": "jobboerse-jobsuche"
+    },
+    "params": [
+      {
+        "name": "was",
+        "value": "{keywords}"
+      },
+      {
+        "name": "angebotsart",
+        "value": "34",
+        "when": "level=intern"
+      },
+      {
+        "name": "angebotsart",
+        "value": "1",
+        "when": "level!=intern"
+      },
+      {
+        "name": "page",
+        "value": "{page}"
+      },
+      {
+        "name": "size",
+        "value": "{size}"
+      },
+      {
+        "name": "wo",
+        "value": "{place}",
+        "when": "place"
+      },
+      {
+        "name": "umkreis",
+        "value": "{radiusKm}",
+        "when": [
+          "place",
+          "radiusKm"
+        ]
+      },
+      {
+        "name": "veroeffentlichtseit",
+        "value": "{postedDays}"
+      },
+      {
+        "name": "arbeitszeit",
+        "value": "ho",
+        "when": "remoteOnly"
+      }
+    ],
+    "paging": {
+      "type": "page",
+      "size": 25,
+      "total": "maxErgebnisse",
+      "first": 1
+    },
+    "items": "ergebnisliste",
+    "itemsMayBeMissing": true,
+    "posting": {
+      "id": "referenznummer",
+      "title": "stellenangebotsTitel",
+      "company": "firma",
+      "place": {
+        "each": "stellenlokationen",
+        "take": "adresse.ort",
+        "unique": true,
+        "limit": 2,
+        "with": " / "
+      },
+      "remote": {
+        "first": [
+          {
+            "path": "homeofficeprozent",
+            "atLeast": 100,
+            "then": true
+          },
+          {
+            "path": "homeofficemoeglich",
+            "equals": false,
+            "then": false
+          }
+        ]
+      },
+      "salary": {
+        "min": "gehaltsspanneVon",
+        "max": "gehaltsspanneBis",
+        "currency": {
+          "value": "EUR"
+        }
+      },
+      "postedAt": {
+        "path": "datumErsteVeroeffentlichung",
+        "as": "date"
+      },
+      "url": {
+        "first": [
+          {
+            "path": "externeURL",
+            "link": true
+          },
+          {
+            "template": "https://www.arbeitsagentur.de/jobsuche/jobdetail/{id|url}"
+          }
+        ]
+      },
+      "complete": false
+    }
+  },
+  "details": {
+    "type": "request",
+    "url": "{base}/pc/v4/jobdetails/{id|base64|raw}",
+    "headers": {
+      "X-API-Key": "jobboerse-jobsuche"
+    },
+    "description": {
+      "path": "stellenangebotsBeschreibung",
+      "clean": "markdown"
+    },
+    "thenPage": true
+  },
+  "test": {
+    "keywords": "Softwareentwickler",
+    "country": "de"
+  }
+}

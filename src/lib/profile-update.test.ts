@@ -63,7 +63,7 @@ describe("profileUpdate (#301)", () => {
   });
 
   it("doesn't bring in a new section, which is for Add", () => {
-    const withSection = { ...live, customSections: [{ id: "s1", title: "Awards", format: "LINES" as const, items: [line("i1", "Best Paper")] }] };
+    const withSection = { ...live, customSections: [{ id: "s1", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [line("i1", "Best Paper")] }] };
     const result = update({ live: withSection });
     expect(result.changed).toBe(false);
     expect(result.copy?.customSections).toEqual([]);
@@ -71,13 +71,13 @@ describe("profileUpdate (#301)", () => {
   });
 
   it("adds a new item to a custom section the resume holds, leaves its format alone, and joins inline items", () => {
-    const sent = { id: "s1", title: "Awards", format: "LINES" as const, items: [line("i1", "Best Paper")] };
-    const inline = { id: "s2", title: "Interests", format: "INLINE" as const, items: [line("i2", "Chess")] };
+    const sent = { id: "s1", title: "Awards", format: "LINES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [line("i1", "Best Paper")] };
+    const inline = { id: "s2", title: "Interests", format: "INLINE" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [line("i2", "Chess")] };
     const held = [...units, { id: "custom-line:i1", label: "Best Paper", text: "Best Paper, edited" }, { id: "custom-inline:s2", label: "Interests", text: "Chess" }];
     const now = {
       ...live,
       customSections: [
-        { ...sent, format: "ENTRIES" as const, items: [...sent.items, line("i3", "Fellow")] },
+        { ...sent, format: "ENTRIES" as const, countsAs: "EXTRA_ACTIVITIES" as const, items: [...sent.items, line("i3", "Fellow")] },
         { ...inline, items: [...inline.items, line("i4", "Climbing")] },
       ],
     };

@@ -1,83 +1,107 @@
 import { z } from "zod";
 
-import { experienceMonths, type ProfileData } from "@/lib/profile";
+import { LOCATION_FITS, SENIORITY_FITS, type FactorAnswers, type RequirementAnswer } from "@/lib/scoring/factors";
+import {
+  EDUCATION_LEVELS,
+  EXTRA_LEVELS,
+  levelAnswer,
+  LOCATION_OPTIONS,
+  REQUIREMENT_KINDS,
+  scoringState,
+  SENIORITY_OPTIONS,
+  WORK_LEVELS,
+  type ScoringPosting,
+  type ScoringProfile,
+} from "@/lib/scoring/questions";
 
-import { postingForPrompt, profileForPrompt, system, UNTRUSTED_POSTING, type Task } from "./prompt-parts";
+import { MAX_POSTING_CHARACTERS, postingForPrompt, system, UNTRUSTED_POSTING, type Task } from "./prompt-parts";
 
-export const SCORE_POSTING_VERSION = "score-posting@2";
+export const SCORE_POSTING_VERSION = "score-posting@3";
 
-// The job agent's first look at a posting (E16-2): a cheap, explainable fit
-// score before anything is spent on a draft. Adapted from avinashbatchala's
-// fork of Dossier.
+// The AI model as a scoring model (E25-1, #408): it answers the engine's
+// questions, the same ones decision models answer, as JSON with a reason for
+// each factor. Dossier adds the answers up (src/lib/scoring/factors.ts).
 
-/** What the model answers; code checks and trims it (scoreFrom). */
+const reasoned = z.object({ level: z.number(), reason: z.string() });
 const answerSchema = z.object({
-  score: z.number(),
-  reasons: z.array(z.string()),
-  redFlags: z.array(z.string()),
+  requirements: z.array(z.object({ line: z.number(), kind: z.enum(["must", "nice", "other"]), covered: z.boolean(), evidence: z.string(), skill: z.string() })),
+  work: reasoned,
+  extra: reasoned,
+  education: reasoned,
+  seniority: z.object({ fit: z.enum(SENIORITY_FITS), reason: z.string() }),
+  location: z.object({ fit: z.enum(LOCATION_FITS), reason: z.string() }),
+  thin: z.boolean(),
 });
 
-/** How well a posting fits the profile: 0 to 100, one to four reasons, up to three red flags. */
-export type PostingScore = { score: number; reasons: string[]; redFlags: string[] };
+const scale = (levels: readonly { means: string }[]) => levels.map((level, index) => `  ${index}: ${level.means}`).join("\n");
+const options = (choices: Record<string, { means: string }>) =>
+  Object.entries(choices)
+    .map(([value, { means }]) => `  "${value}": ${means}`)
+    .join("\n");
 
-const INSTRUCTIONS = `You score how well a job posting fits a candidate before anyone writes an application, as JSON.
+const INSTRUCTIONS = `You judge how well a job posting fits one of a candidate's profiles, as JSON. You don't give a score: you answer six questions, and the app adds the answers up.
 
-Judge only what the posting and the candidate's profile show:
-- skills and experience against the posting's requirements;
-- seniority and scope, in both directions: a role well below the candidate's level is as much a mismatch as one well above it;
-- location, remote work and language, when the posting states them;
-- salary, when both the posting and the candidate's profile say something about it.
+1. requirements: for every numbered line of the posting, once each:
+- kind:
+${options(REQUIREMENT_KINDS)}
+- covered: whether the candidate's profile shows what the line asks for, anywhere in it (skills, languages, facts, work experience, extra activities, education). Directly or clearly, never a stretch.
+- evidence: when covered, the part of the profile that shows it, in a few words, such as "Senior Designer at Acme", "Figma (skill)", "Dutch (native)" or "MSc Computer Science"; otherwise "".
+- skill: the one skill, tool or language the line is about, as the candidate would list it, such as "Figma" or "Kubernetes"; "" when it's about something else, such as years or a degree.
 
-Give a score from 0 to 100:
-- 85–100: excellent fit; the candidate clearly meets the core requirements.
-- 70–84: good fit; most core requirements are covered, with a gap or two.
-- 50–69: possible fit; meaningful gaps, or a stretch.
-- 0–49: poor fit.
+2. work: how close the paid work in candidate.workExperience is to the job's day-to-day work, a level from 0 to ${WORK_LEVELS.length - 1}:
+${scale(WORK_LEVELS)}
 
-A large seniority gap either way, such as a role asking for 2 to 5 years from someone with 10 or more, or a team member's role for someone who leads teams, makes it a possible fit at best: below 70. Years well beyond what a far more junior role asks for are never a reason it fits.
+3. extra: how much candidate.extraActivities support the candidate for the job, a level from 0 to ${EXTRA_LEVELS.length - 1}:
+${scale(EXTRA_LEVELS)}
 
-- reasons: one to four short sentences, each pointing at a specific requirement of the posting and a specific part of the profile (a role, a project, a skill, a degree). Never invent experience the profile doesn't show.
-- redFlags: up to three real concerns, or none: a missing must-have skill, a seniority mismatch either way (a role far above the candidate's level, or well below it), a location or work-permit requirement the profile can't meet, or a language the candidate doesn't speak.
+4. education: how well candidate.education meets what the posting asks for, a level from 0 to ${EDUCATION_LEVELS.length - 1}:
+${scale(EDUCATION_LEVELS)}
 
-Never use age, gender, nationality, ethnicity, religion, disability, family status or any other protected characteristic. If the posting is too thin to judge, say so in a reason and score conservatively.`;
+5. seniority: where the job's level (its title, seniority, scope and the years it asks for) is against candidate.seniority.levels, the levels the candidate is looking for. The levels, lowest first: Internship, Entry level, Mid level, Senior, Lead or director. Use the roles and years only to read an unclear posting.
+${options(SENIORITY_OPTIONS)}
+
+6. location: whether the candidate can work where and how the job is, by candidate.location and any facts about work permits.
+${options(LOCATION_OPTIONS)}
+
+thin: true when the posting is too short or too vague to tell what the job requires of applicants.
+
+Each reason is one short sentence to the candidate ("You…"), pointing at a specific part of the posting and of the profile. Never invent experience the profile doesn't show. Never use age, gender, nationality, ethnicity, religion, disability, family status or any other protected characteristic.`;
 
 export type ScorePostingInput = {
-  /** The posting's text, as the source gave it. */
-  posting: string;
-  title: string;
-  company: string;
-  place: string;
-  remote: boolean | null;
-  salary: string;
-  profile: ProfileData;
-  /** For the candidate's years of experience; today by default. */
+  posting: ScoringPosting;
+  /** The posting's lines, numbered from 0, as decision models get them (postingLines). */
+  lines: readonly string[];
+  profile: ScoringProfile;
+  /** For the years of experience; today by default. */
   today?: Date;
 };
 
-const MAX_REASONS = 4;
-const MAX_RED_FLAGS = 3;
-const MAX_LENGTH = 300;
+const clampLevel = (level: number, count: number) => Math.min(count - 1, Math.max(0, Math.round(Number.isFinite(level) ? level : 0))) / (count - 1);
+const trimmed = (text: string, max = 300) => text.trim().slice(0, max);
 
-/** The answer, trusting nothing: a whole score within 0–100, and short, non-empty reasons and flags within their limits. */
-export function scoreFrom(answer: z.infer<typeof answerSchema>): PostingScore {
-  const clean = (lines: string[], max: number) =>
-    lines
-      .map((line) => line.trim().slice(0, MAX_LENGTH))
-      .filter(Boolean)
-      .slice(0, max);
-  const reasons = clean(answer.reasons, MAX_REASONS);
+/** The answer as the engine's, trusting nothing: each line once, in range; a line it skipped isn't a requirement. */
+export function factorsFrom(answer: z.infer<typeof answerSchema>, lines: readonly string[]): FactorAnswers {
+  const byLine = new Map<number, (typeof answer.requirements)[number]>();
+  for (const entry of answer.requirements) if (!byLine.has(entry.line)) byLine.set(entry.line, entry);
+  const requirements = lines.flatMap((text, index): RequirementAnswer[] => {
+    const entry = byLine.get(index);
+    if (!entry || entry.kind === "other") return [];
+    return [{ text, mustHave: entry.kind === "must", covered: entry.covered, evidence: entry.covered ? trimmed(entry.evidence, 120) || null : null, skill: trimmed(entry.skill, 60) || null }];
+  });
   return {
-    score: Math.min(100, Math.max(0, Math.round(Number.isFinite(answer.score) ? answer.score : 0))),
-    reasons: reasons.length > 0 ? reasons : ["The model gave no reasons for this score."],
-    redFlags: clean(answer.redFlags, MAX_RED_FLAGS),
+    requirements,
+    work: levelAnswer(clampLevel(answer.work.level, WORK_LEVELS.length), WORK_LEVELS, trimmed(answer.work.reason)),
+    extra: levelAnswer(clampLevel(answer.extra.level, EXTRA_LEVELS.length), EXTRA_LEVELS, trimmed(answer.extra.reason)),
+    education: levelAnswer(clampLevel(answer.education.level, EDUCATION_LEVELS.length), EDUCATION_LEVELS, trimmed(answer.education.reason)),
+    seniority: { fit: answer.seniority.fit, reason: trimmed(answer.seniority.reason) || SENIORITY_OPTIONS[answer.seniority.fit].says },
+    location: { fit: answer.location.fit, reason: trimmed(answer.location.reason) || LOCATION_OPTIONS[answer.location.fit].says },
+    thin: answer.thin,
   };
 }
 
-/** E16-2: how well a posting fits the profile. Contact details and references are never sent. */
-export const scorePosting: Task<ScorePostingInput, PostingScore> = async (provider, input, { signal }) => {
-  const { posting, profile, title, company, place, remote, salary, today = new Date() } = input;
-  // Models add up date ranges badly, and seniority is judged on it (#279).
-  const years = Math.floor(experienceMonths(profile, today) / 12);
+/** E25-1: the engine's questions about a posting and one profile. Contact details, references and links are never sent. */
+export const scorePosting: Task<ScorePostingInput, FactorAnswers> = async (provider, { posting, lines, profile, today = new Date() }, { signal }) => {
+  const state = scoringState({ ...posting, description: posting.description.slice(0, MAX_POSTING_CHARACTERS) }, profile, today);
   const answer = await provider.complete({
     task: "score-posting",
     system: system(
@@ -89,19 +113,19 @@ export const scorePosting: Task<ScorePostingInput, PostingScore> = async (provid
       {
         role: "user",
         content: [
-          `The candidate's profile:\n${profileForPrompt(profile)}`,
-          `The candidate's work experience: ${years === 1 ? "about 1 year" : `about ${years} years`} in all, counting overlapping roles once.`,
-          `The posting's facts:\n${JSON.stringify({ title, company, place, remote, salary }, null, 2)}`,
-          `The posting:\n${postingForPrompt(posting)}`,
+          `The candidate:\n${JSON.stringify(state.candidate, null, 2)}`,
+          `The posting's facts:\n${JSON.stringify({ ...state.posting, text: undefined }, null, 2)}`,
+          `The posting's lines:\n${lines.map((line, index) => `${index}: ${line}`).join("\n") || "(none)"}`,
+          `The posting:\n${postingForPrompt(state.posting.text)}`,
         ].join("\n\n"),
       },
     ],
     schema: answerSchema,
-    schemaName: "posting_score",
+    schemaName: "posting_factors",
     // Judging, not writing: faithful, and no long think before answering.
     creativity: "FAITHFUL",
     effort: "low",
     signal,
   });
-  return { data: scoreFrom(answer), promptVersion: SCORE_POSTING_VERSION };
+  return { data: factorsFrom(answer, lines), promptVersion: SCORE_POSTING_VERSION };
 };

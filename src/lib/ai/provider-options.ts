@@ -116,6 +116,10 @@ export type AiSettingsView = {
   baseUrl: string;
   model: string;
   keyState: KeyState;
+  /** The saved key's last four characters (ST4), or null. */
+  keyEnding: string | null;
+  /** The last connection test of what's chosen (E34-1), or null. */
+  test: { at: string; ok: boolean; seconds: number | null; error: string | null } | null;
   /** Saved in Settings; null for DOSSIER_AI_TIMEOUT_SECONDS's, or the provider's own. */
   timeoutSeconds: number | null;
   /** DOSSIER_AI_TIMEOUT_SECONDS, if it's set. */

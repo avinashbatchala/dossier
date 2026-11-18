@@ -23,7 +23,7 @@ export function isPublicationUnit(unitId: string): boolean {
 }
 
 /** Whether a unit holds a certification (#293): its name as the user wrote it, which the AI never rewrites. */
-export function isCertificationUnit(unitId: string): boolean {
+function isCertificationUnit(unitId: string): boolean {
   return unitId.startsWith("certification:");
 }
 

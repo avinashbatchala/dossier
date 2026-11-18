@@ -7,6 +7,7 @@ import type { Extracted } from "@/lib/application-data";
 import { readPostingJob } from "@/lib/jobs/read-posting";
 import { defineJob } from "@/lib/jobs/runner";
 import { writeDocumentsJob } from "@/lib/jobs/write-documents";
+import { profileIdOr } from "@/lib/profiles";
 import { loadSettings } from "@/lib/settings-data";
 
 // A draft application asked for from Claude chat (#221, draft_application),
@@ -36,13 +37,16 @@ export const connectorDraftJob = defineJob({
     note: z.string().max(2000),
     /** The posting from Find jobs it came from, so it shows as applied for. */
     postingId: z.string().nullable(),
+    /** The profile it's written from (E24-6); the first when it's missing. */
+    profileId: z.string().min(1).nullable().default(null),
   }),
   result: z.object({ applicationId: z.string().min(1) }),
-  async run({ posting, postingUrl, note, postingId }, context) {
-    const reading = await readPostingJob.run({ posting }, context);
+  async run({ posting, postingUrl, note, postingId, profileId: asked }, context) {
+    const profileId = await profileIdOr(asked);
+    const reading = await readPostingJob.run({ posting, profileId }, context);
     const settings = await loadSettings();
     const documents = await writeDocumentsJob.run(
-      { readJobId: context.id, posting, extracted: reading.extracted, match: reading.match, tone: settings.defaultTone, note, write: "both" },
+      { readJobId: context.id, posting, extracted: reading.extracted, match: reading.match, tone: settings.defaultTone, note, write: "both", profileId },
       context,
     );
     const applicationId = await createApplicationFromDocuments({
@@ -55,6 +59,7 @@ export const connectorDraftJob = defineJob({
       note,
       // This job claims it, as New application's write job does, so a retry can't make two.
       claim: { kind: "manual", writeJobId: context.id, readJobId: context.id, postingId },
+      profileId,
     });
     return { applicationId };
   },

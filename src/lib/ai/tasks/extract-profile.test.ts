@@ -102,6 +102,7 @@ const answer = {
     { citation: " ", link: null },
   ],
   references: [{ name: "Jane Doe", relation: "Former manager", company: "Fieldnote", email: null, phone: null }],
+  levels: { from: "lead", to: "senior" },
 };
 
 describe("extractProfile (E4-10)", () => {
@@ -130,6 +131,7 @@ describe("extractProfile (E4-10)", () => {
       certifications: [{ name: "Google Data Analytics", issuer: "Google", year: 2023, month: null, expiryYear: null, expiryMonth: null, credentialId: null, link: null }],
       publications: [],
       references: [],
+      levels: null,
     };
     const { data } = await extractProfile(new MockProvider({ reply: () => added }), { resume, today: new Date("2026-11-08") }, options);
     expect(data.basics).toEqual({ name: "Morgan Ellis", headline: "Data Analyst", city: "Portland" });
@@ -146,7 +148,9 @@ describe("extractProfile (E4-10)", () => {
   it("checks the answer: dates in range, levels, one of each skill, and names looked up in the resume", async () => {
     const provider = new MockProvider({ reply: () => answer });
     const { data, promptVersion } = await extractProfile(provider, { resume: RESUME, today: new Date("2026-09-29") }, options);
-    expect(promptVersion).toBe("extract-profile@6");
+    expect(promptVersion).toBe("extract-profile@7");
+    // The levels are guessed, put in order, and shown to confirm (E24-3).
+    expect(data.levels).toEqual({ from: "senior", to: "lead" });
     expect(data.basics).toEqual({
       name: "John Doe",
       headline: "Senior Product Designer",

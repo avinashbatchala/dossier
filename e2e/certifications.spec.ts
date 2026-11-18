@@ -14,7 +14,7 @@ test.beforeAll(async () => {
 
 test("adds a certification and shows it on the base resume", async ({ page }) => {
   await page.goto("/profile?section=certifications");
-  await expect(page.getByRole("link", { name: /Certifications\s*optional\s*1/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Certifications\b.*1 certification/ })).toBeVisible();
   await page.getByRole("button", { name: "+ Add a certification" }).click();
   const name = page.getByRole("textbox", { name: "Certification" });
   await expect(name).toBeFocused();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { loadGoogleAccount } from "@/lib/google/account";
-import { authorizeUrl, googleClient, redirectUri, SCOPES, signState, type ScopeGroup } from "@/lib/google/oauth";
+import { authorizeUrl, CALLBACK_PATH, googleClient, pkcePair, PKCE_COOKIE, redirectUri, SCOPES, signState, type ScopeGroup } from "@/lib/google/oauth";
 import { publicOrigin } from "@/lib/google/origin";
 import { route } from "@/lib/route";
 
@@ -33,5 +33,10 @@ export const GET = route(async (request) => {
   const account = await loadGoogleAccount();
   const scopes = [...SCOPES.identity, ...(account?.scopes.split(/\s+/) ?? []), ...asked.flatMap((group) => SCOPES[group])].filter(Boolean);
   const state = await signState(back);
-  return NextResponse.redirect(authorizeUrl({ clientId: client.id, redirect: redirectUri(publicOrigin(request)), state, scopes }));
+  const origin = publicOrigin(request);
+  const { verifier, challenge } = pkcePair();
+  const response = NextResponse.redirect(authorizeUrl({ clientId: client.id, redirect: redirectUri(origin), state, scopes, challenge }));
+  // PKCE (#358): only this browser, coming back to the callback within ten minutes, can trade the code.
+  response.cookies.set(PKCE_COOKIE, verifier, { httpOnly: true, sameSite: "lax", path: CALLBACK_PATH, maxAge: 600, secure: origin.startsWith("https:") });
+  return response;
 });

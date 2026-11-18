@@ -26,7 +26,6 @@ export type DocumentSettings = {
   defaultTone: Tone;
   docLanguage: string | null;
   /** The base resume's language; null is English. */
-  resumeLanguage: string | null;
   customLanguages: string[];
   fileNamePattern: string;
   includeRefs: boolean;
@@ -163,18 +162,6 @@ export function DocumentsSection({
             </div>
           )}
         </div>
-        <Select
-          label="Base resume language"
-          hint="For its headings and dates. Tailored documents use their application's language."
-          value={settings.resumeLanguage ?? "English"}
-          onChange={(event) => change({ resumeLanguage: event.target.value === "English" ? null : event.target.value })}
-        >
-          {DOCUMENT_LANGUAGES.map(({ name }) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </Select>
         <Select
           label="Documents to write"
           hint="What New application writes, unless you choose there. A skipped one can be written later from the application."

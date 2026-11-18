@@ -20,7 +20,7 @@ import { proposeSlots, scheduleInterview } from "./availability";
 import { GoogleError } from "./errors";
 import { worthSuggesting } from "./matching";
 import { loadGoogleClientConfig } from "./oauth";
-import { sendApplicationEmail, sendReply } from "./send";
+import { sendApplicationEmail, sendApplicationMessage, sendReply } from "./send";
 import { formatSlot } from "./slots";
 import { checkInboxNow, readReply } from "./sync";
 
@@ -140,6 +140,14 @@ export const sendWithGmail = action(z.object({ id: z.string().min(1) }), async (
   return { eventId: sent.eventId };
 });
 
+/** "Send reply" on a drafted follow-up or answer to the offer (E30-7, E30-8), after the confirmation. */
+export const sendMessageWithGmail = action(z.object({ id: z.string().min(1) }), async ({ id }, { toast }) => {
+  await google(() => sendApplicationMessage(id));
+  refreshEverything();
+  toast("Sent, in the same thread.");
+  return null;
+});
+
 /** Drafts (or redrafts) the answer to an email in the background. */
 export const startDraftingReply = action(
   z.object({ emailId: z.string().min(1), note: z.string().max(2000).default(""), slots: z.array(z.iso.datetime({ offset: true })).max(8).nullable().default(null) }),
@@ -175,7 +183,7 @@ export const markHandled = action(z.object({ emailId: z.string().min(1), handled
   return null;
 });
 
-/** Links a mail to an application ("Needs a look"), with the rest of its thread. Null unlinks. */
+/** Links a mail to an application, with the rest of its thread: from "Needs a look", or moved from another (public #134). Null unlinks. */
 export const linkEmail = action(z.object({ emailId: z.string().min(1), applicationId: z.string().min(1).nullable() }), async ({ emailId, applicationId }, { toast }) => {
   const email = await prisma.emailMessage.findUnique({ where: { id: emailId }, select: { threadId: true } });
   if (!email) throw new ActionError("That email is no longer in Dossier.");
@@ -183,7 +191,7 @@ export const linkEmail = action(z.object({ emailId: z.string().min(1), applicati
   // Mail dismissed before has nothing left to show, so it stays dismissed.
   await prisma.emailMessage.updateMany({ where: { threadId: email.threadId, dismissedAt: null }, data: { applicationId } });
   refreshEverything();
-  toast(applicationId ? "Linked. Replies in this thread will go there too." : "Unlinked.");
+  toast(applicationId ? "Linked. Replies in this thread will go there too." : "Unlinked. It's under Needs a look in the inbox.");
   return null;
 });
 

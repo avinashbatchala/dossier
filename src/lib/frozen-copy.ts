@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import {
-  CustomSectionFormat,
+  CustomSectionCountsAs, CustomSectionFormat,
   DateFormat,
   DateStyle,
   Density,
@@ -24,6 +24,8 @@ import { extractedSchema } from "@/lib/application-data";
 import { prisma } from "@/lib/prisma";
 import { BASICS_FIELDS, type Basics, type ProfileData } from "@/lib/profile";
 import { loadProfile } from "@/lib/profile-data";
+import type { ProfileSettings } from "@/lib/profile-settings";
+import { loadProfileSettings } from "@/lib/profiles";
 import { sectionOfUnit } from "@/lib/resume-sections";
 import { THEME_STYLE_DEFAULTS, BUILT_IN_THEMES, type ThemeData } from "@/lib/themes";
 import { loadSettings } from "@/lib/settings-data";
@@ -78,6 +80,8 @@ const frozenProfileSchema = z.object({
       id: z.string(),
       title: text,
       format: z.enum(CustomSectionFormat),
+      // Copies made before E24-5 say nothing: every section was Extra activities then.
+      countsAs: z.enum(CustomSectionCountsAs).catch("EXTRA_ACTIVITIES"),
       items: list(z.object({ id: z.string(), title: text, subtitle: text, details: text, link: text, onResumes: z.boolean().default(true), ...when })),
     }),
   ),
@@ -126,24 +130,25 @@ export function readFrozenCopy(value: unknown): FrozenCopy | null {
 /** The copy's profile with today's photo. */
 export const frozenProfile = (copy: FrozenCopy, live: ProfileData): ProfileData => ({ ...copy.profile, photo: live.photo });
 
-/** The profile an application is written and drawn from: its copy once it was sent, for the AI too. */
-export async function profileOfApplication(frozen: unknown): Promise<ProfileData> {
-  const [live, copy] = [await loadProfile(), readFrozenCopy(frozen)];
+/** The profile an application is written and drawn from: its copy once it was sent, for the AI too; else its own profile now (E24-6). */
+export async function profileOfApplication(frozen: unknown, profileId?: string | null): Promise<ProfileData> {
+  const [live, copy] = [await loadProfile(profileId), readFrozenCopy(frozen)];
   return copy ? frozenProfile(copy, live) : live;
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
 
-type Shared = { profile: ProfileData; settings: Awaited<ReturnType<typeof loadSettings>>; baseTheme: ThemeData };
+type Shared = { profile: ProfileData; settings: Awaited<ReturnType<typeof loadSettings>>; own: ProfileSettings; baseTheme: ThemeData };
 
-async function loadShared(db: Db): Promise<Shared> {
-  const [profile, settings] = await Promise.all([loadProfile(db), loadSettings(db)]);
-  const baseTheme = (await db.theme.findUnique({ where: { id: settings.baseThemeId }, select: THEME_FIELDS })) ?? BUILT_IN_THEMES[0];
-  return { profile, settings, baseTheme };
+/** What a send freezes from the application's profile (E24-6) and the settings. */
+async function loadShared(db: Db, profileId: string | null): Promise<Shared> {
+  const [profile, settings, own] = await Promise.all([loadProfile(profileId, db), loadSettings(db), loadProfileSettings(profileId, db)]);
+  const baseTheme = (await db.theme.findUnique({ where: { id: own.baseThemeId }, select: THEME_FIELDS })) ?? BUILT_IN_THEMES[0];
+  return { profile, settings, own, baseTheme };
 }
 
 /** What to write on an application to freeze it. */
-async function frozenData(db: Db, applicationId: string, { profile, settings, baseTheme }: Shared) {
+async function frozenData(db: Db, applicationId: string, { profile, settings, own, baseTheme }: Shared) {
   const application = await db.application.findUniqueOrThrow({
     where: { id: applicationId },
     select: { sections: true, extracted: true, documents: { select: { kind: true, theme: { select: THEME_FIELDS } } } },
@@ -159,12 +164,13 @@ async function frozenData(db: Db, applicationId: string, { profile, settings, ba
     includeReferences: settings.includeRefs && extracted.success && extracted.data.asksForReferences === true,
     followedBase: application.sections === null,
   };
-  return { frozen: asJson(copy), sections: application.sections === null ? asJson(settings.resumeSections) : asJson(application.sections) };
+  return { frozen: asJson(copy), sections: application.sections === null ? asJson(own.resumeSections) : asJson(application.sections) };
 }
 
 /** On an application's first send. */
 export async function frozenDataForSend(db: Db, applicationId: string) {
-  return frozenData(db, applicationId, await loadShared(db));
+  const { profileId } = await db.application.findUniqueOrThrow({ where: { id: applicationId }, select: { profileId: true } });
+  return frozenData(db, applicationId, await loadShared(db, profileId));
 }
 
 /** Undoing that send: it follows the profile again, and the base resume's sections if it did. */
@@ -179,10 +185,14 @@ export function unfrozenData(frozen: unknown) {
  * importing it. They keep what they show now; earlier changes can't be undone.
  */
 export async function freezeSentApplications(db: Db = prisma): Promise<number> {
-  const sent = await db.application.findMany({ where: { sentAt: { not: null }, frozen: { equals: Prisma.DbNull } }, select: { id: true } });
+  const sent = await db.application.findMany({ where: { sentAt: { not: null }, frozen: { equals: Prisma.DbNull } }, select: { id: true, profileId: true } });
   if (sent.length === 0) return 0;
-  const shared = await loadShared(db);
-  for (const { id } of sent) await db.application.update({ where: { id }, data: await frozenData(db, id, shared) });
+  // Each from its own profile, read once for all its applications.
+  const shared = new Map<string | null, Shared>();
+  for (const { id, profileId } of sent) {
+    if (!shared.has(profileId)) shared.set(profileId, await loadShared(db, profileId));
+    await db.application.update({ where: { id }, data: await frozenData(db, id, shared.get(profileId)!) });
+  }
   return sent.length;
 }
 

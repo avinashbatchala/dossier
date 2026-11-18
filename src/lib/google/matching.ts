@@ -69,12 +69,17 @@ function mentions(haystack: readonly string[], company: readonly string[]): bool
   return haystack.some((_, start) => company.every((word, i) => haystack[start + i] === word));
 }
 
-/** The most likely of several candidates: one still in progress, most recently changed. */
+/**
+ * The most likely of several candidates: one sent and still in progress,
+ * else a draft, most recently changed. A closed one never is (#358): a new
+ * mail from that company is about something else, and waits in the Inbox
+ * unmatched. A reply in a thread already linked still goes to it.
+ */
 function best(candidates: MatchableApplication[]): MatchableApplication | null {
-  if (candidates.length === 0) return null;
-  const open = candidates.filter((application) => isInProgress(application.status) && application.status !== ApplicationStatus.DRAFT);
-  const pool = open.length > 0 ? open : candidates;
-  return [...pool].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+  const live = candidates.filter((application) => isInProgress(application.status));
+  const sent = live.filter((application) => application.status !== ApplicationStatus.DRAFT);
+  const pool = sent.length > 0 ? sent : live;
+  return [...pool].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
 }
 
 export function matchMail(

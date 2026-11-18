@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { PrismaClient, StatusEvent } from "@/generated/prisma/client";
-import type { ApplicationStatus } from "@/generated/prisma/enums";
+import type { ApplicationStatus, SentVia } from "@/generated/prisma/enums";
 
 import { frozenDataForSend, unfrozenData } from "./frozen-copy";
 import { advance, undoChange } from "./status";
@@ -14,12 +14,13 @@ export type StatusChangeResult =
   | { outcome: "unchanged" }
   | { outcome: "not-found" };
 
-/** Moves an application to `to` and records the change. */
+/** Moves an application to `to` and records the change; `sentVia` says how, when this is its first send (E29-7). */
 export async function applyStatusChange(
   db: PrismaClient,
   applicationId: string,
   to: ApplicationStatus,
   now = new Date(),
+  { sentVia }: { sentVia?: SentVia } = {},
 ): Promise<StatusChangeResult> {
   return db.$transaction(async (tx) => {
     // Lock the row so two changes to the same application can't interleave:
@@ -37,7 +38,10 @@ export async function applyStatusChange(
     // Its first send: from here on it keeps what it was sent with (#299).
     const firstSend = application.sentAt === null && change.update.sentAt !== null;
     // Without a place, it goes on top of its new column (public issue 60).
-    await tx.application.update({ where: { id: applicationId }, data: { ...change.update, boardSort: null, ...(firstSend ? await frozenDataForSend(tx, applicationId) : {}) } });
+    await tx.application.update({
+      where: { id: applicationId },
+      data: { ...change.update, boardSort: null, ...(firstSend ? { ...(await frozenDataForSend(tx, applicationId)), ...(sentVia ? { sentVia } : {}) } : {}) },
+    });
     const event = await tx.statusEvent.create({ data: { applicationId, ...change.event, previousBoardSort: application.boardSort } });
     return { outcome: "changed", event };
   });
@@ -69,7 +73,11 @@ export async function undoStatusChange(db: PrismaClient, eventId: string): Promi
     const restored = undoChange(event);
     // Undoing the first send means it was never sent: it follows the profile again (#299).
     const { frozen } = await tx.application.findUniqueOrThrow({ where: { id: event.applicationId }, select: { frozen: true } });
-    await tx.application.update({ where: { id: event.applicationId }, data: { ...restored, boardSort: event.previousBoardSort, ...(restored.sentAt === null && frozen !== null ? unfrozenData(frozen) : {}) } });
+    await tx.application.update({
+      where: { id: event.applicationId },
+      // Never sent after all: nor how (E29-7).
+      data: { ...restored, boardSort: event.previousBoardSort, ...(restored.sentAt === null ? { sentVia: null } : {}), ...(restored.sentAt === null && frozen !== null ? unfrozenData(frozen) : {}) },
+    });
     await tx.statusEvent.delete({ where: { id: event.id } });
     return { outcome: "undone", status: restored.status };
   });

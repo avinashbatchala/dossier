@@ -25,7 +25,7 @@ import {
   type Task,
 } from "./prompt-parts";
 
-export const REGENERATE_UNIT_VERSION = "regenerate-unit@6";
+const REGENERATE_UNIT_VERSION = "regenerate-unit@6";
 
 /** What the letter's frame parts are, for the model (E8-11). */
 const FRAME_PARTS: Record<string, string> = {

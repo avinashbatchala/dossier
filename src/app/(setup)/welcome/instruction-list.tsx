@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Instruction } from "@/lib/setup/instructions";
 
 /** Text with **bold** for what's on the screen. */
-export function withBold(text: string): ReactNode[] {
+function withBold(text: string): ReactNode[] {
   return text.split("**").map((part, index) => (index % 2 === 1 ? <strong key={index} className="font-medium text-ink">{part}</strong> : part));
 }
 

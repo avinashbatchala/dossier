@@ -9,8 +9,9 @@ import { loadProfileName } from "@/lib/profile-data";
 import { signIn, signInWithForm } from "./actions";
 import { loginMessages } from "./messages";
 
+const request = vi.hoisted(() => ({ userAgent: "Mozilla/5.0 Chrome/150.0" }));
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ "x-forwarded-for": "10.0.0.1, 203.0.113.7" }),
+  headers: async () => new Headers({ "x-forwarded-for": "10.0.0.1, 203.0.113.7", "user-agent": request.userAgent }),
 }));
 vi.mock("next/navigation", () => ({
   unstable_rethrow: () => {},
@@ -83,6 +84,18 @@ describe("signIn", () => {
     expect(succeeded).toHaveBeenCalledOnce();
     expect(startSession).toHaveBeenCalledWith({ persistent: true });
     expect(rememberBrowser).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a browser's session only when asked, and the desktop app's always (#359)", async () => {
+    await signIn({ password: "correct horse", remember: false });
+    expect(startSession).toHaveBeenLastCalledWith({ persistent: false });
+    request.userAgent = "Mozilla/5.0 Chrome/150.0 Electron/45.2.3 DossierDesktop/1.15.0";
+    try {
+      await signIn({ password: "correct horse", remember: false });
+      expect(startSession).toHaveBeenLastCalledWith({ persistent: true });
+    } finally {
+      request.userAgent = "Mozilla/5.0 Chrome/150.0";
+    }
   });
 
   it("counts a browser that signed in before for itself (#334)", async () => {

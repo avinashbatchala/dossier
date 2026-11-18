@@ -22,10 +22,10 @@ export function cached<T>(key: string, now = Date.now()): T | undefined {
   return entry.value as T;
 }
 
-/** Keeps `value` under `key`; past the limit, the oldest entry goes. */
-export function remember(key: string, value: unknown, now = Date.now()): void {
+/** Keeps `value` under `key`, for half an hour or `ttlMs`; past the limit, the oldest entry goes. */
+export function remember(key: string, value: unknown, now = Date.now(), ttlMs = CACHE_TTL_MS): void {
   store.delete(key);
-  store.set(key, { value, expires: now + CACHE_TTL_MS });
+  store.set(key, { value, expires: now + ttlMs });
   while (store.size > MAX_ENTRIES) {
     const oldest = store.keys().next().value;
     if (oldest === undefined) break;

@@ -4,15 +4,20 @@ import Link from "next/link";
 import { buttonClassName } from "@/components/ui/button";
 import { verifySession } from "@/lib/auth/session";
 import { isAiConfigured, isAiUsable, loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
-import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
+import { enabledPortals, jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
+import { COUNTRIES, countryCodeFor } from "@/lib/job-search/countries";
 import { SOURCE_INFO } from "@/lib/job-search/sources";
-import { loadProfileName } from "@/lib/profile-data";
+import { BUILT_IN_PORTALS } from "@/lib/portals/built-in";
+import { catalogView, readCatalog } from "@/lib/portals/catalog";
+import { loadInstalledPortals } from "@/lib/portals/installed";
+import { loadProfileCountry, loadProfileName } from "@/lib/profile-data";
 import { SCORER_INFO } from "@/lib/scoring/scorers";
 import { jobRetentionLabel } from "@/lib/settings";
 import { loadScoringConfig, scoringView } from "@/lib/scoring/config";
 import { providerOption } from "@/lib/ai/provider-options";
 import { env } from "@/lib/env";
 import { redirectUri } from "@/lib/google/oauth";
+import { firstProfileId, loadProfileLevels } from "@/lib/profiles";
 import { loadSettings } from "@/lib/settings-data";
 import { googleClientView, googleView, requestOrigin } from "@/lib/settings-views";
 import { aiChoice, choiceOf } from "@/lib/setup/ai-choices";
@@ -74,7 +79,7 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
     const choice = choiceOf(view.provider, view.baseUrl);
     const rows = [
       { label: "AI", value: usable ? (choice ? aiChoice(choice).name : providerOption(view.provider).name) : null, href: "/settings?section=ai" },
-      { label: "Job search", value: jobs.source ? SOURCE_INFO[jobs.source].name : null, href: "/settings?section=jobs" },
+      { label: "Job search", value: enabledPortals(jobs).map((id) => SOURCE_INFO[id].name).join(", ") || null, href: "/settings?section=jobs" },
       { label: "Scoring", value: SCORER_INFO[scoring.scorer].name, href: "/settings?section=scoring" },
       { label: "Gmail and Calendar", value: connection.status === "connected" ? connection.email : null, href: "/settings?section=google" },
       { label: "Profile", value: name.trim() || null, href: "/profile" },
@@ -136,15 +141,20 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
   }
 
   if (step === "jobs") {
-    const view = jobSearchView(await loadJobSearchConfig());
+    // The catalog, read now if it's been a minute (E23-4); its reviewed portals are listed beside the built-ins.
+    await readCatalog({ force: true });
+    const [config, country, installed] = await Promise.all([loadJobSearchConfig(), loadProfileCountry(), loadInstalledPortals()]);
+    const view = jobSearchView(config);
+    const catalog = await catalogView(new Map(installed.map((portal) => [portal.config.id, portal.config.version])), new Set(BUILT_IN_PORTALS.map((portal) => portal.id)));
     return (
       <SetupFrame
         step="jobs"
         title="Where to look for jobs"
-        complete={settings.jobSource !== null || view.source !== "OFF"}
-        lead="Find jobs and the job agent search one source for postings that fit you. You can also paste any posting you find yourself."
+        complete={view.portals.some((portal) => portal.on)}
+        lead="Positions and the job agent search the portals you pick for postings that fit you. You can also paste any posting you find yourself."
       >
-        <JobsStep initial={view} />
+        {/* Named here: the browser's ICU can name a few countries differently from the server's. */}
+        <JobsStep initial={view} countries={COUNTRIES} country={countryCodeFor(country)} catalog={catalog.readAt ? catalog.portals : null} />
       </SetupFrame>
     );
   }
@@ -155,7 +165,7 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
       <SetupFrame
         step="scoring"
         title="How to judge a posting"
-        complete={view.scorer === "AI" || view.keyState === "set" || view.keyState === "env"}
+        complete={view.scorer === "AI" || view.keys[view.scorer] === "set" || view.keys[view.scorer] === "env"}
         lead="Score in Find jobs and the job agent say how well a posting fits your profile, so you can see the good ones first. Your resumes and letters are always written by your AI."
       >
         <ScoringStep initial={view} />
@@ -196,7 +206,15 @@ export default async function WelcomePage({ searchParams }: PageProps<"/welcome"
           : "Everything Dossier writes is built from your profile: your roles, skills and education. Start it from a resume you already have, or skip this step and fill it in yourself."
       }
     >
-      <ProfileImport aiReady={aiReady} provider={ai.provider} initialJobId={typeof job === "string" ? job : null} keptFor={jobRetentionLabel(settings.jobRetentionHours)} inGuide />
+      <ProfileImport
+        profileId={await firstProfileId()}
+        needsLevels={!(await loadProfileLevels())}
+        aiReady={aiReady}
+        provider={ai.provider}
+        initialJobId={typeof job === "string" ? job : null}
+        keptFor={jobRetentionLabel(settings.jobRetentionHours)}
+        inGuide
+      />
     </SetupFrame>
   );
 }

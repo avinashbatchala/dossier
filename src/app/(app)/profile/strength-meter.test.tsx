@@ -19,7 +19,8 @@ describe("StrengthMeter", () => {
     );
     const bar = screen.getByRole("progressbar", { name: "Profile strength" });
     expect(bar).toHaveAttribute("aria-valuenow", "37"); // 1/6 × 40 = 6.7 → plus 30
-    expect(bar).toHaveAccessibleDescription("A good start. Experience matters most.");
+    // The hint names the next missing thing (E33-1).
+    expect(bar).toHaveAccessibleDescription("A good start. Add your email address in Basics.");
     expect(screen.getByText("37%")).toBeInTheDocument();
   });
 
@@ -31,5 +32,17 @@ describe("StrengthMeter", () => {
       />,
     );
     expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAttribute("aria-valuenow", "7");
+  });
+});
+
+describe("StrengthMeter's hint (E33-1)", () => {
+  it("names a role with no lines once the basics are there", () => {
+    const full = { ...basics, name: "Jane", email: "jane@example.com", city: "Rotterdam", country: "Netherlands", headline: "Designer", summary: "Designs." };
+    render(
+      <StrengthMeter
+        profile={{ basics: full, skills: [], languages: [], experience: [{ bullets: "Led it" } as never, { bullets: "" } as never], projects: [], education: [], certifications: [], publications: [], references: [], customSections: [], facts: [], photo: null }}
+      />,
+    );
+    expect(screen.getByRole("progressbar", { name: "Profile strength" })).toHaveAccessibleDescription("Good progress. One role has no lines yet.");
   });
 });

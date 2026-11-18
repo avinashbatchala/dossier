@@ -13,29 +13,34 @@ import type { JobView } from "@/lib/jobs/runner";
 
 import {
   addMatchSkill,
+  markKnownGap,
   addNote,
   deleteNote,
   leaveOutUnit,
-  listVersions,
-  loadVersion,
   putBackTrimmed,
   restoreNote,
   restoreUnit,
-  restoreVersion,
   saveUnit,
   sendMessage,
+  rewriteLetter,
   setApplicationTheme,
   setFollowThemeLayout,
   setShowPhoto,
   startRegenerating,
-  startScoringResume,
+  startCheckingRequirements,
   startWritingDocument,
   startWritingEmail,
   undoEmailRewrite,
+  goBackTo,
+  stopWritingApplication,
+  startPreparing,
+  tickPrep,
+  startWritingMessage,
+  markMessageSent,
   undoMessage,
   updateNote,
 } from "./actions";
-import { ApplicationView, type ApplicationViewProps } from "./application-view";
+import { ApplicationView, letterPlaces, type ApplicationViewProps } from "./application-view";
 
 vi.mock("./actions", () => ({
   setApplicationTheme: vi.fn(async () => ({ ok: true, data: null })),
@@ -45,21 +50,32 @@ vi.mock("./actions", () => ({
   startRegenerating: vi.fn(async () => ({ ok: true, data: "job-1" })),
   restoreUnit: vi.fn(async () => ({ ok: true, data: null })),
   sendMessage: vi.fn(async () => ({ ok: true, data: { jobId: "reply-1" } })),
+  rewriteLetter: vi.fn(async () => ({ ok: true, data: "letter-1" })),
+  goBackTo: vi.fn(async (): Promise<unknown> => ({ ok: true, data: ["RESUME"] })),
+  startPreparing: vi.fn(async () => ({ ok: true, data: "prep-1" })),
+  tickPrep: vi.fn(async () => ({ ok: true, data: null })),
+  updateInterview: vi.fn(async () => ({ ok: true, data: null })),
+  addInterviewRound: vi.fn(async () => ({ ok: true, data: { id: "i3", round: 3 } })),
+  saveOffer: vi.fn(async () => ({ ok: true, data: null })),
+  startWritingMessage: vi.fn(async () => ({ ok: true, data: "msg-1" })),
+  saveMessageDraft: vi.fn(async () => ({ ok: true, data: null })),
+  markMessageSent: vi.fn(async () => ({ ok: true, data: null })),
+  discardMessageDraft: vi.fn(async () => ({ ok: true, data: null })),
   undoMessage: vi.fn(async () => ({ ok: true, data: { edited: [{ document: "RESUME", unitId: "summary" }] } })),
-  addMatchSkill: vi.fn(async () => ({ ok: true, data: { name: "Kubernetes" } })),
+  addMatchSkill: vi.fn(async (): Promise<unknown> => ({ ok: true, data: { name: "Kubernetes", where: "", experienceId: null } })),
+  markKnownGap: vi.fn(async () => ({ ok: true, data: null })),
+  forgetKnownGap: vi.fn(async () => ({ ok: true, data: null })),
   addNote: vi.fn(async () => ({ ok: true, data: null })),
   updateNote: vi.fn(async () => ({ ok: true, data: null })),
   deleteNote: vi.fn(async () => ({ ok: true, data: { body: "Called John.", createdAt: "2026-10-03T13:00:00.000Z", updatedAt: "2026-10-03T13:00:00.000Z" } })),
   restoreNote: vi.fn(async () => ({ ok: true, data: null })),
   putBackTrimmed: vi.fn(async () => ({ ok: true, data: null })),
   leaveOutUnit: vi.fn(async () => ({ ok: true, data: { index: 2 } })),
-  listVersions: vi.fn(async () => ({ ok: true, data: [] })),
-  loadVersion: vi.fn(),
-  restoreVersion: vi.fn(async () => ({ ok: true, data: null, toast: "Restored the resume as it was then." })),
   startWritingEmail: vi.fn(async () => ({ ok: true, data: "email-1" })),
   startWritingDocument: vi.fn(async () => ({ ok: true, data: "document-1" })),
-  startScoringResume: vi.fn(async () => ({ ok: true, data: "score-1" })),
+  startCheckingRequirements: vi.fn(async () => ({ ok: true, data: "check-1" })),
   undoEmailRewrite: vi.fn(async () => ({ ok: true, data: null })),
+  stopWritingApplication: vi.fn(async () => ({ ok: true, data: null })),
 }));
 vi.mock("@/lib/copy-text", () => ({ copyText: vi.fn(async () => true) }));
 vi.mock("@/lib/jobs/actions", () => ({ retry: vi.fn(async () => ({ ok: true, data: null })) }));
@@ -95,6 +111,7 @@ const props: ApplicationViewProps = {
   application: {
     id: "app-1",
     title: "Senior Product Designer · Ledgerly",
+    role: "Senior Product Designer",
     company: "Ledgerly",
     location: "Amsterdam",
     status: "DRAFT",
@@ -128,7 +145,6 @@ const props: ApplicationViewProps = {
   dateFormat: "DAY_MONTH_YEAR",
   includeReferences: false,
   letterDate: new Date(Date.UTC(2026, 8, 28)),
-  score: { hit: 5, total: 7 },
   initialTab: "resume",
   aiReady: true,
   rewriting: [],
@@ -145,7 +161,7 @@ beforeEach(() => {
   vi.mocked(startRegenerating).mockClear();
   vi.mocked(restoreUnit).mockClear();
   vi.mocked(sendMessage).mockClear();
-  vi.mocked(undoMessage).mockClear();
+  vi.mocked(goBackTo).mockClear();
   vi.mocked(startWritingEmail).mockClear();
   vi.mocked(undoEmailRewrite).mockClear();
   vi.mocked(toast).mockClear();
@@ -156,11 +172,24 @@ beforeEach(() => {
 const summary = demoResumeUnits()[0];
 
 describe("the document tabs (E8-2)", () => {
-  it("has Resume, Cover letter, Email and the posting with its match", () => {
-    render(<ApplicationView {...props} />);
-    const tabs = within(screen.getByRole("tablist", { name: "Application" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Resume", "Cover letter", "Email", "Job posting · 5/7 match", "Notes"]);
+  it("has Resume, Cover letter, Email, the posting and Notes, with a dot on what's ready (E30-2)", () => {
+    const { rerender } = render(<ApplicationView {...props} />);
+    const tabs = () => within(screen.getByRole("tablist", { name: "Application" })).getAllByRole("tab");
+    expect(tabs().map((tab) => tab.textContent)).toEqual(["Resume", "Cover letter", "Email", "Job posting", "Notes"]);
     expect(screen.getByRole("tab", { name: "Resume" })).toHaveAttribute("aria-selected", "true");
+    rerender(<ApplicationView {...props} email={[{ id: "body", label: "Body", text: "Hello" }]} />);
+    expect(screen.getByRole("tab", { name: "Email, ready" })).toBeInTheDocument();
+  });
+
+  it("offers the one next step for its status, which opens its tab (E30-2)", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ApplicationView {...props} />);
+    await user.click(screen.getByRole("button", { name: "Review and send" }));
+    expect(screen.getByRole("tab", { name: /^Email/ })).toHaveAttribute("aria-selected", "true");
+    rerender(<ApplicationView {...props} application={{ ...props.application, status: "OFFER" }} />);
+    expect(screen.getByRole("button", { name: "Review offer" })).toBeInTheDocument();
+    rerender(<ApplicationView {...props} application={{ ...props.application, status: "SENT" }} />);
+    expect(screen.queryByRole("button", { name: /Review|Answer|Prepare/ })).not.toBeInTheDocument();
   });
 
   it("keeps the tab in the URL", async () => {
@@ -184,11 +213,16 @@ describe("the document tabs (E8-2)", () => {
 
   it("shows the tailored resume in its theme, in a single column by default", () => {
     render(<ApplicationView {...props} />);
-    expect(screen.getByText(/^Tailored resume ·/)).toHaveTextContent("Tailored resume · Editorial theme");
+    expect(screen.getByText("Tailored resume")).toBeInTheDocument();
     const resume = screen.getByRole("article", { name: "Resume" });
     expect(resume.querySelector('[data-unit="summary"]')).toHaveTextContent(demoResumeUnits()[0].text);
-    // Editorial is a single-column theme: nothing to switch.
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("has nothing to switch in a single-column theme without a photo (E30-9)", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} />);
+    await user.click(screen.getByRole("button", { name: "Editorial theme" }));
+    expect(screen.queryByRole("menuitemcheckbox")).not.toBeInTheDocument();
   });
 
   it("lets a sidebar theme use its own layout, saved on the application", async () => {
@@ -197,7 +231,8 @@ describe("the document tabs (E8-2)", () => {
     const resume = screen.getByRole("article", { name: "Resume" });
     expect(within(resume).queryByText("Contact")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("switch", { name: "Sidebar layout" }));
+    await user.click(screen.getByRole("button", { name: "Modern theme" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Sidebar layout" }));
     expect(setFollowThemeLayout).toHaveBeenCalledWith({ id: "app-1", follow: true });
   });
 
@@ -209,22 +244,21 @@ describe("the document tabs (E8-2)", () => {
     const resume = screen.getByRole("article", { name: "Resume" });
     expect(within(resume).getByRole("img", { name: profile.basics.name })).toBeInTheDocument();
 
-    const toggle = screen.getByRole("switch", { name: "Photo" });
+    await user.click(screen.getByRole("button", { name: "Editorial theme" }));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: "Photo" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
     await user.click(toggle);
     expect(setShowPhoto).toHaveBeenCalledWith({ id: "app-1", show: false });
   });
 
-  it("shows the photo as the application says, and has no Photo switch without one (#224)", () => {
+  it("shows the photo as the application says (#224)", async () => {
+    const user = userEvent.setup();
     const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
     const profile = { ...props.profile, photo: { src: png, onResumes: false } };
-    const { unmount } = render(<ApplicationView {...props} profile={profile} application={{ ...props.application, showPhoto: true }} />);
-    expect(screen.getByRole("switch", { name: "Photo" })).toHaveAttribute("aria-checked", "true");
+    render(<ApplicationView {...props} profile={profile} application={{ ...props.application, showPhoto: true }} />);
     expect(within(screen.getByRole("article", { name: "Resume" })).getByRole("img")).toBeInTheDocument();
-    unmount();
-
-    render(<ApplicationView {...props} />);
-    expect(screen.queryByRole("switch", { name: "Photo" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Editorial theme" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Photo" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("changes the resume's and cover letter's theme together from the Theme menu (#226)", async () => {
@@ -232,7 +266,6 @@ describe("the document tabs (E8-2)", () => {
     let answer: (result: { ok: true; data: null }) => void = () => {};
     vi.mocked(setApplicationTheme).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
     render(<ApplicationView {...props} />);
-    expect(screen.queryByRole("switch", { name: "Sidebar layout" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Editorial theme" }));
     const menu = screen.getByRole("menu");
@@ -244,16 +277,15 @@ describe("the document tabs (E8-2)", () => {
     // Shown in the new theme while it's saved: Modern has a sidebar, so its layout switch appears.
     await user.click(within(menu).getByRole("menuitemradio", { name: "Modern base theme" }));
     expect(setApplicationTheme).toHaveBeenCalledWith({ id: "app-1", themeId: "modern" });
-    expect(screen.getByRole("button", { name: "Modern theme" })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Sidebar layout" })).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Cover letter" }));
-    expect(screen.getByRole("button", { name: "Modern theme" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Modern theme" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Sidebar layout" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await act(async () => answer({ ok: true, data: null }));
   });
 
   it("doesn't save the theme the documents already have", async () => {
     const user = userEvent.setup();
-    render(<ApplicationView {...props} initialTab="letter" />);
+    render(<ApplicationView {...props} />);
     await user.click(screen.getByRole("button", { name: "Editorial theme" }));
     await user.click(screen.getByRole("menuitemradio", { name: "Editorial" }));
     expect(setApplicationTheme).not.toHaveBeenCalled();
@@ -267,7 +299,6 @@ describe("the document tabs (E8-2)", () => {
         resume={{ units: demoResumeUnits(), theme: theme("modern") }}
       />,
     );
-    expect(screen.getByRole("switch", { name: "Sidebar layout" })).toHaveAttribute("aria-checked", "true");
     expect(within(screen.getByRole("article", { name: "Resume" })).getByText("Contact")).toBeInTheDocument();
   });
 
@@ -279,7 +310,18 @@ describe("the document tabs (E8-2)", () => {
     expect(within(letter).getByText("28 September 2026")).toBeInTheDocument();
     expect(within(letter).getByText("Ledgerly · Hiring team")).toBeInTheDocument();
     expect(within(letter).getByText("Dear Ledgerly team,")).toBeInTheDocument();
-    expect(screen.getByText(/^Cover letter · about \d+0 words$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy text" })).toHaveAttribute("title", expect.stringMatching(/^about \d+0 words$/));
+  });
+
+  it("writes the letter again in another tone or language, from its toolbar (E30-9, AP3)", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} initialTab="letter" />);
+    await user.click(screen.getByRole("button", { name: "Warm tone" }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^Formal/ }));
+    expect(rewriteLetter).toHaveBeenCalledWith({ id: "app-1", tone: "FORMAL" });
+    expect(await screen.findByRole("status")).toHaveTextContent("Writing the letter again, in English and a formal tone…");
+    // One at a time.
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("copies the cover letter as text, from the greeting to the name (public issue 101)", async () => {
@@ -294,24 +336,29 @@ describe("the document tabs (E8-2)", () => {
     expect(toast).toHaveBeenLastCalledWith("Copied the letter, from the greeting to your name.");
   });
 
-  it("scores the tailored resume on request, and shows the score with its reasons (#370)", async () => {
+  it("shows the coverage, never a score out of 100, and checks again on request (E30-1)", async () => {
     const user = userEvent.setup();
-    const view = render(<ApplicationView {...props} />);
-    await user.click(screen.getByRole("button", { name: "Score" }));
-    expect(startScoringResume).toHaveBeenCalledWith({ id: props.application.id });
-    expect(screen.getByRole("button", { name: "Scoring…" })).toBeDisabled();
-    view.unmount();
-    const fit = { score: 82, reasons: ["Payments, as the posting asks"], redFlags: ["No Dutch"], scoredWith: "score-posting@2", scoredAt: "2026-11-08T12:00:00.000Z" };
-    render(<ApplicationView {...props} resumeFit={fit} />);
-    expect(screen.getByRole("img", { name: "Score 82 of 100" })).toBeInTheDocument();
-    expect(screen.getByText("Good fit")).toBeInTheDocument();
-    expect(screen.getByText("Payments, as the posting asks Watch out: No Dutch")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Score again" })).toBeInTheDocument();
+    const item = { skill: null, experienceIds: [], note: null };
+    const match = {
+      items: [
+        { ...item, requirement: "Design systems", result: "covered" as const },
+        { ...item, requirement: "Figma", result: "covered" as const },
+        { ...item, requirement: "Payments", result: "gap" as const },
+      ],
+    };
+    render(<ApplicationView {...props} match={match} />);
+    expect(screen.queryByRole("button", { name: /^Score/ })).not.toBeInTheDocument();
+    const column = screen.getByRole("complementary", { name: "How you fit" });
+    expect(within(column).getByRole("img", { name: "2 of 3 requirements covered" })).toBeInTheDocument();
+    expect(within(column).getByText("Good fit")).toBeInTheDocument();
+    await user.click(within(column).getByRole("button", { name: "Check again" }));
+    expect(startCheckingRequirements).toHaveBeenCalledWith({ id: props.application.id });
+    expect(within(column).getByRole("button", { name: "Checking…" })).toBeDisabled();
   });
 
   it("says so when a document is missing, and writes it on request (#367)", async () => {
     const user = userEvent.setup();
-    render(<ApplicationView {...props} resume={null} score={null} />);
+    render(<ApplicationView {...props} resume={null} />);
     expect(screen.getByText("This application was created without a tailored resume.")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Job posting" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Write the tailored resume" }));
@@ -322,7 +369,6 @@ describe("the document tabs (E8-2)", () => {
 describe("editing a unit (E8-3)", () => {
   it("gives every unit a focusable frame with its toolbar", () => {
     render(<ApplicationView {...props} />);
-    expect(screen.getByText("Hover a section to edit or regenerate it")).toBeInTheDocument();
     const frame = screen.getByRole("group", { name: "Summary" });
     expect(frame).toHaveAttribute("tabindex", "0");
     expect(frame).toHaveAttribute("data-unit", "summary");
@@ -534,7 +580,7 @@ describe("regenerating a unit (E8-4)", () => {
   });
 });
 
-describe("the Refine with AI panel (E8-5)", () => {
+describe("the composer (E8-5, E30-10)", () => {
   const opening = {
     id: "m1",
     role: "AI" as const,
@@ -544,41 +590,55 @@ describe("the Refine with AI panel (E8-5)", () => {
     canUndo: false,
     undone: false,
   };
-  const panel = () => screen.getByRole("complementary", { name: "Refine with AI" });
+  const composer = () => screen.getByRole("region", { name: "Composer" });
   const input = () => screen.getByRole("textbox", { name: "Ask for a change" });
+  const log = () => screen.getByRole("log", { name: "Conversation" });
 
-  it("shows the conversation, with the opening list and its footnote", () => {
-    render(
-      <ApplicationView
-        {...props}
-        messages={[opening, { id: "m2", role: "USER", text: "Shorter please", targetUnit: "Summary", opening: false, canUndo: false, undone: false }]}
-      />,
-    );
-    const log = within(panel()).getByRole("log", { name: "Conversation" });
-    expect(within(log).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Rewrote your summary", "Wrote a warm cover letter"]);
-    expect(within(log).getByText("Nothing invented: every line comes from your profile.")).toHaveClass("text-muted");
-    expect(within(log).getByText("About: Summary")).toBeInTheDocument();
+  it("shows only the latest reply above it, which can be hidden", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} messages={[opening, { id: "m2", role: "USER", text: "Shorter please", targetUnit: "Summary", opening: false, canUndo: false, undone: false }]} />);
+    // The opening message starts as one line, so it doesn't cover the document.
+    expect(within(log()).getByText("Here's what I tailored for Ledgerly:")).toBeInTheDocument();
+    expect(within(log()).queryByRole("listitem")).not.toBeInTheDocument();
+    await user.click(within(log()).getByRole("button", { name: "Show" }));
+    expect(within(log()).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Rewrote your summary", "Wrote a warm cover letter"]);
+    expect(within(log()).queryByText("Shorter please")).not.toBeInTheDocument();
+    await user.click(within(log()).getByRole("button", { name: "Hide this answer" }));
+    expect(within(log()).queryByRole("listitem")).not.toBeInTheDocument();
   });
 
-  it("changes its subtitle and suggestions with the tab", async () => {
+  it("changes its suggestions and placeholder with the tab, and only asks where there's nothing to change", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} />);
-    expect(within(panel()).getByText(/^Ask for changes to your tailored resume/)).toBeInTheDocument();
-    expect(within(panel()).getByRole("button", { name: "Make the summary shorter" })).toBeInTheDocument();
+    expect(within(composer()).getByRole("button", { name: "Make the summary shorter" })).toBeInTheDocument();
+    expect(input()).toHaveAttribute("placeholder", "Ask for a change to the resume, e.g. “sound more confident”");
     await user.click(screen.getByRole("tab", { name: "Cover letter" }));
-    expect(within(panel()).getByText(/^Ask for changes to your cover letter/)).toBeInTheDocument();
-    expect(within(panel()).getByRole("button", { name: "Make it more formal" })).toBeInTheDocument();
+    expect(within(composer()).getByRole("button", { name: "Make it more formal" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /Job posting/ }));
-    expect(within(panel()).getByText("Switch to the resume, cover letter or email to make changes.")).toBeInTheDocument();
-    expect(within(panel()).queryByRole("button", { name: /Make/ })).not.toBeInTheDocument();
+    expect(within(composer()).getByRole("radio", { name: "Change" })).toBeDisabled();
+    expect(within(composer()).getByRole("radio", { name: "Ask" })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Ask a question" })).toHaveAttribute("placeholder", "Ask about this job, or how you fit it");
+    expect(within(composer()).getByRole("button", { name: "What matters most to them?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Notes" }));
+    expect(screen.queryByRole("region", { name: "Composer" })).not.toBeInTheDocument();
   });
 
   it("sends a suggestion about the document on screen, then thinks", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} />);
     await user.click(screen.getByRole("button", { name: "Make the summary shorter" }));
-    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Make the summary shorter", viewing: "RESUME", target: null });
-    expect(within(panel()).getByText("Thinking…")).toBeInTheDocument();
+    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Make the summary shorter", viewing: "RESUME", target: null, mode: "change" });
+    expect(within(log()).getByText("Thinking…")).toBeInTheDocument();
+  });
+
+  it("asks a question in Ask, which changes nothing (public issue 132)", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} application={{ ...props.application, status: "INTERVIEW" }} />);
+    await user.click(within(composer()).getByRole("radio", { name: "Ask" }));
+    const question = screen.getByRole("textbox", { name: "Ask a question" });
+    expect(question).toHaveAttribute("placeholder", "Ask for help getting ready…");
+    await user.type(question, "What might they ask me?{Enter}");
+    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "What might they ask me?", viewing: "RESUME", target: null, mode: "ask" });
   });
 
   it("sends with Enter and starts a new line with Shift+Enter", async () => {
@@ -597,16 +657,11 @@ describe("the Refine with AI panel (E8-5)", () => {
     await user.click(within(screen.getByRole("group", { name: "Summary" })).getByRole("button", { name: "Ask AI" }));
     expect(input()).toHaveFocus();
     expect(input()).toHaveAttribute("placeholder", "What should change in the summary?");
-    expect(within(panel()).getByText("About: Summary")).toBeInTheDocument();
+    expect(within(composer()).getByText("About: Summary")).toBeInTheDocument();
 
     await user.type(input(), "Mention payments{Enter}");
-    expect(sendMessage).toHaveBeenCalledWith({
-      id: "app-1",
-      text: "Mention payments",
-      viewing: "RESUME",
-      target: { document: "RESUME", unitId: "summary" },
-    });
-    expect(within(panel()).queryByRole("button", { name: "Stop asking about the summary" })).not.toBeInTheDocument();
+    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Mention payments", viewing: "RESUME", target: { document: "RESUME", unitId: "summary" }, mode: "change" });
+    expect(within(composer()).queryByRole("button", { name: "Stop asking about the summary" })).not.toBeInTheDocument();
   });
 
   it("drops the picked unit with ×", async () => {
@@ -614,7 +669,7 @@ describe("the Refine with AI panel (E8-5)", () => {
     render(<ApplicationView {...props} />);
     await user.click(within(screen.getByRole("group", { name: "Summary" })).getByRole("button", { name: "Ask AI" }));
     await user.click(screen.getByRole("button", { name: "Stop asking about the summary" }));
-    expect(input()).toHaveAttribute("placeholder", "Ask for a change, e.g. “sound more confident”");
+    expect(input()).toHaveAttribute("placeholder", "Ask for a change to the resume, e.g. “sound more confident”");
   });
 
   it("shows the reply's edits, switching to the document they're on", async () => {
@@ -624,9 +679,58 @@ describe("the Refine with AI panel (E8-5)", () => {
     report({ id: "reply-1", type: "refine", status: "DONE", result: { messageId: "m9", edited: [{ document: "COVER_LETTER", unitId: "paragraph:1" }] } });
 
     expect(router.refresh).toHaveBeenCalled();
-    expect(within(panel()).queryByText("Thinking…")).not.toBeInTheDocument();
+    expect(within(log()).queryByText("Thinking…")).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cover letter" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("group", { name: demoLetterUnits()[0].label }).className).toMatch(/flash/);
+  });
+
+  it("lands a change: marks its new lines, with Keep and Undo (E30-12)", async () => {
+    const user = userEvent.setup();
+    const units = demoResumeUnits();
+    const role = units.find((unit) => unit.id.startsWith("experience:"))!;
+    const history = [{ kind: "change" as const, id: "v2", at: "2026-11-16T10:00:00.000Z", text: "Added it.", why: "Asked", versions: [{ document: "RESUME" as const, id: "v2", number: 2, previousId: "v1" }] }];
+    const view = render(<ApplicationView {...props} />);
+    await user.type(input(), "Mention the design system{Enter}");
+    report({ id: "reply-1", type: "refine", status: "DONE", result: { messageId: "m9", edited: [{ document: "RESUME", unitId: role.id }] } });
+    const added = "Built the design system across six product teams";
+    const after = units.map((unit) => (unit.id === role.id ? { ...unit, text: `${unit.text}\n${added}` } : unit));
+    view.rerender(<ApplicationView {...props} history={history} resume={{ ...props.resume!, units: after }} />);
+
+    const frame = screen.getByRole("group", { name: role.label });
+    expect(within(frame).getByRole("status")).toHaveTextContent("Changed just now");
+    expect(within(frame).getByText(added)).toHaveAttribute("data-change");
+    await user.click(within(frame).getByRole("button", { name: "Undo" }));
+    expect(goBackTo).toHaveBeenCalledWith({ id: "app-1", versionIds: ["v1"] });
+    expect(within(frame).queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("selects the requirement a landed change serves (E30-12)", async () => {
+    const user = userEvent.setup();
+    const units = demoResumeUnits();
+    const role = units.find((unit) => unit.id.startsWith("experience:"))!;
+    const item = { skill: null, experienceIds: [], note: null };
+    const match = { items: [{ ...item, requirement: "Payments", result: "gap" as const }, { ...item, requirement: "Figma", result: "covered" as const }] };
+    const view = render(<ApplicationView {...props} match={match} />);
+    await user.type(input(), "Mention payouts{Enter}");
+    report({ id: "reply-1", type: "refine", status: "DONE", result: { messageId: "m9", edited: [{ document: "RESUME", unitId: role.id }] } });
+    const added = "Designed payout flows";
+    const after = units.map((unit) => (unit.id === role.id ? { ...unit, text: `${unit.text}\n${added}`, serves: [{ line: added, requirements: ["Payments"] }] } : unit));
+    view.rerender(<ApplicationView {...props} match={match} resume={{ ...props.resume!, units: after }} />);
+    const fit = screen.getByRole("complementary", { name: "How you fit" });
+    expect(within(fit).getByRole("button", { name: /Payments/, pressed: true })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: role.label })).getByText(added)).toHaveAttribute("data-highlight");
+  });
+
+  it("keeps a landed change with Keep", async () => {
+    const user = userEvent.setup();
+    const view = render(<ApplicationView {...props} />);
+    await user.type(input(), "Shorter{Enter}");
+    report({ id: "reply-1", type: "refine", status: "DONE", result: { messageId: "m9", edited: [{ document: "RESUME", unitId: "summary" }] } });
+    view.rerender(<ApplicationView {...props} resume={{ ...props.resume!, units: demoResumeUnits().map((unit) => (unit.id === "summary" ? { ...unit, text: "Shorter." } : unit)) }} />);
+    const frame = screen.getByRole("group", { name: "Summary" });
+    expect(frame.className).toMatch(/landing/);
+    await user.click(within(frame).getByRole("button", { name: "Keep" }));
+    expect(frame.className).not.toMatch(/landing/);
   });
 
   it("keeps the message in the box when it can't be sent", async () => {
@@ -646,110 +750,220 @@ describe("the Refine with AI panel (E8-5)", () => {
     expect(toast).toHaveBeenLastCalledWith("The AI server didn't answer in time.", { action: expect.objectContaining({ label: "Retry" }) });
     await act(async () => vi.mocked(toast).mock.lastCall?.[1]?.action?.onClick());
     expect(retry).toHaveBeenCalledWith({ id: "reply-1" });
-    expect(within(panel()).getByText("Thinking…")).toBeInTheDocument();
+    expect(within(log()).getByText("Thinking…")).toBeInTheDocument();
   });
 
   it("keeps thinking about a reply started before a reload", () => {
     render(<ApplicationView {...props} refining="reply-7" />);
-    expect(within(panel()).getByText("Thinking…")).toBeInTheDocument();
+    expect(within(log()).getByText("Thinking…")).toBeInTheDocument();
   });
 
-  it("answers on the Job posting tab without the AI", async () => {
-    const user = userEvent.setup();
-    render(<ApplicationView {...props} aiReady={false} initialTab="posting" />);
-    await user.type(input(), "Change the salary{Enter}");
-    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Change the salary", viewing: null, target: null });
-  });
-
-  it("points to Settings without an AI provider", async () => {
+  it("points to Settings without an AI provider, and keeps what was typed", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} aiReady={false} />);
-    expect(within(panel()).getByRole("link", { name: "Choose one in Settings" })).toHaveAttribute("href", "/settings?section=ai");
+    expect(within(composer()).getByRole("link", { name: "Choose one in Settings" })).toHaveAttribute("href", "/settings?section=ai");
     await user.type(input(), "Shorter{Enter}");
     expect(sendMessage).not.toHaveBeenCalled();
     expect(input()).toHaveValue("Shorter");
   });
 });
 
-describe("undoing an AI change (E8-6)", () => {
-  const replyWith = (extra: object) => ({
-    id: "m3",
-    role: "AI" as const,
-    text: "Trimmed your summary.",
-    targetUnit: null,
-    opening: false,
-    canUndo: true,
-    undone: false,
-    ...extra,
+describe("the latest change and the history (E30-10, E30-11)", () => {
+  const change = (id: string, text: string, at: string, versions: { id: string; previousId: string | null; number: number }[], why = "Asked") => ({
+    kind: "change" as const,
+    id,
+    at,
+    text,
+    why,
+    versions: versions.map((version) => ({ document: "RESUME" as const, ...version })),
   });
+  const history = [
+    change("v3", "Moved payments into the first sentence.", "2026-11-16T10:02:00.000Z", [{ id: "v3", previousId: "v2", number: 3 }]),
+    { kind: "answer" as const, id: "m5", at: "2026-11-16T10:01:00.000Z", question: "What matters most?", text: "Design systems." },
+    change("v2", "Rewrote “Summary”", "2026-11-16T10:00:00.000Z", [{ id: "v2", previousId: "v1", number: 2 }], "Regenerated"),
+    change("v1", "Wrote the resume", "2026-11-15T10:00:00.000Z", [{ id: "v1", previousId: null, number: 1 }], "Tailoring"),
+  ];
   const log = () => screen.getByRole("log", { name: "Conversation" });
 
-  it("offers Undo under a reply that changed something", () => {
-    render(
-      <ApplicationView
-        {...props}
-        messages={[replyWith({}), replyWith({ id: "m4", text: "Your profile doesn't mention that.", canUndo: false })]}
-      />,
-    );
-    expect(within(log()).getAllByRole("button", { name: "Undo" })).toHaveLength(1);
-  });
-
-  it("puts the change back, marks the units and says Undone", async () => {
+  it("shows only the latest change above the composer, with Undo and how many are earlier", async () => {
     const user = userEvent.setup();
-    render(<ApplicationView {...props} messages={[replyWith({})]} />);
+    render(<ApplicationView {...props} history={history} />);
+    expect(within(log()).getByText("Moved payments into the first sentence.")).toBeInTheDocument();
     await user.click(within(log()).getByRole("button", { name: "Undo" }));
-    expect(undoMessage).toHaveBeenCalledWith({ id: "app-1", messageId: "m3" });
+    expect(goBackTo).toHaveBeenCalledWith({ id: "app-1", versionIds: ["v2"] });
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Undone. It's in the history if you want it back."));
+    expect(router.refresh).toHaveBeenCalled();
     expect(screen.getByRole("group", { name: "Summary" }).className).toMatch(/flash/);
   });
 
-  it("stays Undone after a reload", () => {
-    render(<ApplicationView {...props} messages={[replyWith({ undone: true })]} />);
-    expect(within(log()).getByText("Undone")).toBeInTheDocument();
-    expect(within(log()).queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  it("opens the history with every change and answer: Undo on the latest, Go back to this on older ones", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} history={history} />);
+    await user.click(within(log()).getByRole("button", { name: "3 earlier" }));
+    const items = within(screen.getByRole("list", { name: "Changes" })).getAllByRole("listitem");
+    expect(items.map((item) => item.querySelector("p:nth-child(2)")?.textContent)).toEqual(["Moved payments into the first sentence.", "What matters most?", "Rewrote “Summary”", "Wrote the resume"]);
+    expect(items[0]).toHaveTextContent(/^Resume v3 · Asked ·/);
+    expect(within(items[0]).getByRole("button", { name: "Undo" })).toBeInTheDocument();
+    expect(within(items[1]).queryByRole("button")).not.toBeInTheDocument();
+    await user.click(within(items[3]).getByRole("button", { name: /^Go back to this/ }));
+    expect(goBackTo).toHaveBeenCalledWith({ id: "app-1", versionIds: ["v1"] });
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("list", { name: "Changes" })).not.toBeInTheDocument();
   });
 
-  it("explains when it can't undo", async () => {
+  it("opens it from a document's History · vN too", async () => {
     const user = userEvent.setup();
-    const why = "You've changed the summary since, so undoing this would overwrite that. Edit it by hand instead.";
-    vi.mocked(undoMessage).mockResolvedValueOnce({ ok: false, error: why });
-    render(<ApplicationView {...props} messages={[replyWith({})]} />);
+    render(<ApplicationView {...props} history={history} versions={{ RESUME: 3 }} />);
+    await user.click(screen.getByRole("button", { name: "History · v3" }));
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+  });
+
+  it("shows a newer reply that changed nothing instead, until it's hidden", async () => {
+    const user = userEvent.setup();
+    const declined = { id: "m9", role: "AI" as const, text: "Your profile doesn't mention Kubernetes.", targetUnit: null, opening: false, canUndo: false, undone: false, at: "2026-11-16T11:00:00.000Z" };
+    render(<ApplicationView {...props} history={history} messages={[declined]} />);
+    expect(within(log()).getByText("Your profile doesn't mention Kubernetes.")).toBeInTheDocument();
+    expect(within(log()).queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+    await user.click(within(log()).getByRole("button", { name: "Hide this answer" }));
+    expect(within(log()).getByText("Moved payments into the first sentence.")).toBeInTheDocument();
+  });
+
+  it("undoes a first change from the chat with its reply's own Undo, without an earlier version", async () => {
+    const user = userEvent.setup();
+    const first = [{ ...change("v1", "Trimmed your summary.", "2026-11-16T10:00:00.000Z", [{ id: "v1", previousId: null, number: 1 }]), messageId: "m3" }];
+    render(<ApplicationView {...props} history={first} />);
     await user.click(within(log()).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith(why));
-    // Back once the action has finished.
-    expect(await within(log()).findByRole("button", { name: "Undo" })).toBeInTheDocument();
+    expect(undoMessage).toHaveBeenCalledWith({ id: "app-1", messageId: "m3" });
+    expect(goBackTo).not.toHaveBeenCalled();
+  });
+
+  it("explains when it can't go back", async () => {
+    const user = userEvent.setup();
+    vi.mocked(goBackTo).mockResolvedValueOnce({ ok: false, error: "That's how it is now already." });
+    render(<ApplicationView {...props} history={history} />);
+    await user.click(within(log()).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("That's how it is now already."));
+    expect(within(log()).getByRole("button", { name: "Undo" })).toBeInTheDocument();
   });
 });
 
-describe("the Job posting tab (E8-7)", () => {
+describe("the Fit column and the Job posting tab (E8-7, E30-3)", () => {
   const requirements = [
     { text: "Strong prototyping skills in Figma", kind: "skill" as const, skill: "Figma", years: null, language: null },
     { text: "Experience with Kubernetes", kind: "skill" as const, skill: "Kubernetes", years: null, language: null },
   ];
   const match = {
     items: [
-      { requirement: requirements[0].text, result: "covered" as const, skill: "Figma", experienceIds: ["e2"], note: "Used at Fieldnote" },
-      { requirement: requirements[1].text, result: "gap" as const, skill: null, experienceIds: [], note: "Not in your profile" },
+      { requirement: requirements[0].text, result: "covered" as const, skill: "Figma", experienceIds: ["e2"], note: "At Fieldnote" },
+      { requirement: requirements[1].text, result: "gap" as const, skill: null, experienceIds: [], note: null, mustHave: true },
     ],
   };
   const open = (extra: Partial<ApplicationViewProps> = {}) =>
     render(<ApplicationView {...props} match={match} requirements={requirements} initialTab="posting" {...extra} />);
+  const column = () => screen.getByRole("complementary", { name: "How you fit" });
 
-  it("shows how the profile matches, then the posting as pasted", () => {
+  it("shows what they ask for beside the documents, with where each is covered", () => {
     open();
-    expect(screen.getByRole("heading", { name: "How you match" })).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 covered by your profile")).toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "Requirements" })).getAllByRole("listitem")).toHaveLength(2);
+    const items = within(within(column()).getByRole("list", { name: "What they ask for" })).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "✓Covered: Strong prototyping skills in FigmaAt Fieldnote",
+      "–Not covered: Experience with KubernetesNot in your profile · must-have · Add to profile · Mention in the letter",
+    ]);
+    expect(within(column()).getByText("Amsterdam")).toBeInTheDocument();
+  });
+
+  it("highlights every line that covers a picked requirement, and says which paragraph on the letter (E30-4)", async () => {
+    const user = userEvent.setup();
+    const units = demoResumeUnits();
+    const role = units.find((unit) => unit.id.startsWith("experience:"))!;
+    const line = role.text.split("\n")[0];
+    const resume = { ...props.resume!, units: units.map((unit) => (unit.id === role.id ? { ...unit, serves: [{ line, requirements: [requirements[0].text] }] } : unit)) };
+    const letterUnits = demoLetterUnits().map((unit, index) => (index === 1 ? { ...unit, serves: [{ line: unit.text, requirements: [requirements[0].text] }] } : unit));
+    open({ resume, letter: { ...props.letter!, units: letterUnits }, initialTab: "resume" });
+
+    // Only what the resume covers can be picked.
+    expect(within(column()).queryByRole("button", { name: /Experience with Kubernetes/ })).not.toBeInTheDocument();
+    await user.click(within(column()).getByRole("button", { name: /Strong prototyping skills in Figma/ }));
+    expect(within(column()).getByRole("button", { name: /Strong prototyping skills in Figma/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: role.label })).getByText(line)).toHaveAttribute("data-highlight");
+
+    await user.click(screen.getByRole("tab", { name: "Cover letter" }));
+    expect(within(column()).getByText("Paragraph 2")).toBeInTheDocument();
+    const second = screen.getByRole("group", { name: demoLetterUnits()[1].label });
+    expect(second.querySelector("[data-highlight], [data-highlight-all]") ?? (second.hasAttribute("data-highlight-all") ? second : null)).not.toBeNull();
+  });
+
+  it("shows the rows of a document written before, without highlights", () => {
+    open({ initialTab: "resume" });
+    expect(within(column()).queryByRole("button", { name: /Strong prototyping skills in Figma/ })).not.toBeInTheDocument();
+    expect(within(column()).getByText("At Fieldnote")).toBeInTheDocument();
+  });
+
+  it("adds a missing skill to the profile, in the role it was used in, and offers to rewrite that role (E30-5)", async () => {
+    const user = userEvent.setup();
+    const roles = [{ id: "e1", label: "Northwind Logistics, 2021 – now" }];
+    const resume = { ...props.resume!, units: [...props.resume!.units, { id: "experience:e1", label: "Northwind role", text: "Led the portal" }] };
+    open({ roles, resume });
+    await user.click(within(column()).getByRole("button", { name: "Add to profile" }));
+    const form = within(column()).getByRole("group", { name: "Add Kubernetes to your profile" });
+    expect(within(form).getByLabelText("Where you used it")).toHaveFocus();
+    await user.type(within(form).getByLabelText(/What you did with it/), "Set up the clusters");
+    vi.mocked(addMatchSkill).mockResolvedValueOnce({ ok: true, data: { name: "Kubernetes", where: "Northwind Logistics", experienceId: "e1" } });
+    await user.click(within(form).getByRole("button", { name: "Add to profile" }));
+    expect(addMatchSkill).toHaveBeenCalledWith({ id: "app-1", index: 1, experienceId: "e1", did: "Set up the clusters" });
+    expect(toast).toHaveBeenLastCalledWith("Added “Kubernetes” to your profile, at Northwind Logistics. Rewrite that role on the resume?", expect.objectContaining({ action: expect.objectContaining({ label: "Rewrite it" }) }));
+    expect(within(column()).queryByRole("group", { name: "Add Kubernetes to your profile" })).not.toBeInTheDocument();
+  });
+
+  it("adds it to the skills only, without a role", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(within(column()).getByRole("button", { name: "Add to profile" }));
+    await user.click(within(column()).getByRole("button", { name: "Add to profile" }));
+    expect(addMatchSkill).toHaveBeenLastCalledWith({ id: "app-1", index: 1, experienceId: null, did: undefined });
+    expect(toast).toHaveBeenLastCalledWith("Added “Kubernetes” to your skills. Attach it to a role under Experience to make it count.");
+  });
+
+  it("marks a gap the user doesn't have, and shows it so (E30-5)", async () => {
+    const user = userEvent.setup();
+    const view = open();
+    await user.click(within(column()).getByRole("button", { name: "Add to profile" }));
+    await user.click(within(column()).getByRole("button", { name: "I don't have this" }));
+    expect(markKnownGap).toHaveBeenCalledWith({ id: "app-1", requirement: "Experience with Kubernetes" });
+    view.rerender(<ApplicationView {...props} match={match} requirements={requirements} initialTab="posting" knownGaps={["Experience with Kubernetes"]} />);
+    expect(within(column()).getByText("You don't have this")).toBeInTheDocument();
+    expect(within(column()).queryByRole("button", { name: "Add to profile" })).not.toBeInTheDocument();
+  });
+
+  it("asks for a gap to be mentioned in the letter, honestly (E30-5)", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(within(column()).getByRole("button", { name: "Mention in the letter" }));
+    expect(screen.getByRole("tab", { name: "Cover letter" })).toHaveAttribute("aria-selected", "true");
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      id: "app-1",
+      text: "Address “Experience with Kubernetes” honestly in the letter, without claiming I have it.",
+      viewing: "COVER_LETTER",
+      target: null,
+      mode: "change",
+    });
+  });
+
+  it("opens the column over the document from the narrow rail, and closes it with Esc", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(screen.getByRole("button", { name: "Show how you fit: 1 of 2 requirements covered" }));
+    const dialog = screen.getByRole("dialog", { name: "How you fit" });
+    expect(within(dialog).getByRole("list", { name: "What they ask for" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the posting as pasted on its tab", () => {
+    open();
     expect(screen.getByRole("heading", { name: "Original posting" })).toBeInTheDocument();
     expect(screen.getByText(/^Ledgerly is hiring\./)).toHaveClass("whitespace-pre-wrap");
     expect(screen.getByText("Pasted 27 Sep")).toBeInTheDocument();
-  });
-
-  it("adds a missing skill to the profile", async () => {
-    const user = userEvent.setup();
-    open();
-    await user.click(screen.getByRole("button", { name: "+ Add to profile" }));
-    expect(addMatchSkill).toHaveBeenCalledWith({ id: "app-1", index: 1 });
-    expect(toast).toHaveBeenCalledWith("Added “Kubernetes” to your skills. Attach it to a role under Experience to make it count.");
   });
 
   it("links to the saved posting in a new tab", () => {
@@ -760,29 +974,25 @@ describe("the Job posting tab (E8-7)", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("shows only the posting when it wasn't matched", () => {
+  it("says so when it wasn't matched", () => {
     open({ match: null });
-    expect(screen.queryByRole("heading", { name: "How you match" })).not.toBeInTheDocument();
+    expect(within(column()).getByText("No requirements from the posting yet.")).toBeInTheDocument();
     expect(within(screen.getByRole("tabpanel")).queryByRole("link", { name: /opens in a new tab/ })).not.toBeInTheDocument();
   });
 });
 
 describe("downloading PDFs (E8-8)", () => {
-  const download = () => screen.getByRole("link", { name: "Download PDF" });
-
-  it("downloads the document on screen, and the resume from the Job posting tab", async () => {
+  it("downloads each document from its own toolbar (E30-2)", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} />);
-    expect(download()).toHaveAttribute("href", "/api/pdf?doc=resume&application=app-1");
+    expect(screen.getByRole("link", { name: "Download the tailored resume as a PDF" })).toHaveAttribute("href", "/api/pdf?doc=resume&application=app-1");
     await user.click(screen.getByRole("tab", { name: "Cover letter" }));
-    expect(download()).toHaveAttribute("href", "/api/pdf?doc=letter&application=app-1");
-    await user.click(screen.getByRole("tab", { name: /Job posting/ }));
-    expect(download()).toHaveAttribute("href", "/api/pdf?doc=resume&application=app-1");
+    expect(screen.getByRole("link", { name: "Download the cover letter as a PDF" })).toHaveAttribute("href", "/api/pdf?doc=letter&application=app-1");
   });
 
   it("isn't offered without documents", () => {
     render(<ApplicationView {...props} resume={null} letter={null} />);
-    expect(screen.queryByRole("link", { name: "Download PDF" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /PDF/ })).not.toBeInTheDocument();
   });
 });
 
@@ -804,9 +1014,9 @@ describe("notes and activity (E8-9)", () => {
     vi.mocked(restoreNote).mockClear();
   });
 
-  it("has a Notes tab with the number of notes", () => {
+  it("has a Notes tab", () => {
     open();
-    expect(screen.getByRole("tab", { name: "Notes · 2" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Notes" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Private and never sent to the AI")).toBeInTheDocument();
   });
 
@@ -857,9 +1067,9 @@ describe("notes and activity (E8-9)", () => {
     });
   });
 
-  it("keeps the refine panel to the documents", () => {
+  it("has no composer beside the notes, which never go to the AI (E30-10)", () => {
     open();
-    expect(within(screen.getByRole("complementary", { name: "Refine with AI" })).getByText("Switch to the resume, cover letter or email to make changes.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Composer" })).not.toBeInTheDocument();
   });
 });
 
@@ -898,65 +1108,6 @@ describe("one-page trimming on the Resume tab (E10-10)", () => {
   });
 });
 
-describe("version history (E8-10)", () => {
-  const written = { id: "v1", cause: "WRITTEN" as const, detail: "", createdAt: "2026-09-29T08:05:00.000Z" };
-  const refined = { id: "v2", cause: "REFINED" as const, detail: "Make it shorter", createdAt: "2026-09-29T09:10:00.000Z" };
-
-  it("lists the versions with why and when, and says when there are none", async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(<ApplicationView {...props} />);
-    await user.click(screen.getAllByRole("button", { name: "History" })[0]);
-    expect(await screen.findByText("No versions yet. The next AI change saves the first one.")).toBeInTheDocument();
-    expect(listVersions).toHaveBeenCalledWith({ id: props.application.id, document: "RESUME" });
-    unmount();
-
-    vi.mocked(listVersions).mockResolvedValueOnce({ ok: true, data: [refined, written] });
-    render(<ApplicationView {...props} />);
-    await user.click(screen.getAllByRole("button", { name: "History" })[0]);
-    const list = await screen.findByRole("list", { name: "Versions" });
-    const items = within(list).getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("Changed from the chat: “Make it shorter”");
-    expect(items[0]).toHaveTextContent("· the newest");
-    expect(items[1]).toHaveTextContent("Written by the AI");
-  });
-
-  it("says the history didn't load, rather than that there are no versions", async () => {
-    const user = userEvent.setup();
-    vi.mocked(listVersions).mockResolvedValueOnce({ ok: false, error: "Something went wrong on the server. Please try again." });
-    render(<ApplicationView {...props} />);
-    await user.click(screen.getAllByRole("button", { name: "History" })[0]);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong on the server. Please try again.");
-    expect(screen.queryByText(/No versions yet/)).not.toBeInTheDocument();
-  });
-
-  it("shows an earlier version in place, restores it, or goes back", async () => {
-    const user = userEvent.setup();
-    vi.mocked(listVersions).mockResolvedValue({ ok: true, data: [written] });
-    const older = demoResumeUnits().map((unit) => (unit.id === "summary" ? { ...unit, text: "An older summary." } : unit));
-    vi.mocked(loadVersion).mockResolvedValue({ ok: true, data: { document: "RESUME", units: older } });
-    render(<ApplicationView {...props} />);
-
-    await user.click(screen.getAllByRole("button", { name: "History" })[0]);
-    await user.click(await screen.findByRole("button", { name: /^Look at the version from/ }));
-    expect(loadVersion).toHaveBeenCalledWith({ id: props.application.id, versionId: "v1" });
-    expect(screen.getByRole("note")).toHaveTextContent("You're looking at the version from");
-    expect(screen.getByRole("note")).toHaveTextContent("Written by the AI.");
-    expect(screen.getByText("An older summary.")).toBeInTheDocument();
-    // No editing tools on an earlier version.
-    expect(screen.queryByRole("button", { name: "Regenerate" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Back to the current one" }));
-    expect(screen.queryByText("An older summary.")).not.toBeInTheDocument();
-
-    await user.click(screen.getAllByRole("button", { name: "History" })[0]);
-    await user.click(await screen.findByRole("button", { name: /^Look at the version from/ }));
-    await user.click(screen.getByRole("button", { name: "Restore this version" }));
-    expect(restoreVersion).toHaveBeenCalledWith({ id: props.application.id, versionId: "v1" });
-    expect(router.refresh).toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Restore this version" })).not.toBeInTheDocument();
-  });
-});
-
 describe("the Email tab", () => {
   const email = [
     { id: "to", label: "Recipient", text: "John Doe <john@example.com>" },
@@ -964,7 +1115,6 @@ describe("the Email tab", () => {
     { id: "body", label: "Message", text: "Dear John,\n\nI'd love to bring calm to Ledgerly's payments.\n\nWarm regards,\nJane Doe" },
   ];
   const toastAction = () => vi.mocked(toast).mock.lastCall?.[1]?.action;
-  const panel = () => screen.getByRole("complementary", { name: "Refine with AI" });
 
   it("offers to write the email, then shows it", async () => {
     const user = userEvent.setup();
@@ -1043,7 +1193,7 @@ describe("the Email tab", () => {
   it("rewrites it, with Undo on the toast", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} initialTab="email" email={email} />);
-    await user.click(screen.getByRole("button", { name: "Rewrite" }));
+    await user.click(screen.getByRole("button", { name: "Write it again" }));
     expect(startWritingEmail).toHaveBeenCalledWith({ id: "app-1" });
     expect(screen.getByRole("article", { name: "Email" })).toHaveAttribute("aria-busy", "true");
 
@@ -1069,14 +1219,15 @@ describe("the Email tab", () => {
 
   it("refines the email from the chat once there is one", async () => {
     const user = userEvent.setup();
+    const composer = () => screen.getByRole("region", { name: "Composer" });
     const { unmount } = render(<ApplicationView {...props} initialTab="email" />);
-    expect(within(panel()).queryByRole("button", { name: "Shorter, under 100 words" })).not.toBeInTheDocument();
+    expect(within(composer()).queryByRole("button", { name: "Shorter, under 100 words" })).not.toBeInTheDocument();
     unmount();
 
     render(<ApplicationView {...props} initialTab="email" email={email} />);
-    expect(within(panel()).getByText(/^Ask for changes to your email/)).toBeInTheDocument();
-    await user.click(within(panel()).getByRole("button", { name: "Shorter, under 100 words" }));
-    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Shorter, under 100 words", viewing: "EMAIL", target: null });
+    expect(screen.getByRole("textbox", { name: "Ask for a change" })).toHaveAttribute("placeholder", "Ask for a change to the email, e.g. “shorter”");
+    await user.click(within(composer()).getByRole("button", { name: "Shorter, under 100 words" }));
+    expect(sendMessage).toHaveBeenCalledWith({ id: "app-1", text: "Shorter, under 100 words", viewing: "EMAIL", target: null, mode: "change" });
   });
 
   it("switches to the email when a reply changed it", async () => {
@@ -1084,15 +1235,278 @@ describe("the Email tab", () => {
     render(<ApplicationView {...props} email={email} />);
     await user.type(screen.getByRole("textbox", { name: "Ask for a change" }), "Make the email shorter{Enter}");
     report({ id: "reply-1", type: "refine", status: "DONE", result: { messageId: "m9", edited: [{ document: "EMAIL", unitId: "body" }] } });
-    expect(screen.getByRole("tab", { name: "Email" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /^Email/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("group", { name: "Message" }).className).toMatch(/flash/);
   });
 
-  it("has a history of its own", async () => {
+  it("opens the one history from its History (E30-11)", async () => {
     const user = userEvent.setup();
     render(<ApplicationView {...props} initialTab="email" email={email} />);
     await user.click(screen.getByRole("button", { name: "History" }));
-    expect(await screen.findByRole("heading", { name: "History of the email" })).toBeInTheDocument();
-    expect(listVersions).toHaveBeenLastCalledWith({ id: "app-1", document: "EMAIL" });
+    expect(screen.getByRole("heading", { name: "History" })).toBeInTheDocument();
+  });
+});
+
+describe("letterPlaces (E30-4)", () => {
+  it("names the paragraphs that cover each requirement, and says when a gap is addressed", () => {
+    const item = { skill: null, experienceIds: [], note: null };
+    const match = {
+      items: [
+        { ...item, requirement: "Design systems", result: "covered" as const },
+        { ...item, requirement: "Figma", result: "covered" as const },
+        { ...item, requirement: "Payments", result: "gap" as const },
+      ],
+    };
+    const units = [
+      { id: "greeting", label: "Greeting", text: "Dear team," },
+      { id: "paragraph:1", label: "Opening", text: "One.", serves: [{ line: "One.", requirements: ["Design systems"] }] },
+      { id: "paragraph:2", label: "Middle", text: "Two.", serves: [{ line: "Two.", requirements: ["Design systems", "Payments"] }] },
+    ];
+    expect(letterPlaces(match, units)).toEqual({
+      "Design systems": "Paragraphs 1 and 2",
+      Figma: "Not in the letter, resume only",
+      Payments: "Addressed in paragraph 2",
+    });
+  });
+});
+
+describe("the Interview column (E30-6)", () => {
+  const interviews = [
+    { id: "i1", round: 1, at: "2026-11-25T10:00:00.000Z", minutes: 30, place: "", people: "Lotte de Vries", notes: "Friendly screening.", prep: null },
+    {
+      id: "i2",
+      round: 2,
+      at: "2030-12-03T10:00:00.000Z",
+      minutes: 60,
+      place: "Google Meet",
+      people: "Lotte de Vries, Design Director\nRuben Kok",
+      notes: "",
+      prep: [
+        { text: "Reread the posting and your letter", why: "From the posting", done: true, doneAt: "2026-11-30T09:00:00.000Z" },
+        { text: "A payments story for the fintech gap", why: "For the payments gap", done: false },
+      ],
+    },
+  ];
+  const item = { skill: null, experienceIds: [], note: null };
+  const match = { items: [{ ...item, requirement: "Figma", result: "covered" as const }, { ...item, requirement: "Payments", result: "gap" as const }] };
+  const open = (extra: Partial<ApplicationViewProps> = {}) =>
+    render(<ApplicationView {...props} application={{ ...props.application, status: "INTERVIEW" }} match={match} interviews={interviews} timeZone="UTC" {...extra} />);
+  const column = () => screen.getByRole("complementary", { name: "How you fit" });
+
+  beforeEach(() => {
+    vi.mocked(startPreparing).mockClear();
+    vi.mocked(tickPrep).mockClear();
+  });
+
+  it("shows the next round, Getting ready with its ticks, and So far", () => {
+    open();
+    expect(within(column()).getByText("Next interview · round 2")).toBeInTheDocument();
+    expect(within(column()).getByText("60 min · Google Meet")).toBeInTheDocument();
+    expect(within(column()).getByText("Ruben Kok")).toBeInTheDocument();
+    expect(within(column()).getByRole("checkbox", { name: "Reread the posting and your letter" })).toBeChecked();
+    expect(within(column()).getByText(/^Done /)).toBeInTheDocument();
+    expect(within(column()).getByText("For the payments gap")).toBeInTheDocument();
+    expect(within(column()).getByText(/Round 1 with Lotte de Vries/)).toBeInTheDocument();
+    expect(within(column()).getByText("1 of 2 requirements covered", { exact: false })).toBeInTheDocument();
+  });
+
+  it("ticks an item", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(within(column()).getByRole("checkbox", { name: "A payments story for the fintech gap" }));
+    expect(tickPrep).toHaveBeenCalledWith({ id: "app-1", interviewId: "i2", index: 1, done: true });
+  });
+
+  it("writes Getting ready only when Prepare is clicked", async () => {
+    const user = userEvent.setup();
+    open({ interviews: [{ ...interviews[1], prep: null }] });
+    expect(startPreparing).not.toHaveBeenCalled();
+    await user.click(within(column()).getByRole("button", { name: "Prepare" }));
+    expect(startPreparing).toHaveBeenCalledWith({ id: "app-1" });
+    expect(await within(column()).findByRole("button", { name: "Getting you ready…" })).toBeInTheDocument();
+  });
+
+  it("writes it from the header's Prepare too", async () => {
+    const user = userEvent.setup();
+    open({ interviews: [{ ...interviews[1], prep: null }] });
+    const header = screen.getAllByRole("button", { name: "Prepare" }).find((button) => !column().contains(button))!;
+    await user.click(header);
+    expect(startPreparing).toHaveBeenCalledWith({ id: "app-1" });
+  });
+
+  it("starts it when a Prepare button elsewhere opened the page", async () => {
+    open({ interviews: [{ ...interviews[1], prep: null }], start: "prepare" });
+    await waitFor(() => expect(startPreparing).toHaveBeenCalledWith({ id: "app-1" }));
+  });
+
+  it("shows the fit on Show, and goes back", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(within(column()).getByRole("button", { name: "Show" }));
+    expect(within(column()).getByRole("list", { name: "What they ask for" })).toBeInTheDocument();
+    await user.click(within(column()).getByRole("button", { name: "← Back to the interview" }));
+    expect(within(column()).getByText("Next interview · round 2")).toBeInTheDocument();
+  });
+});
+
+describe("the Offer column and drafted messages (E30-7, E30-8)", () => {
+  const offer = { salary: "€82,500", decideBy: "2026-11-20", startDate: "2027-02-01", holidays: "27 days", office: "Hybrid, 3 days", fromEmail: true };
+  const open = (extra: Partial<ApplicationViewProps> = {}) =>
+    render(<ApplicationView {...props} application={{ ...props.application, status: "OFFER", salary: "€75,000–€90,000" }} offer={offer} {...extra} />);
+  const column = () => screen.getByRole("complementary", { name: "How you fit" });
+
+  beforeEach(() => {
+    vi.mocked(startWritingMessage).mockClear();
+    vi.mocked(markMessageSent).mockClear();
+  });
+
+  it("shows the salary, where it falls on the posted range, and Decide by", () => {
+    open();
+    expect(within(column()).getByText("€82,500")).toBeInTheDocument();
+    expect(within(column()).getByRole("img", { name: "Posted range €75,000–€90,000; the offer is 50% of the way up" })).toBeInTheDocument();
+    expect(within(column()).getByText("27 days")).toBeInTheDocument();
+    expect(within(column()).getByText(/read from their email/)).toBeInTheDocument();
+  });
+
+  it("drafts an answer on its click, with the email when there's no Gmail thread", async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(within(column()).getByRole("button", { name: "Draft an acceptance" }));
+    expect(startWritingMessage).toHaveBeenCalledWith({ id: "app-1", kind: "accept" });
+    expect(screen.getByRole("tab", { name: /^Email/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("shows a drafted message to copy, and I sent it", async () => {
+    const user = userEvent.setup();
+    const messageDraft = { kind: "decline" as const, to: "careers@ledgerly.example", subject: "Re: Offer", body: "Thank you, but…", writtenWith: "write-message@1", at: "2026-11-17T10:00:00.000Z" };
+    open({ messageDraft, initialTab: "email" });
+    const card = screen.getByRole("region", { name: "Declining politely" });
+    expect(within(card).getByRole("textbox", { name: "Message" })).toHaveValue("Thank you, but…");
+    expect(within(card).getByRole("link", { name: "Open in mail app" })).toHaveAttribute("href", expect.stringMatching(/^mailto:careers@ledgerly\.example\?/));
+    await user.click(within(card).getByRole("button", { name: "I sent it" }));
+    expect(markMessageSent).toHaveBeenCalledWith({ id: "app-1" });
+  });
+
+  it("offers Send reply instead when it can go out in the Gmail thread", () => {
+    const messageDraft = { kind: "accept" as const, to: "", subject: "Re: Offer", body: "Yes!", writtenWith: "write-message@1", at: "2026-11-17T10:00:00.000Z" };
+    const gmail = { sender: { from: "jane@gmail.com" }, sentBefore: true, emails: [], moveTo: [], reading: true };
+    open({ messageDraft, initialTab: "conversation", threadReady: true, gmail });
+    const card = screen.getByRole("region", { name: "Your acceptance" });
+    expect(within(card).getByRole("button", { name: "Send reply" })).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "I sent it" })).not.toBeInTheDocument();
+  });
+});
+
+describe("a follow-up (E30-8)", () => {
+  const quiet = { kind: "quiet" as const, text: "Quiet for 14 days", due: null, soon: true };
+
+  beforeEach(() => vi.mocked(startWritingMessage).mockClear());
+
+  it("drafts one from the header's next step, on the click", async () => {
+    const user = userEvent.setup();
+    render(<ApplicationView {...props} application={{ ...props.application, status: "SENT" }} flag={quiet} />);
+    expect(startWritingMessage).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Draft a follow-up" }));
+    expect(startWritingMessage).toHaveBeenCalledWith({ id: "app-1", kind: "follow-up" });
+    expect(screen.getByRole("tab", { name: /^Email/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("drafts one when a Follow up button elsewhere opened the page", async () => {
+    render(<ApplicationView {...props} application={{ ...props.application, status: "SENT" }} flag={quiet} start="follow-up" />);
+    await waitFor(() => expect(startWritingMessage).toHaveBeenCalledWith({ id: "app-1", kind: "follow-up" }));
+    expect(screen.getByRole("tab", { name: /^Email/ })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("writing a new application's documents (E31-5)", () => {
+  const requirements = [
+    { text: "Strong prototyping skills in Figma", kind: "skill" as const, skill: "Figma", years: null, language: null },
+    { text: "Design systems", kind: "skill" as const, skill: null, years: null, language: null },
+    { text: "Experience with Kubernetes", kind: "skill" as const, skill: "Kubernetes", years: null, language: null },
+  ];
+  const match = {
+    items: [
+      { requirement: requirements[0].text, result: "covered" as const, skill: "Figma", experienceIds: ["e2"], note: "At Fieldnote" },
+      { requirement: requirements[1].text, result: "covered" as const, skill: null, experienceIds: [], note: "At Northwind" },
+      { requirement: requirements[2].text, result: "gap" as const, skill: null, experienceIds: [], note: null, mustHave: true },
+    ],
+  };
+  const writing = { jobId: "write-1", write: "both" as const, notifies: true };
+  const step = (name: string) => report({ id: "write-1", type: "write-application", step: name });
+  const column = () => screen.getByRole("complementary", { name: "How you fit" });
+
+  beforeEach(() => {
+    router.refresh.mockReset();
+    vi.mocked(toast).mockReset();
+  });
+
+  it("fills the resume in where it will be, with the steps above it, and says you can leave", () => {
+    render(<ApplicationView {...props} resume={null} letter={null} match={match} requirements={requirements} writingApplication={writing} />);
+    step("Writing the resume");
+    expect(screen.getByRole("status", { name: "Writing" })).toHaveTextContent("Writing your resumeStep 3 of 5");
+    expect(screen.getByText("Writing the resume").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByText("Your tailored resume is being written.")).toBeInTheDocument();
+    expect(screen.getByText("You can leave this page. It shows as a Draft on the board, and I'll let you know when it's done.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Writing…" })).toHaveAttribute("aria-disabled", "true");
+    // Nothing to ask for while it writes.
+    expect(screen.queryByRole("textbox", { name: "Ask for a change" })).not.toBeInTheDocument();
+    expect(within(column()).getAllByText("Not used yet")).toHaveLength(2);
+    expect(within(column()).getByText("For the letter, next")).toBeInTheDocument();
+  });
+
+  it("doesn't promise a notification no channel will send", () => {
+    render(<ApplicationView {...props} resume={null} letter={null} writingApplication={{ ...writing, notifies: false }} />);
+    expect(screen.getByText("You can leave this page. It shows as a Draft on the board, and keeps writing.")).toBeInTheDocument();
+  });
+
+  it("brings each document in as it lands, and marks what the resume uses", () => {
+    const units = demoResumeUnits();
+    const role = units.find((unit) => unit.id.startsWith("experience:"))!;
+    const line = role.text.split("\n")[0];
+    const resume = { ...props.resume!, units: units.map((unit) => (unit.id === role.id ? { ...unit, serves: [{ line, requirements: [requirements[0].text] }] } : unit)) };
+    const { rerender } = render(<ApplicationView {...props} resume={null} letter={null} match={match} requirements={requirements} writingApplication={writing} />);
+    step("Writing the resume");
+    expect(router.refresh).not.toHaveBeenCalled();
+    step("Writing the letter");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    rerender(<ApplicationView {...props} resume={resume} letter={null} match={match} requirements={requirements} writingApplication={writing} />);
+    expect(screen.getByRole("article", { name: "Resume" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Writing" })).toHaveTextContent("Writing your letterStep 4 of 5");
+    expect(within(column()).getByText("Used in the resume")).toHaveClass("text-success");
+    expect(within(column()).getByText("Not in the resume")).toBeInTheDocument();
+    expect(within(column()).getByText("1 of 3 used in the resume so far")).toBeInTheDocument();
+  });
+
+  it("leaves the rows as they were when the resume doesn't say what its lines serve", () => {
+    render(<ApplicationView {...props} letter={null} match={match} requirements={requirements} writingApplication={writing} />);
+    expect(within(column()).getByText("At Fieldnote")).toBeInTheDocument();
+    expect(within(column()).queryByText("Not in the resume")).not.toBeInTheDocument();
+    expect(within(column()).queryByText(/used in the resume so far/)).not.toBeInTheDocument();
+  });
+
+  it("opens the application as usual once it's done", () => {
+    render(<ApplicationView {...props} match={match} requirements={requirements} writingApplication={writing} />);
+    report({ id: "write-1", type: "write-application", status: "DONE", step: "Checking every line against your profile" });
+    expect(toast).toHaveBeenCalledWith("Your application is ready. Nothing gets sent until you say so.");
+    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.queryByRole("status", { name: "Writing" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Ask for a change" })).toBeInTheDocument();
+  });
+
+  it("stops on Stop, keeping what's written", async () => {
+    render(<ApplicationView {...props} resume={null} letter={null} writingApplication={writing} />);
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(stopWritingApplication).toHaveBeenCalledWith({ id: "app-1" });
+    expect(screen.getByRole("button", { name: "Stopping…" })).toBeInTheDocument();
+    report({ id: "write-1", type: "write-application", status: "FAILED", error: "Cancelled." });
+    expect(toast).toHaveBeenCalledWith("Stopped. What's written stays.");
+    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.queryByText(/^You can leave this page/)).not.toBeInTheDocument();
+  });
+
+  it("says why it stopped when writing fails", () => {
+    render(<ApplicationView {...props} resume={null} letter={null} writingApplication={writing} />);
+    report({ id: "write-1", type: "write-application", status: "FAILED", error: "The model took too long to answer." });
+    expect(toast).toHaveBeenCalledWith("The model took too long to answer. What's written stays: write the rest from here.");
   });
 });

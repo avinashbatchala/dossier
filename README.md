@@ -12,6 +12,7 @@
   <a href="https://github.com/AienTech/dossier/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/AienTech/dossier?label=release"></a>
   <a href="https://github.com/AienTech/dossier/actions/workflows/image.yml"><img alt="CI" src="https://github.com/AienTech/dossier/actions/workflows/image.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
+  <a href="https://discord.gg/4pfxADVSf9"><img alt="Chat on Discord" src="https://img.shields.io/badge/chat-Discord-5865F2?logo=discord&logoColor=white"></a>
   <a href="https://github.com/AienTech/dossier/pkgs/container/dossier"><img alt="Docker image: ghcr.io/aientech/dossier" src="https://img.shields.io/badge/image-ghcr.io%2Faientech%2Fdossier-2496ED?logo=docker&logoColor=white"></a>
   <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs">
   <img alt="PostgreSQL 18" src="https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white">
@@ -35,7 +36,7 @@ It's for one person on a small server: one password, your data in your own Postg
 
 - **Profile:** basics, skills and languages, experience and volunteering, projects, education, certifications, publications and references, in the order you choose, with a strength meter that counts only what a profile needs. Projects (side, open-source, course or thesis work) show what you can do where your job titles don't yet. Certifications keep who issued them, their dates, credential ID and a link to verify them. Publications are cited in your own style, with bold and italics, and go on resumes word for word. Start it from an existing resume (PDF, Word or Markdown) if you like.
 - **Base resume:** twelve themes and a theme builder, previewed live and printed to PDF on the server. Duplicate themes, or share them as files.
-- **Find jobs:** search postings near your city, or anywhere you choose, through JSearch (LinkedIn, Indeed and more), Adzuna or FreeHire (company career pages). Save the good ones, dismiss the rest, score any of them against your profile, and start an application from a posting with one click.
+- **Positions:** search postings near your city, or anywhere you choose, on every portal you switch on at once: JSearch (LinkedIn, Indeed and more), Adzuna, FreeHire (company career pages) and the Bundesagentur für Arbeit. Every posting lands once, even when several portals list it; save the good ones, dismiss the rest, score any of them against your profile, and start an application from a posting with one click. What you leave untouched moves to an Archive.
 - **Startups:** startups that are hiring, from YC startups' job posts and Hacker News' monthly “Who is hiring?” thread, kept to the ones that hire where you live or remotely from your country and ranked against your profile, with the address each one publishes for applications. Dossier reads their sites politely and follows their robots.txt. Start an application to one with a click; you decide whom to write to.
 - **Job agent (optional):** save up to three named searches and run the enabled ones once a day, in order. It skips what you've seen, scores the new postings against your profile and keeps the best on the Agent screen, with its reasons and the searches that found them. The searches share one schedule, score/draft limits and a budget of three first-page source requests per rolling 24 hours (failed attempts count; the whole batch waits until it fits). It can prepare tailored drafts too, which wait for your review. It never sends or applies.
 - **New application:** paste a posting; Dossier pulls out the details and requirements, matches them against your profile, and writes a tailored resume and cover letter in the tone you pick.
@@ -128,6 +129,10 @@ The [wiki](https://github.com/AienTech/dossier/wiki) has what comes after instal
 - [Troubleshooting](https://github.com/AienTech/dossier/wiki/Troubleshooting): what the common errors mean, and what to do about them.
 - [Privacy](https://github.com/AienTech/dossier/wiki/Privacy): what stays on your server and what leaves it. [PRIVACY.md](PRIVACY.md) has the details.
 - [Environment variables](https://github.com/AienTech/dossier/wiki/Environment-variables): every setting the server reads.
+
+## Community
+
+Join [Dossier on Discord](https://discord.gg/4pfxADVSf9), where people looking for work help each other get hired: job markets country by country, honest resume feedback, interview practice, and help setting Dossier up. Bugs still go to [GitHub issues](https://github.com/AienTech/dossier/issues/new/choose), so they don't get lost.
 
 ## Known limitations
 

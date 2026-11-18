@@ -1,4 +1,4 @@
-import { experienceAskedFor, type ExperienceLevel, type SearchQuery } from "./search";
+import { experienceRangeAskedFor, type ExperienceLevel, type SearchQuery } from "./search";
 
 // The experience level a posting is for (public issue 59), read from its
 // title and the years it asks for, so a search for one level leaves out the
@@ -41,10 +41,10 @@ export function experienceLevelOf(posting: { title: string; description: string 
   return years <= 1 ? "junior" : years < 5 ? "mid" : "senior";
 }
 
-/** Whether a posting may be shown for the level a search asks for: it is for it, or doesn't say. */
-export function fitsExperience(posting: { title: string; description: string }, query: Pick<SearchQuery, "experience">): boolean {
-  const asked = experienceAskedFor(query);
+/** Whether a posting may be shown for the levels a search asks for: it is for one of them, or doesn't say. */
+export function fitsExperience(posting: { title: string; description: string }, query: Pick<SearchQuery, "experience" | "experienceTo">): boolean {
+  const asked = experienceRangeAskedFor(query);
   if (!asked) return true;
   const level = experienceLevelOf(posting);
-  return level === null || level === asked;
+  return level === null || asked.includes(level);
 }

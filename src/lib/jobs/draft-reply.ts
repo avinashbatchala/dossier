@@ -57,7 +57,7 @@ export const draftReplyJob = defineJob({
       take: 4,
       select: { direction: true, fromName: true, body: true },
     });
-    const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
+    const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(application?.profileId)]);
     const { data, promptVersion } = await draftReply(
       provider,
       {

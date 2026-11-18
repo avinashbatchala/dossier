@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +22,9 @@ vi.mock("@/lib/google/account", () => ({ loadGoogleAccount: vi.fn(), saveGoogleA
 vi.mock("@/lib/google/oauth", async (original) => ({ ...(await original<typeof import("@/lib/google/oauth")>()), exchangeCode: vi.fn() }));
 
 const origin = "http://localhost:3000";
-const request = (path: string) => new NextRequest(`${origin}${path}`, { headers: { host: "localhost:3000" } });
+const request = (path: string, headers: Record<string, string> = {}) => new NextRequest(`${origin}${path}`, { headers: { host: "localhost:3000", ...headers } });
+/** The browser that started the sign-in, with its PKCE verifier (#358). */
+const fromThisBrowser = { cookie: "dossier_google_pkce=the-verifier" };
 const idToken = (email: string) => `h.${Buffer.from(JSON.stringify({ email })).toString("base64url")}.s`;
 
 beforeEach(() => {
@@ -41,6 +45,14 @@ describe("GET /api/google/connect", () => {
     expect(url.searchParams.get("scope")).toContain("calendar.events");
     expect(url.searchParams.get("scope")).not.toContain("gmail.readonly");
     expect(url.searchParams.get("state")).toBeTruthy();
+    // PKCE (#358): the challenge goes to Google, the verifier stays in a cookie for the callback only.
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    const cookie = response.headers.get("set-cookie")!;
+    expect(cookie).toMatch(/^dossier_google_pkce=[\w-]{43};/);
+    expect(cookie).toMatch(/Path=\/api\/google\/callback/);
+    expect(cookie).toMatch(/HttpOnly/i);
+    const verifier = /^dossier_google_pkce=([\w-]+)/.exec(cookie)![1];
+    expect(url.searchParams.get("code_challenge")).toBe(createHash("sha256").update(verifier).digest("base64url"));
   });
 
   it("goes back to Settings when Google isn't set up", async () => {
@@ -53,24 +65,25 @@ describe("GET /api/google/connect", () => {
 describe("GET /api/google/callback", () => {
   const back = (response: Response) => new URL(response.headers.get("location")!).searchParams.get("google");
 
-  it("saves the account from a valid state and code", async () => {
+  it("saves the account from a valid state, code and PKCE verifier, and forgets the verifier", async () => {
     const state = await signState("/settings?section=google");
-    const response = await callback(request(`/api/google/callback?state=${state}&code=abc`));
+    const response = await callback(request(`/api/google/callback?state=${state}&code=abc`, { cookie: "dossier_google_pkce=the-verifier" }));
     expect(back(response)).toBe("connected");
-    expect(exchangeCode).toHaveBeenCalledWith("abc", `${origin}/api/google/callback`);
+    expect(exchangeCode).toHaveBeenCalledWith("abc", `${origin}/api/google/callback`, "the-verifier");
+    expect(response.headers.get("set-cookie")).toMatch(/^dossier_google_pkce=;.*Max-Age=0/);
     expect(saveGoogleAccount).toHaveBeenCalledWith({ email: "jane@gmail.com", refreshToken: "r", scopes: "openid email" });
   });
 
   it("goes back to the setup guide when it started there (E21-5)", async () => {
     const started = await connect(request(`/api/google/connect?return=${encodeURIComponent("/welcome?step=google")}`), undefined);
     const state = new URL(started.headers.get("location")!).searchParams.get("state")!;
-    const response = await callback(request(`/api/google/callback?state=${state}&code=abc`));
+    const response = await callback(request(`/api/google/callback?state=${state}&code=abc`, fromThisBrowser));
     expect(response.headers.get("location")).toBe(`${origin}/welcome?step=google&google=connected`);
 
     // Anywhere else isn't on the way back.
     const elsewhere = await connect(request(`/api/google/connect?return=${encodeURIComponent("https://evil.example/")}`), undefined);
     const other = new URL(elsewhere.headers.get("location")!).searchParams.get("state")!;
-    expect((await callback(request(`/api/google/callback?state=${other}&code=abc`))).headers.get("location")).toBe(`${origin}/settings?section=google&google=connected`);
+    expect((await callback(request(`/api/google/callback?state=${other}&code=abc`, fromThisBrowser))).headers.get("location")).toBe(`${origin}/settings?section=google&google=connected`);
 
     env.DOSSIER_GOOGLE_CLIENT_ID = undefined;
     const missing = await connect(request(`/api/google/connect?return=${encodeURIComponent("/welcome?step=google")}`), undefined);
@@ -82,6 +95,8 @@ describe("GET /api/google/callback", () => {
     const state = await signState("/settings?section=google");
     expect(back(await callback(request(`/api/google/callback?state=${state}&error=access_denied`)))).toBe("denied");
     expect(back(await callback(request(`/api/google/callback?state=${state}`)))).toBe("failed");
+    // A code without the browser that asked for it (#358).
+    expect(back(await callback(request(`/api/google/callback?state=${state}&code=abc`)))).toBe("expired");
     vi.mocked(getSession).mockResolvedValue(null);
     expect((await callback(request(`/api/google/callback?state=${state}&code=abc`))).headers.get("location")).toBe(`${origin}/login`);
     expect(saveGoogleAccount).not.toHaveBeenCalled();

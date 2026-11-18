@@ -1,55 +1,81 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { Breadcrumb, type Crumb } from "@/components/breadcrumb";
 import { PageBar } from "@/components/page-header";
+import type { ApplicationStatus } from "@/generated/prisma/enums";
+import { flagInLine, type ApplicationFlag } from "@/lib/application-flag";
+import { statusHref } from "@/lib/applications-list";
+import { cn } from "@/lib/cn";
+import { statusInfo } from "@/lib/status";
 
 /**
- * The top of an application's page (APP-1): the page bar with the breadcrumb,
- * the title and the actions (status, downloads), then the meta line and the
- * tabs.
+ * The top of an application's page in one row (E30-2, design 3b): the
+ * breadcrumb "Applications / Draft · apply by Thu 19 Nov" whose parts are
+ * links (public issue 112), the title "Role at Company", the tabs, and the
+ * status with the one thing to do next.
  */
 export function ApplicationHeader({
+  role,
+  company,
   title,
-  meta,
+  status,
+  flag,
+  tabs,
   actions,
-  children,
+  crumb,
+  edit,
 }: {
+  role: string;
+  company: string;
+  /** The saved title, for an application without a role. */
   title: string;
-  /** Location, work mode, salary, deadline, created: whichever are known. */
-  meta: string[];
+  status: ApplicationStatus;
+  /** What it needs next (E27-2), after the status. */
+  flag: ApplicationFlag | null;
+  /** The tab list. */
+  tabs: ReactNode;
   actions: ReactNode;
-  /** The tab list, drawn on the header's bottom line. */
-  children?: ReactNode;
+  /** In place of the status's link, e.g. "New" before writing (E31-3). */
+  crumb?: Crumb;
+  /** After the title: ✎ to edit it (E31-3). */
+  edit?: ReactNode;
 }) {
-  const name = title.trim() || "Untitled application";
+  const what = role.trim() || title.trim() || "Untitled application";
+  const at = company.trim() && company.trim() !== what ? company.trim() : "";
   return (
-    <>
-      <PageBar>
-        <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-2">
-          <nav aria-label="Breadcrumb">
-            <ol className="flex gap-1.5 text-meta text-muted">
-              <li>
-                <Link href="/applications" className="text-muted hover:text-ink">
-                  Applications
-                </Link>
-              </li>
-              <li aria-hidden="true">/</li>
-            </ol>
-          </nav>
-          <h1 className="font-serif text-[34px] leading-[1.15] tracking-[-0.015em] text-pretty">{name}</h1>
+    <PageBar compact>
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-0.5">
+        <Breadcrumb
+          items={[
+            { label: "Applications", href: "/applications" },
+            {
+              ...(crumb ?? { label: statusInfo(status).label, href: statusHref(status) }),
+              extra: flag && (
+                <>
+                  {" · "}
+                  <span className={cn(flag.soon && "text-warning")}>{flagInLine(flag.text)}</span>
+                </>
+              ),
+            },
+            // The page itself, which the heading below shows (#514).
+            { label: at ? `${what} at ${at}` : what, hidden: true },
+          ]}
+        />
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 title={at ? `${what} at ${at}` : what} className="truncate font-serif text-[26px] leading-[1.2] tracking-[-0.01em]">
+            {what}
+            {at && (
+              <>
+                {" "}
+                <span className="text-muted">at</span> {at}
+              </>
+            )}
+          </h1>
+          {edit}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-      </PageBar>
-      <div className="flex flex-col gap-[18px] border-b border-line px-10 pt-5">
-        {meta.length > 0 && (
-          <p className="flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-muted">
-            {meta.map((part) => (
-              <span key={part}>{part}</span>
-            ))}
-          </p>
-        )}
-        {children}
       </div>
-    </>
+      {tabs}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+    </PageBar>
   );
 }

@@ -13,7 +13,8 @@ const nav = (page: Page) => page.getByRole("navigation", { name: "Profile sectio
 const rows = async (page: Page) => {
   const links = nav(page).getByRole("listitem").getByRole("link");
   await expect(links.first()).toBeVisible();
-  return links.evaluateAll((all) => all.map((link) => link.querySelector("span")?.firstChild?.textContent ?? ""));
+  // The label, after the mark (E33-1).
+  return links.evaluateAll((all) => all.map((link) => link.querySelector(".truncate")?.textContent ?? ""));
 };
 const headings = async (page: Page) => {
   const all = page.getByRole("article", { name: "Resume" }).getByRole("heading", { level: 2 });

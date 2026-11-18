@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "s".repeat(40), DOSSIER_PASSWORD: "argon2id:m=19456,t=2,p=1:c2FsdA:aGFzaA" } }));
 const settings = vi.hoisted(() => ({ resumeSections: { order: [] as string[], off: [] as string[] }, connectorEnabledAt: "2026-10-23T09:00:00.000Z" as string | null }));
 vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => settings }));
-const db = vi.hoisted(() => ({ postingSearch: { findUnique: vi.fn() }, postingScore: { upsert: vi.fn() } }));
+vi.mock("@/lib/profiles", () => ({
+  loadProfileSettings: async () => settings,
+  listProfiles: async () => [{ id: "first", name: "My profile" }],
+  profileNamed: async () => ({ id: "first", name: "My profile" }),
+}));
+const db = vi.hoisted(() => ({ postingSearch: { findUnique: vi.fn() }, postingFind: { findMany: vi.fn() }, postingScore: { upsert: vi.fn() } }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/ai/config", () => ({ isAiUsable: async () => false }));
 vi.mock("@/lib/profile-data", async () => {
@@ -101,6 +106,7 @@ describe("the Claude connector at /api/mcp (#221)", () => {
       "save_job_scores",
       "search_jobs",
       "set_application_status",
+      "update_application",
     ]);
   });
 
@@ -108,7 +114,9 @@ describe("the Claude connector at /api/mcp (#221)", () => {
     const { isError, text } = await tool("get_profile", {});
     expect(isError).toBe(false);
     const profile = JSON.parse(text) as Record<string, unknown>;
-    expect(profile).toMatchObject({ name: demoProfile().basics.name, link: "https://dossier.example/profile" });
+    expect(profile).toMatchObject({ profile: "My profile", name: demoProfile().basics.name, link: "https://dossier.example/profile?profile=first" });
+    // With one profile, none are listed.
+    expect(profile).not.toHaveProperty("profiles");
     expect(text).not.toContain(demoProfile().basics.email);
     expect(text).not.toContain(demoProfile().basics.phone || "no phone");
   });
@@ -139,7 +147,9 @@ describe("the Claude connector at /api/mcp (#221)", () => {
 
   it("saves the fit scores Claude gives postings, so Find jobs shows them", async () => {
     const posting = { source: "JSEARCH", externalId: "j1", title: "Product Designer", company: "Acme", place: "Berlin", remote: null, salary: "", postedAt: null, url: "", via: "", description: "Figma", complete: true };
-    db.postingSearch.findUnique.mockResolvedValue({ postings: [posting] });
+    // What the search found is in the library (E22-5).
+    db.postingSearch.findUnique.mockResolvedValue({ id: "s1" });
+    db.postingFind.findMany.mockResolvedValue([{ posting: { ...posting, id: "row-1" } }]);
     const { text } = await tool("save_job_scores", {
       search_id: "s1",
       scores: [

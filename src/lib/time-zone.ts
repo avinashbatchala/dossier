@@ -57,6 +57,12 @@ export async function lastKnownTimeZone(): Promise<string> {
   return zone ?? (await loadSettings()).browserTimeZone ?? serverTimeZone();
 }
 
+/** Keeps the address Dossier was opened at, for notifications' links (E26-1); called after a page, like the zone. */
+export async function rememberOrigin(origin: string): Promise<void> {
+  const { lastOrigin } = await loadSettings();
+  if (lastOrigin !== origin) await saveSettings({ lastOrigin: origin });
+}
+
 /** Keeps the browser's zone for work done without a request; called after a page with the zone its request had. */
 export async function rememberBrowserTimeZone(zone: string | undefined): Promise<void> {
   if (!zone) return;

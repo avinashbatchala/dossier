@@ -5,8 +5,8 @@ import type { CalendarItem } from "@/lib/calendar-view";
 import { cn } from "@/lib/cn";
 import { formatTime } from "@/lib/dates";
 
-/** An interview's dot is dark, another event's faint: the same marks as on the month. */
-export const itemDot = (item: CalendarItem) => (item.kind === "interview" ? "bg-primary" : "bg-faint");
+/** An agenda row's bar (E28-5): an interview in Interview's colour, another event in a quiet line. */
+export const itemColor = (item: CalendarItem) => (item.kind === "interview" ? "var(--color-status-interview)" : "var(--color-line-strong)");
 
 /** "13:00–13:45", or "All day". */
 export const itemTime = (item: CalendarItem, timeZone: string) =>

@@ -16,7 +16,7 @@ vi.mock("@/components/toast", () => ({
   },
 }));
 
-const initial = { creativity: "BALANCED" as const, strict: true, showDiff: true };
+const initial = { creativity: "BALANCED" as const, strict: true, showDiff: true, dailyNoteAi: true };
 
 beforeEach(() => vi.mocked(updateSettings).mockClear());
 
@@ -58,5 +58,14 @@ describe("AI behaviour (E10-2)", () => {
     await user.click(screen.getByRole("switch", { name: "Show what changed" }));
     expect(screen.getByRole("switch", { name: "Show what changed" })).toHaveAttribute("aria-checked", "true");
     expect(toast).toHaveBeenCalledWith("Couldn't save.");
+  });
+
+  it("turns the AI's daily note off (E28-6)", async () => {
+    render(<AiBehaviour initial={initial} />);
+    const note = screen.getByRole("switch", { name: "Write the daily note with AI" });
+    expect(note).toHaveAttribute("aria-checked", "true");
+    expect(note).toHaveAccessibleDescription(/Nothing about you goes into it/);
+    await userEvent.click(note);
+    expect(updateSettings).toHaveBeenCalledWith({ dailyNoteAi: false });
   });
 });

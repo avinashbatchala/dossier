@@ -55,6 +55,12 @@ describe("matchMail", () => {
     const older = app({ id: "old", company: "Ledgerly", emailTo: "jobs@ledgerly.example", status: "REJECTED", updatedAt: new Date("2026-10-15") });
     expect(matchMail(mail({ fromAddress: "hr@ledgerly.example" }), [older, ledgerly], new Map())?.applicationId).toBe("lg");
   });
+
+  it("never matches a new mail to a closed application, but keeps a thread already linked to one (#358)", () => {
+    const closed = app({ id: "old", company: "Ledgerly", emailTo: "jobs@ledgerly.example", status: "REJECTED", updatedAt: new Date("2026-11-15") });
+    expect(matchMail(mail({ fromAddress: "hr@ledgerly.example" }), [closed], new Map())).toBeNull();
+    expect(matchMail(mail({ fromAddress: "hr@ledgerly.example", threadId: "t-old" }), [closed], new Map([["t-old", "old"]]))).toEqual({ applicationId: "old", by: "thread" });
+  });
 });
 
 describe("domains and names", () => {

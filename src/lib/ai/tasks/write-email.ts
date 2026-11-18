@@ -24,7 +24,7 @@ import {
 } from "./prompt-parts";
 import { withoutFrame } from "./write-cover-letter";
 
-export const WRITE_EMAIL_VERSION = "write-email@2";
+const WRITE_EMAIL_VERSION = "write-email@2";
 
 const answerSchema = z.object({
   contactName: z.string().nullable(),

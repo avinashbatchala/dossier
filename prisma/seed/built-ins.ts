@@ -11,5 +11,7 @@ export async function seedBuiltIns(db: PrismaClient): Promise<void> {
     BUILT_IN_THEMES.map(({ id, ...theme }) =>
       db.theme.upsert({ where: { id }, create: { id, ...theme }, update: theme }),
     ),
+    // Prisma waits 2 s for a connection by default; a busy database (a full e2e run) needed longer.
+    { maxWait: 10_000 },
   );
 }

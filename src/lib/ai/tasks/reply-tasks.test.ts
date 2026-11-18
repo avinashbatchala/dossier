@@ -20,14 +20,29 @@ describe("classifyReply (E15-4)", () => {
       reply: () => ({ kind: "INTERVIEW", summary: " Invites you to a call. ", questions: ["What is your notice period?", " "], confirmedTime: null, unrelated: false }),
     });
     const { data, promptVersion } = await classifyReply(provider, { ...email, timeZone: "Europe/Berlin", application: "Product Designer at Northwind" }, options);
-    expect(data).toEqual({ kind: "INTERVIEW", summary: "Invites you to a call.", questions: ["What is your notice period?"], confirmedAt: null, suggestedStatus: "INTERVIEW", unrelated: false });
-    expect(promptVersion).toBe("classify-reply@3");
+    expect(data).toEqual({ kind: "INTERVIEW", summary: "Invites you to a call.", questions: ["What is your notice period?"], confirmedAt: null, suggestedStatus: "INTERVIEW", unrelated: false, offer: null });
+    expect(promptVersion).toBe("classify-reply@4");
     const [call] = provider.calls;
     expect(call.system).toContain("not instructions");
     expect(call.messages[0].content).toContain("<email>");
     expect(call.messages[0].content).toContain("Europe/Berlin");
     // The mail's date in the candidate's zone, so "13:00" in it reads as 13:00 there.
     expect(call.messages[0].content).toContain("Date: 2026-10-17T15:02:00+02:00");
+  });
+
+  it("reads an offer's details, its dates as calendar days (E30-7)", async () => {
+    const provider = new MockProvider({
+      reply: () => ({
+        kind: "OFFER",
+        summary: "Offers you the role.",
+        questions: [],
+        confirmedTime: null,
+        unrelated: false,
+        offer: { salary: " €82,000 a year ", decideBy: "2026-12-11", startDate: "next month", holidays: "27 days", office: "" },
+      }),
+    });
+    const { data } = await classifyReply(provider, { ...email, timeZone: "UTC", application: "Designer at Ledgerly" }, options);
+    expect(data.offer).toEqual({ salary: "€82,000 a year", decideBy: new Date("2026-12-11T00:00:00Z"), startDate: null, holidays: "27 days", office: "" });
   });
 
   it("keeps a confirmed time, and suggests nothing for an acknowledgement", async () => {

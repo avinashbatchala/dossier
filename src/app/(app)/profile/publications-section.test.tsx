@@ -103,7 +103,7 @@ describe("PublicationsSection (#218)", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: /^Move “Dombrowe, V\. \(2019\)\. A poster\.” up$/ }));
-    expect(reorderPublications).toHaveBeenCalledWith({ ids: ["u2", "u1"] });
+    expect(reorderPublications).toHaveBeenCalledWith({ profileId: "", ids: ["u2", "u1"] });
     expect(latest.publications.map((entry) => entry.id)).toEqual(["u2", "u1"]);
   });
 });

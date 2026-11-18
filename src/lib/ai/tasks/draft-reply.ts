@@ -10,7 +10,7 @@ import { factSources, guardSources, unverifiedFacts } from "../fact-guard";
 import { emailForPrompt, UNTRUSTED_EMAIL } from "./classify-reply";
 import { applicationFacts, candidateFacts, CREATIVITY, jobForPrompt, NO_EM_DASHES, profileForPrompt, system, truthfulness, type Task } from "./prompt-parts";
 
-export const DRAFT_REPLY_VERSION = "draft-reply@3";
+const DRAFT_REPLY_VERSION = "draft-reply@3";
 
 const answerSchema = z.object({
   greeting: z.string(),

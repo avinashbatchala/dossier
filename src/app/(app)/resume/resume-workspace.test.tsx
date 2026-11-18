@@ -10,10 +10,11 @@ import { BUILT_IN_THEMES } from "@/lib/themes";
 
 import { themeFile } from "@/lib/theme-file";
 
-import { deleteTheme, duplicateTheme, importTheme, saveResumeSections, saveTheme, setBaseTheme, setFitBaseResume } from "./actions";
+import { deleteTheme, duplicateTheme, importTheme, saveResumeSections, saveTheme, setBaseResumeLanguage, setBaseTheme, setFitBaseResume } from "./actions";
 import { ResumeWorkspace, type ResumeWorkspaceProps } from "./resume-workspace";
 
-vi.mock("./actions", () => ({ setBaseTheme: vi.fn(), saveTheme: vi.fn(), duplicateTheme: vi.fn(), deleteTheme: vi.fn(), importTheme: vi.fn(), saveResumeSections: vi.fn(), setFitBaseResume: vi.fn() }));
+vi.mock("./actions", () => ({ setBaseTheme: vi.fn(), saveTheme: vi.fn(), duplicateTheme: vi.fn(), deleteTheme: vi.fn(), importTheme: vi.fn(), saveResumeSections: vi.fn(), setFitBaseResume: vi.fn(), setBaseResumeLanguage: vi.fn() }));
+vi.mock("../profile/profiles-actions", () => ({ newProfile: vi.fn(), renameProfileAction: vi.fn(), deleteProfileAction: vi.fn() }));
 vi.mock("next/navigation", async (importOriginal) => ({ ...(await importOriginal<typeof import("next/navigation")>()), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/toast", () => {
   const toast = vi.fn();
@@ -28,6 +29,8 @@ vi.mock("@/components/toast", () => {
 });
 
 const props: ResumeWorkspaceProps = {
+  profileId: "p1",
+  profiles: [{ id: "p1", name: "Product Designer" }],
   profile: demoProfile(),
   themes: BUILT_IN_THEMES,
   usage: {},
@@ -57,7 +60,7 @@ describe("ResumeWorkspace", () => {
       render(<ResumeWorkspace {...single} initialPanel="sections" />);
       await userEvent.click(screen.getByRole("button", { name: "Move “Projects” up" }));
       expect(titles().indexOf("Projects")).toBeLessThan(titles().indexOf("Experience"));
-      expect(saveResumeSections).toHaveBeenCalledWith(expect.objectContaining({ off: [] }));
+      expect(saveResumeSections).toHaveBeenCalledWith(expect.objectContaining({ profileId: "p1", off: [] }));
     });
 
     it("removes a section, keeps it listed and puts it back", async () => {
@@ -86,8 +89,8 @@ describe("ResumeWorkspace", () => {
   it("has the header, its actions and the preview in the base theme (RES-1)", () => {
     render(<ResumeWorkspace {...props} />);
     expect(screen.getByRole("heading", { level: 1, name: "Base resume" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Edit profile" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("link", { name: "Download PDF" })).toHaveAttribute("href", "/api/pdf?doc=base");
+    expect(screen.getByRole("link", { name: "Edit profile" })).toHaveAttribute("href", "/profile?profile=p1");
+    expect(screen.getByRole("link", { name: "Download PDF" })).toHaveAttribute("href", "/api/pdf?doc=base&profile=p1");
     expect(previewLabel()).toBe("Modern");
     expect(screen.getByText("A4 · 1 page")).toBeInTheDocument();
     expect(screen.getByRole("article", { name: "Resume" })).toHaveTextContent("Jane Doe");
@@ -105,6 +108,26 @@ describe("ResumeWorkspace", () => {
     unmountProjects();
     render(<ResumeWorkspace {...props} />);
     expect(screen.queryByText(/fills in from your profile/)).not.toBeInTheDocument();
+  });
+
+  it("picks its profile's language from the built-in ones, English by default (E24-2)", async () => {
+    vi.mocked(setBaseResumeLanguage).mockResolvedValue({ ok: true, data: null });
+    const user = userEvent.setup();
+    render(<ResumeWorkspace {...props} />);
+    const select = screen.getByLabelText("Language") as HTMLSelectElement;
+    expect(select).toHaveDisplayValue("English");
+    expect(select.options).toHaveLength(21);
+    expect(select).toHaveAccessibleDescription("For its headings and dates. Tailored documents use their application's language.");
+    await user.selectOptions(select, "German");
+    expect(setBaseResumeLanguage).toHaveBeenLastCalledWith({ profileId: "p1", language: "German" });
+    await user.selectOptions(select, "English");
+    expect(setBaseResumeLanguage).toHaveBeenLastCalledWith({ profileId: "p1", language: null });
+  });
+
+  it("says which profile's it is, and downloads that one (E24-2)", () => {
+    render(<ResumeWorkspace {...props} />);
+    expect(screen.getByRole("button", { name: /Profile: Product Designer/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Edit profile" })).toHaveAttribute("href", "/profile?profile=p1");
   });
 
   it("names the paper size", () => {
@@ -127,7 +150,7 @@ describe("ResumeWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Classic theme" }));
     expect(previewLabel()).toBe("Classic");
     expect(screen.getByRole("button", { name: "Classic theme, in use" })).toBeInTheDocument();
-    expect(setBaseTheme).toHaveBeenCalledWith({ id: "classic" });
+    expect(setBaseTheme).toHaveBeenCalledWith({ profileId: "p1", id: "classic" });
   });
 
   it("goes back to the saved theme when saving fails", async () => {
@@ -195,7 +218,7 @@ describe("managing themes (E5-7)", () => {
     // Built-in themes can't be deleted.
     expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Duplicate Modern" }));
-    expect(duplicateTheme).toHaveBeenCalledWith({ id: "modern" });
+    expect(duplicateTheme).toHaveBeenCalledWith({ profileId: "p1", id: "modern" });
     expect(screen.getByRole("button", { name: "Modern copy theme, in use" })).toBeInTheDocument();
   });
 
@@ -207,7 +230,7 @@ describe("managing themes (E5-7)", () => {
     const dialog = screen.getByRole("alertdialog", { name: "Delete “Quiet green”?" });
     expect(dialog).toHaveTextContent("2 applications use it; their documents will use your base theme instead. Editorial becomes your base theme.");
     await user.click(within(dialog).getByRole("button", { name: "Delete theme" }));
-    expect(deleteTheme).toHaveBeenCalledWith({ id: "c1" });
+    expect(deleteTheme).toHaveBeenCalledWith({ profileId: "p1", id: "c1" });
     expect(screen.queryByRole("button", { name: /Quiet green theme/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Editorial theme, in use" })).toBeInTheDocument();
   });
@@ -234,7 +257,7 @@ describe("managing themes (E5-7)", () => {
     const { container } = render(<ResumeWorkspace {...props} />);
     const input = container.querySelector<HTMLInputElement>("input[type=file]")!;
     await user.upload(input, new File([JSON.stringify(file)], "Shared.dossier-theme.json", { type: "application/json" }));
-    expect(importTheme).toHaveBeenCalledWith({ file });
+    expect(importTheme).toHaveBeenCalledWith({ profileId: "p1", file });
     expect(screen.getByRole("button", { name: "Shared theme, in use" })).toBeInTheDocument();
 
     await user.upload(input, new File(["{\"hello\":1}"], "other.json", { type: "application/json" }));
@@ -251,7 +274,7 @@ describe("Fit to one page (public issue 69)", () => {
     const toggle = screen.getByRole("switch", { name: "Fit to one page" });
     expect(toggle).toHaveAccessibleDescription("Off. The resume takes the pages it needs.");
     await user.click(toggle);
-    expect(setFitBaseResume).toHaveBeenCalledWith({ fit: true });
+    expect(setFitBaseResume).toHaveBeenCalledWith({ profileId: "p1", fit: true });
     // jsdom lays nothing out, so the preview counts one page and nothing is squeezed.
     expect(toggle).toHaveAccessibleDescription("On. It fits as it is.");
   });

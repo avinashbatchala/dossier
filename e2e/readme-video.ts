@@ -50,8 +50,8 @@ test("a run through the app", async ({ page }) => {
   await linger(page, 800);
   await page.getByLabel("Job posting").fill(POSTING);
   await linger(page, 800);
-  await page.getByRole("button", { name: "Read the posting →" }).click();
-  const match = page.getByRole("heading", { name: "How you match" });
+  await page.getByRole("button", { name: "Read the posting" }).click();
+  const match = page.getByRole("heading", { name: "What I read from the posting" });
   await expect(match).toBeVisible();
   await linger(page);
   await match.evaluate((heading) => {
@@ -59,7 +59,7 @@ test("a run through the app", async ({ page }) => {
     window.scrollBy({ top: -96, behavior: "smooth" });
   });
   await linger(page, 2000);
-  await page.getByRole("button", { name: "Create application →" }).click();
+  await page.getByRole("button", { name: "Write resume and letter" }).first().click();
   await page.waitForURL(/\/applications\/c/, { timeout: 30_000 });
   await expect(page.getByRole("article", { name: "Resume" })).toContainText("Jane Doe");
   await linger(page, 2000);

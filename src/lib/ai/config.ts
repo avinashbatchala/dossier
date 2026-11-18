@@ -20,7 +20,7 @@ export type AiConfig = {
   timeoutMs: number;
 };
 
-export const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: string | null; timeoutSeconds: number }> = {
+const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: string | null; timeoutSeconds: number }> = {
   [AiProvider.LOCAL]: { baseUrl: "http://localhost:11434", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.local },
   [AiProvider.OPENAI]: { baseUrl: "https://api.openai.com/v1", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
   [AiProvider.ANTHROPIC]: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
@@ -113,14 +113,34 @@ export async function loadAiConfig(): Promise<AiConfig> {
 export async function loadAiSettingsView(): Promise<AiSettingsView> {
   const saved = await loadSettings();
   const config = resolveAiConfig(saved, env);
+  const model = config.model ?? "";
+  const test = saved.aiTest;
   return {
     provider: config.provider,
     baseUrl: config.baseUrl,
-    model: config.model ?? "",
+    model,
     keyState: keyStateOf(saved, config),
+    keyEnding: keyEnding(saved),
+    // The last connection test, if it tested what's chosen now (E34-1).
+    test: test && test.provider === config.provider && test.baseUrl === config.baseUrl && test.model === model ? { at: test.at, ok: test.ok, seconds: test.seconds, error: test.error } : null,
     timeoutSeconds: saved.aiTimeoutSeconds,
     envTimeoutSeconds: env.DOSSIER_AI_TIMEOUT_SECONDS ?? null,
   };
+}
+
+/**
+ * A saved key's last four characters (ST4), decrypted here so the key
+ * itself never leaves the server; null when none is saved, it can't be
+ * read, or it's too short to show any of.
+ */
+export function keyEnding(saved: { provider: AiProvider | null; apiKeyEnc: string | null }): string | null {
+  if (!saved.provider || !saved.apiKeyEnc) return null;
+  try {
+    const key = decryptApiKey(saved.apiKeyEnc);
+    return key.length >= 12 ? key.slice(-4) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether a key is in play for the provider in effect, and where it comes from. */

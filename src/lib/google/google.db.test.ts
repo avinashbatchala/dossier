@@ -20,6 +20,7 @@ vi.mock("@/lib/ai", () => ({ getAiProvider: async () => provider.current }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
 vi.mock("@/lib/ai/task-options", () => ({ loadTaskOptions: async () => ({ creativity: "BALANCED", strict: true, language: null }) }));
 vi.mock("@/lib/pdf/render", () => ({ renderPdf: async () => new Uint8Array([37, 80, 68, 70]) }));
+vi.mock("@/lib/notifications/notify", () => ({ emit: vi.fn(async () => 0) }));
 vi.mock("@/lib/time-zone", () => ({ userTimeZone: async () => "Europe/Berlin", lastKnownTimeZone: async () => "Europe/Berlin" }));
 
 import { encryptSecret, GOOGLE_TOKEN } from "@/lib/secrets";
@@ -138,6 +139,24 @@ describe("Send with Gmail (E15-2)", () => {
 });
 
 describe("the inbox check (E15-3)", () => {
+  it("fills in the application's offer from a reply read as one, once (E30-7)", async () => {
+    await sendApplicationEmail("nw");
+    provider.current = new MockProvider({
+      reply: () => ({
+        kind: "OFFER",
+        summary: "Offers you the role.",
+        questions: [],
+        confirmedTime: null,
+        unrelated: false,
+        offer: { salary: "€82,000 a year", decideBy: "2026-12-11", startDate: null, holidays: "27 days", office: "" },
+      }),
+    });
+    const thread = (await prisma().application.findUniqueOrThrow({ where: { id: "nw" } })).emailThreadId!;
+    mailbox = [{ id: "m9", threadId: thread, from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "We'd love to offer you the role.", history: 250 }];
+    await syncInbox();
+    expect(await prisma().offer.findUniqueOrThrow({ where: { applicationId: "nw" } })).toMatchObject({ salary: "€82,000 a year", decideBy: new Date("2026-12-11T00:00:00Z"), holidays: "27 days", fromEmailId: expect.any(String) });
+  });
+
   it("links replies in a known thread or from the company's domain, and has the AI read them", async () => {
     await sendApplicationEmail("nw");
     mailbox = [
@@ -151,7 +170,8 @@ describe("the inbox check (E15-3)", () => {
 
     const kept = await prisma().emailMessage.findMany({ where: { direction: "INCOMING" }, orderBy: { gmailId: "asc" } });
     expect(kept.map((email) => [email.gmailId, email.applicationId, email.kind, email.suggestedStatus])).toEqual([
-      ["m1", "nw", "INTERVIEW", "INTERVIEW"],
+      // One suggestion per application (#358): the last mail's, as they were sent at the same time.
+      ["m1", "nw", "INTERVIEW", null],
       ["m2", "nw", "INTERVIEW", "INTERVIEW"],
     ]);
     expect(kept[0].body).toBe("Could we talk next week?");
@@ -163,6 +183,26 @@ describe("the inbox check (E15-3)", () => {
     mailbox.push({ id: "m6", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Wednesday 14:00 works.", history: 250 });
     expect(await syncInbox()).toEqual({ fetched: 1, kept: 1, read: 1, unread: 0 });
     expect((await prisma().googleAccount.findUniqueOrThrow({ where: { id: "google" } })).historyId).toBe("300");
+  });
+
+  it("says who replied about which application on a scheduled check, never what they wrote (E26-6)", async () => {
+    const { emit } = await import("@/lib/notifications/notify");
+    vi.mocked(emit).mockClear();
+    await sendApplicationEmail("nw");
+    mailbox = [
+      { id: "m1", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Could we talk next week?" },
+      { id: "m3", threadId: "t3", from: "Friend <friend@gmail.com>", subject: "Lunch?", text: "Tomorrow?" },
+    ];
+    await syncInbox({ notify: true });
+    const application = await prisma().application.findUniqueOrThrow({ where: { id: "nw" } });
+    expect(vi.mocked(emit).mock.calls).toEqual([["reply.arrived", { applicationId: "nw", from: "Anna Keller", title: application.role || application.title, company: application.company }]]);
+    expect(JSON.stringify(vi.mocked(emit).mock.calls)).not.toContain("Could we talk");
+
+    // "Check now" never sends it.
+    vi.mocked(emit).mockClear();
+    mailbox.push({ id: "m6", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Wednesday works.", history: 250 });
+    await syncInbox();
+    expect(emit).not.toHaveBeenCalled();
   });
 
   it("skips mail deleted since Gmail listed it, and carries on from the history", async () => {
@@ -251,6 +291,54 @@ describe("the inbox check (E15-3)", () => {
       ["m2", null, "REJECTION", null],
       ["m3", null, "INTERVIEW", null],
     ]);
+  });
+
+  it("logs no mail content when reading fails or Gmail refuses a mail (#358)", async () => {
+    const logged: string[] = [];
+    const spies = (["error", "warn", "log", "info"] as const).map((level) => vi.spyOn(console, level).mockImplementation((...args: unknown[]) => void logged.push(args.map(String).join(" "))));
+    try {
+      await sendApplicationEmail("nw");
+      // The model fails in a way that echoes what it was given.
+      provider.current = new MockProvider({ reply: (call) => Promise.reject(new Error(`Bad request: ${String(call.messages[0].content)}`)) });
+      mailbox = [{ id: "m1", threadId: "thread-new", from: "Anna Keller <anna.keller@northwind.example>", subject: "Re: Application, salary 81,500", text: "Your notice period is ZEBRA-7731, right?" }];
+      expect(await syncInbox()).toMatchObject({ kept: 1, read: 0 });
+      // A refused mail stops the check, which says so in Settings; that's logged too.
+      mailbox = [...mailbox, { id: "m2", threadId: "t2", from: "Hidden Sender <hidden.sender@northwind.example>", subject: "Private subject QUOKKA", text: "Private body QUOKKA", forbid: true, history: 250 }];
+      await expect(syncInbox()).rejects.toThrow();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(logged.some((line) => line.startsWith("[reading a reply]"))).toBe(true);
+    expect(logged.some((line) => line.startsWith("[inbox check]"))).toBe(true);
+    for (const secret of ["ZEBRA-7731", "81,500", "anna.keller", "Anna Keller", "QUOKKA", "hidden.sender", "notice period"]) {
+      expect(logged.join("\n"), secret).not.toContain(secret);
+    }
+  });
+
+  it("keeps one status suggestion per application, the newest mail's, whatever order they're read in (#358)", async () => {
+    await sendApplicationEmail("nw");
+    mailbox = [
+      { id: "m1", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Could we talk?", date: "2026-10-18T09:00:00Z" },
+      { id: "m2", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Could we talk next week?", date: "2026-10-17T09:00:00Z" },
+    ];
+    await syncInbox();
+    const kept = await prisma().emailMessage.findMany({ where: { direction: "INCOMING" }, orderBy: { gmailId: "asc" } });
+    expect(kept.map((email) => [email.gmailId, email.suggestedStatus])).toEqual([
+      ["m1", "INTERVIEW"],
+      ["m2", null],
+    ]);
+  });
+
+  it("keeps a thread moved to another application there, even the one it was sent from (public #134)", async () => {
+    await sendApplicationEmail("nw");
+    await prisma().application.create({ data: { id: "lg", company: "Ledgerly", role: "Designer", status: "SENT" } });
+    mailbox = [{ id: "m1", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Could we talk?" }];
+    await syncInbox();
+    // Moved by hand, as the application's Email tab does.
+    await prisma().emailMessage.updateMany({ where: { threadId: "thread-new" }, data: { applicationId: "lg" } });
+    mailbox.push({ id: "m2", threadId: "thread-new", from: "Anna Keller <a.keller@northwind.example>", subject: "Re: Application", text: "Wednesday?", history: 250 });
+    await syncInbox();
+    expect((await prisma().emailMessage.findFirstOrThrow({ where: { gmailId: "m2" } })).applicationId).toBe("lg");
   });
 
   it("leaves out drafts, even in a known thread", async () => {

@@ -5,8 +5,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { action, ActionError } from "@/lib/action";
+import { hideNote, writeNote } from "@/lib/daily-note";
 import { env } from "@/lib/env";
 import { saveSettings } from "@/lib/settings-data";
+import { userTimeZone } from "@/lib/time-zone";
 import { saveUsagePingChoice } from "@/lib/usage-ping";
 
 /** Remembers the dashboard's period (E9-8), for the next visit. */
@@ -15,7 +17,7 @@ export const rememberDashboardPeriod = action(z.object({ period: z.enum(["30d", 
   return null;
 });
 
-/** Days without news before "Worth a look" suggests a follow-up (E9-9). */
+/** Days without news before Needs you suggests a follow-up (E9-9). */
 export const rememberQuietDays = action(z.object({ days: z.number().int().min(1).max(60) }), async ({ days }) => {
   await saveSettings({ quietDays: days });
   return null;
@@ -32,5 +34,14 @@ export const chooseUsagePing = action(z.object({ send: z.boolean() }), async ({ 
   }
   await saveUsagePingChoice(send ? "on" : "off");
   revalidatePath("/", "layout");
+  return null;
+});
+
+/** Today's daily note (E28-6): written once after the dashboard loads, or another one, up to three a day. */
+export const writeDailyNoteAction = action(z.object({ another: z.boolean() }), async ({ another }) => writeNote({ timeZone: await userTimeZone(), another }));
+
+/** "Hide for today" on the daily note: until midnight in the user's time zone. */
+export const hideDailyNote = action(z.object({}), async () => {
+  await hideNote({ timeZone: await userTimeZone() });
   return null;
 });

@@ -66,6 +66,11 @@ const fold = (text: string) =>
 
 let byName: Map<string, string> | undefined;
 
+/** Every country's names, folded ("deutschland", "united states"), to its code. */
+export function countryNames(): ReadonlyMap<string, string> {
+  return names();
+}
+
 function names(): Map<string, string> {
   if (byName) return byName;
   byName = new Map(Object.entries(ALIASES));

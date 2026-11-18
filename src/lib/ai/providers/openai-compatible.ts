@@ -45,7 +45,7 @@ const NO_ROOM = /could not finish the message because max_tokens/i;
  * thinks as a list of chunks: the text ones are the answer, the thinking
  * isn't.
  */
-export function answerText(content: unknown): string {
+function answerText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content

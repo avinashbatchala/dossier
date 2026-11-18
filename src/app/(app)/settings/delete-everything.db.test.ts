@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildExport } from "@/lib/data-export";
 import { importExport, parseExport } from "@/lib/data-import";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 import { seedDemo } from "../../../../prisma/seed/demo";
@@ -66,7 +66,7 @@ describe("deleteEverything (E10-8)", () => {
     const candidate = await prisma().agentCandidate.create({ data: { source: "JSEARCH", externalId: "job-1", dedupeKey: "key-1" } });
     const search = await prisma().agentSearch.create({ data: { name: "Design", query: {} } });
     await prisma().agentCandidateSearch.create({ data: { candidateId: candidate.id, searchId: search.id, searchName: "Design" } });
-    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", score: 80, reasons: [], redFlags: [], scoredWith: "score-posting@1" } });
+    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", profileId: TEST_PROFILE_ID, score: 80, reasons: [], redFlags: [], scoredWith: "score-posting@1" } });
     // And Startups, with the fingerprints of ones removed for good (#222).
     await prisma().startup.create({ data: { source: "HN", externalId: "1", company: "Acme", roles: [], emails: [], links: [], reasons: [] } });
     await prisma().startupBlock.create({ data: { hash: "a".repeat(64) } });
@@ -76,7 +76,7 @@ describe("deleteEverything (E10-8)", () => {
     // And the tokens AI requests used (#290).
     await prisma().aiUsage.create({ data: { task: "extract-posting", provider: "ANTHROPIC", model: "claude-sonnet-5", inputTokens: 900, outputTokens: 300 } });
     // And the sections the user made (#298).
-    await prisma().customSection.create({ data: { title: "Awards", items: { create: { title: "Best Paper" } } } });
+    await prisma().customSection.create({ data: { profileId: TEST_PROFILE_ID, title: "Awards", items: { create: { title: "Best Paper" } } } });
     await expect(deleteEverything({ confirm: "DELETE" })).rejects.toThrow("NEXT_REDIRECT");
     expect(redirected.to).toBe("/");
     const counts = await Promise.all([

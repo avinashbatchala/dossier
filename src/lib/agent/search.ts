@@ -9,9 +9,23 @@ export const agentSearchInputSchema = z.object({
   query: searchQuerySchema.refine((query) => Boolean(query.keywords), "Add what to look for."),
   enabled: z.boolean().default(true),
   sort: z.number().int().min(0).default(0),
+  /** The profile it scores and drafts with (E24-6); null reads as the first. */
+  profileId: z.string().min(1).nullable().default(null),
+  /** Scores against every profile instead (E25-5), once per profile; drafts with the best-scoring one. */
+  allProfiles: z.boolean().default(false),
 });
 export type AgentSearchInput = z.input<typeof agentSearchInputSchema>;
-export type SavedAgentSearch = { id: string; name: string; query: SearchQuery; enabled: boolean; sort: number; createdAt: Date; updatedAt: Date };
+export type SavedAgentSearch = {
+  id: string;
+  name: string;
+  query: SearchQuery;
+  enabled: boolean;
+  sort: number;
+  profileId: string | null;
+  allProfiles: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 /** Shared setup wording for the engine and the master enable action. */
 export function agentSearchSetupProblem(searches: readonly SavedAgentSearch[]): string | null {

@@ -26,7 +26,7 @@ export type TaskOptions = {
 };
 
 /** A task's output, with the prompt version to save next to it. */
-export type TaskResult<T> = { data: T; promptVersion: string };
+type TaskResult<T> = { data: T; promptVersion: string };
 
 export type Task<I, O> = (provider: AIProvider, input: I, options: TaskOptions) => Promise<TaskResult<O>>;
 
@@ -116,8 +116,13 @@ export function postingForPrompt(posting: string): string {
   return `<posting>\n${posting.trim().slice(0, MAX_POSTING_CHARACTERS)}\n</posting>`;
 }
 
-/** What the model knows about the job for writing tasks. */
-export function jobForPrompt(extracted: Extracted, match: Match | null): string {
+/**
+ * What the model knows about the job for writing tasks. `numbered` gives each
+ * requirement its number `n`, for answers that say which requirements a line
+ * serves (E30-4).
+ */
+export function jobForPrompt(extracted: Extracted, match: Match | null, { numbered = false }: { numbered?: boolean } = {}): string {
+  const n = (index: number) => (numbered ? { n: index + 1 } : {});
   return JSON.stringify(
     {
       title: extracted.title,
@@ -125,13 +130,27 @@ export function jobForPrompt(extracted: Extracted, match: Match | null): string 
       role: extracted.role,
       location: extracted.location,
       requirements: match
-        ? match.items.map((item) => ({ requirement: item.requirement, inProfile: item.result, note: item.note }))
-        : extracted.requirements.map((requirement) => requirement.text),
+        ? match.items.map((item, index) => ({ ...n(index), requirement: item.requirement, ...(item.mustHave === undefined ? {} : { mustHave: item.mustHave }), inProfile: item.result, note: item.note }))
+        : extracted.requirements.map((requirement, index) => (numbered ? { ...n(index), requirement: requirement.text } : requirement.text)),
     },
     null,
     2,
   );
 }
+
+/** The requirements a writing task numbered (jobForPrompt `numbered`), by their text. */
+export function requirementTexts(extracted: Extracted, match: Match | null): string[] {
+  return match ? match.items.map((item) => item.requirement) : extracted.requirements.map((requirement) => requirement.text);
+}
+
+/** The requirements numbered `numbers` serves, by their text; unknown numbers are dropped. */
+export function servedRequirements(numbers: readonly number[] | null | undefined, texts: readonly string[]): string[] {
+  return [...new Set((numbers ?? []).flatMap((number) => texts[number - 1] ?? []))];
+}
+
+/** How a writing task says which requirements each part serves (E30-4). */
+export const SERVES_RULE =
+  "serves: for each part that asks for it, the numbers (n) of the job's requirements that part helps show the candidate meets. Only numbers from the job's list; an empty list when it serves none.";
 
 /** What the candidate tells the AI for this application (APP-15), for the user message; null without any. */
 export function applicationFacts(facts: string[]): string | null {

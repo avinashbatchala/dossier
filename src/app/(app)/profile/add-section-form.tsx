@@ -12,6 +12,7 @@ import type { CustomSectionFormat } from "@/generated/prisma/enums";
 import { CUSTOM_SECTION_FORMATS, type CustomSection } from "@/lib/profile";
 
 import { createCustomSection } from "./actions";
+import { useProfileId } from "./profile-id";
 
 /** Common sections, each with the format it usually takes; picking one fills in both. */
 const SUGGESTIONS: readonly { title: string; format: CustomSectionFormat }[] = [
@@ -25,6 +26,7 @@ const SUGGESTIONS: readonly { title: string; format: CustomSectionFormat }[] = [
 
 /** "Add a section" (#298, #338): a name and a format, then on to its page for its items. */
 export function AddSectionForm({ onAdded, onCancel }: { onAdded: (section: CustomSection) => void; onCancel: () => void }) {
+  const profileId = useProfileId();
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<CustomSectionFormat>("LINES");
   const [saving, setSaving] = useState(false);
@@ -33,8 +35,8 @@ export function AddSectionForm({ onAdded, onCancel }: { onAdded: (section: Custo
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    const result = toastResult(await createCustomSection({ title, format }));
-    if (result.ok) onAdded({ id: result.data, title: title.trim(), format, items: [] });
+    const result = toastResult(await createCustomSection({ profileId, title, format }));
+    if (result.ok) onAdded({ id: result.data, title: title.trim(), format, countsAs: "EXTRA_ACTIVITIES", items: [] });
     else setSaving(false);
   };
 

@@ -1,0 +1,119 @@
+{
+  "format": 1,
+  "id": "FREEHIRE",
+  "name": "FreeHire",
+  "version": "1.0.1",
+  "description": "Mostly tech postings, read straight from company career pages (Greenhouse, Lever, Workday and more), with full postings.",
+  "tag": "Most countries · free, no key · no distance filter",
+  "termsUrl": "https://freehire.me/terms",
+  "countries": null,
+  "kinds": [
+    "tech"
+  ],
+  "radius": false,
+  "hosts": [
+    "freehire.me"
+  ],
+  "fields": [
+    {
+      "name": "server",
+      "type": "server",
+      "label": "FreeHire address",
+      "default": "https://freehire.me"
+    }
+  ],
+  "credit": {
+    "text": "Jobs by FreeHire"
+  },
+  "kind": "json",
+  "search": {
+    "url": "{base}/api/v1/agent/jobs/search",
+    "params": [
+      {
+        "name": "q",
+        "value": "{keywords} in {place}",
+        "when": "place"
+      },
+      {
+        "name": "q",
+        "value": "{keywords}",
+        "when": "!place"
+      },
+      {
+        "name": "description_format",
+        "value": "text"
+      },
+      {
+        "name": "limit",
+        "value": "{size}"
+      },
+      {
+        "name": "offset",
+        "value": "{offset}"
+      },
+      {
+        "name": "countries",
+        "value": "{country|upper}"
+      },
+      {
+        "name": "work_mode",
+        "value": "remote",
+        "when": "remoteOnly"
+      },
+      {
+        "name": "posted_within_days",
+        "value": "{postedDays}"
+      }
+    ],
+    "paging": {
+      "type": "offset",
+      "size": 20,
+      "total": "meta.total",
+      "max": 10000
+    },
+    "items": "data",
+    "posting": {
+      "id": "public_slug",
+      "title": "title",
+      "company": "company",
+      "place": "location",
+      "remote": {
+        "path": "work_mode",
+        "map": {
+          "remote": true,
+          "onsite": false
+        }
+      },
+      "salary": {
+        "min": "enrichment.salary_min",
+        "max": "enrichment.salary_max",
+        "currency": "enrichment.salary_currency",
+        "period": "enrichment.salary_period",
+        "periods": {
+          "year": "a year",
+          "month": "a month",
+          "day": "a day",
+          "hour": "an hour"
+        }
+      },
+      "postedAt": {
+        "path": "posted_at",
+        "as": "iso"
+      },
+      "url": {
+        "path": "url",
+        "link": true
+      },
+      "via": "source",
+      "description": "description",
+      "complete": "description"
+    }
+  },
+  "details": {
+    "type": "page"
+  },
+  "test": {
+    "keywords": "developer",
+    "country": "us"
+  }
+}

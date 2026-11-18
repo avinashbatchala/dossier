@@ -2,24 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { ApplicationRow } from "./applications-data";
 import { boardOrder, orderedColumn, withShownOrder } from "./board-order";
+import { applicationRow } from "@/test/application-row";
 
-const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => ({
-  id,
-  score: null,
-  company: "Acme",
-  role: "Engineer",
-  location: "",
-  mode: "",
-  status: "SENT",
-  archived: false,
-  deadline: null,
-  match: null,
-  sent: null,
-  updated: "Today",
-  updatedAt: 100,
-  boardSort: null,
-  ...extra,
-});
+const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => applicationRow(id, { company: "Acme", role: "Engineer", location: "", mode: "", match: null, sent: null, updated: "Today", updatedAt: 100, ...extra });
 const ids = (rows: { id: string }[]) => rows.map((entry) => entry.id);
 
 describe("board order (public issue 60)", () => {

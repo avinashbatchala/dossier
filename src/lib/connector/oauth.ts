@@ -7,6 +7,7 @@ import { jwtVerify, SignJWT } from "jose";
 import { passwordFingerprint } from "@/lib/auth/session";
 import { deriveKey } from "@/lib/keys";
 import { loadSettings } from "@/lib/settings-data";
+import { isPrivateHost } from "@/lib/private-host";
 
 // Sign-in for the Claude connector (#221, src/app/api/mcp): a small OAuth 2.1
 // authorization server, as Claude's custom connectors expect it, with
@@ -23,8 +24,8 @@ const HOSTED_CALLBACKS = new Set(["https://claude.ai/api/mcp/auth_callback", "ht
 /** What a token lets Claude do; there's only one thing. */
 export const SCOPE = "dossier";
 
-export const ACCESS_TOKEN_SECONDS = 60 * 60;
-export const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
+const ACCESS_TOKEN_SECONDS = 60 * 60;
+const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
 const CODE_SECONDS = 5 * 60;
 
 const AUDIENCE = { client: "dossier-connector-client", code: "dossier-connector-code", access: "dossier-mcp", refresh: "dossier-connector-refresh" } as const;
@@ -62,18 +63,6 @@ export function isClaudeRedirect(redirectUri: string): boolean {
 /** Other apps' callback addresses, added in Settings → MCP connector (#281). */
 export async function addedRedirects(): Promise<string[]> {
   return (await loadSettings()).connectorRedirects;
-}
-
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/;
-
-/** This computer, or an address on a home or office network: a private IPv4 range, a name without a dot, or .local, .lan, .internal, .home.arpa. */
-function isPrivateHost(hostname: string): boolean {
-  const ip = IPV4.exec(hostname);
-  if (ip) {
-    const [a, b] = [Number(ip[1]), Number(ip[2])];
-    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
-  }
-  return hostname === "[::1]" || !hostname.includes(".") || /\.(local|lan|internal|home\.arpa)$/.test(hostname);
 }
 
 /**

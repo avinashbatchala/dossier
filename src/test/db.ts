@@ -35,8 +35,20 @@ export function createTestClient(): PrismaClient {
   return createPrismaClient(testDatabaseUrl());
 }
 
-/** Empties every table, so each test starts from a blank database. */
+/** The profile a migrated database starts with (the profiles migration's id, E24-1). */
+export const TEST_PROFILE_ID = "first";
+
+/**
+ * Empties every table, so each test starts from a blank database: one empty
+ * profile, as after the migrations, with its levels chosen (E24-3), so
+ * scoring can go ahead; a test of the wait for them clears them.
+ */
 export async function resetDatabase(db: PrismaClient): Promise<void> {
+  await emptyTables(db);
+  await db.profile.create({ data: { id: TEST_PROFILE_ID, name: "My profile", levelFrom: "mid", levelTo: "senior" } });
+}
+
+async function emptyTables(db: PrismaClient): Promise<void> {
   if (testsUseSqlite()) {
     const tables = await db.$queryRaw<{ name: string }[]>`
       SELECT name FROM sqlite_master

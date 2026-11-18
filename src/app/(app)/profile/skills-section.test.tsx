@@ -77,7 +77,7 @@ describe("Skills", () => {
     vi.mocked(addSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility", group: "" } } });
     render(<Harness />);
     await user.type(screen.getByLabelText("Add a skill"), "Accessibility{Enter}");
-    expect(addSkill).toHaveBeenCalledWith({ name: "Accessibility", group: "" });
+    expect(addSkill).toHaveBeenCalledWith({ profileId: "", name: "Accessibility", group: "" });
     expect(await screen.findByText("Accessibility")).toBeInTheDocument();
     expect(screen.getByLabelText("Add a skill")).toHaveValue("");
     // No roles use it yet, so no count.
@@ -126,14 +126,14 @@ describe("Skill order (public issue 62)", () => {
     await user.click(screen.getByRole("button", { name: "Figma: move it" }));
     expect(screen.getByRole("menuitem", { name: "Move left" })).toHaveAttribute("aria-disabled", "true");
     await user.click(screen.getByRole("menuitem", { name: "Move right" }));
-    expect(reorderSkills).toHaveBeenCalledWith({ ids: ["s2", "s1"] });
+    expect(reorderSkills).toHaveBeenCalledWith({ profileId: "", ids: ["s2", "s1"] });
     expect(within(screen.getByRole("list", { name: "Your skills" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["User research1 role×", "Figma2 roles×"]);
     expect(latest.skills.map((skill) => skill.id)).toEqual(["s2", "s1"]);
     expect(screen.getByText("In your own order, which tailored resumes keep.")).toBeInTheDocument();
     expect(screen.getByText("“Figma” moved to position 2 of 2.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Most relevant first" }));
-    expect(setSkillOrder).toHaveBeenCalledWith({ order: "relevance" });
+    expect(setSkillOrder).toHaveBeenCalledWith({ profileId: "", order: "relevance" });
     expect(screen.getByText(/Drag a skill, or move it from its menu/)).toBeInTheDocument();
   });
 
@@ -168,7 +168,7 @@ describe("Skill groups (#280)", () => {
     await newGroup(user, "Tools");
     expect(screen.getByRole("heading", { name: "Tools" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Add to Tools"), "Ahrefs{Enter}");
-    expect(addSkill).toHaveBeenCalledWith({ name: "Ahrefs", group: "Tools" });
+    expect(addSkill).toHaveBeenCalledWith({ profileId: "", name: "Ahrefs", group: "Tools" });
     expect(within(await screen.findByRole("list", { name: "Skills in Tools" })).getByText("Ahrefs")).toBeInTheDocument();
     expect(latest.skills.at(-1)).toEqual({ id: "new-Ahrefs", name: "Ahrefs", group: "Tools" });
   });
@@ -208,7 +208,7 @@ describe("Skill groups (#280)", () => {
     await user.click(screen.getByRole("button", { name: "Rename Desing" }));
     await user.clear(screen.getByLabelText("New name for Desing"));
     await user.type(screen.getByLabelText("New name for Desing"), "Design{Enter}");
-    expect(renameSkillGroup).toHaveBeenCalledWith({ from: "Desing", to: "Design" });
+    expect(renameSkillGroup).toHaveBeenCalledWith({ profileId: "", from: "Desing", to: "Design" });
     expect(screen.getByRole("heading", { name: "Design" })).toBeInTheDocument();
     expect(latest.skills.find((skill) => skill.name === "Prototyping")?.group).toBe("Design");
   });

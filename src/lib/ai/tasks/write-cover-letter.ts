@@ -4,6 +4,7 @@ import type { Tone } from "@/generated/prisma/enums";
 import { SIGN_OFF_UNIT, unitsSchema, type Extracted, type Match, type Unit } from "@/lib/application-data";
 import type { ProfileData } from "@/lib/profile";
 import { FRAME_LABELS, isFrameUnit } from "@/lib/letter-frame";
+import { lineText } from "@/lib/changed-lines";
 import { TONES } from "@/lib/tones";
 
 import { guardSources, guardUnits } from "../fact-guard";
@@ -17,18 +18,22 @@ import {
   languageRule,
   NO_EM_DASHES,
   profileForPrompt,
+  requirementTexts,
+  servedRequirements,
+  SERVES_RULE,
   system,
   truthfulness,
   UNTRUSTED_POSTING,
   type Task,
 } from "./prompt-parts";
 
-export const WRITE_COVER_LETTER_VERSION = "write-cover-letter@6";
+const WRITE_COVER_LETTER_VERSION = "write-cover-letter@7";
 
 const answerSchema = z.object({
   recipient: z.string(),
   greeting: z.string(),
-  paragraphs: z.array(z.object({ label: z.string(), text: z.string() })),
+  /** With which requirements each paragraph serves (E30-4). */
+  paragraphs: z.array(z.object({ label: z.string(), text: z.string(), serves: z.array(z.number().int()).nullable().optional() })),
   signOff: z.string(),
 });
 
@@ -40,6 +45,7 @@ const INSTRUCTIONS = `You write a candidate's cover letter for one job, as JSON.
 - label: a short English name for each paragraph's purpose, e.g. "Why this role", "The challenge", "Where I've solved it", "Closing".
 - Where the job asks for something the profile doesn't have ("gap"), don't claim it. If it matters, say so honestly in a sentence and show how the candidate would close the gap.
 - signOff: the closing line before the name, matching the tone, with its punctuation (e.g. "Warm regards,").
+- Each paragraph has its serves.
 - The sender's name, contact details and the date are added from the profile; don't write them.`;
 
 export type CoverLetterInput = {
@@ -64,6 +70,7 @@ export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider,
     task: "write-cover-letter",
     system: system(
       INSTRUCTIONS,
+      SERVES_RULE,
       COVER_LETTER_APPROACH,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,
       truthfulness(options.strict),
@@ -78,7 +85,7 @@ export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider,
         role: "user",
         content: [
           `The candidate's profile:\n${profileForPrompt(profile)}`,
-          `The job:\n${jobForPrompt(extracted, match)}`,
+          `The job:\n${jobForPrompt(extracted, match, { numbered: true })}`,
           applicationFacts(facts),
         ]
           .filter(Boolean)
@@ -94,13 +101,22 @@ export const writeCoverLetter: Task<CoverLetterInput, Unit[]> = async (provider,
   // English letters get the tone's own sign-off; other languages keep the model's.
   const language = options.language ?? extracted.language ?? "English";
   const signOff = /^english$/i.test(language) || !answer.signOff.trim() ? TONES[tone].signOff : answer.signOff.trim();
+  const requirements = requirementTexts(extracted, match);
   const units = unitsSchema.parse([
     // Left out when empty: the English ones fill in (src/lib/letter-frame.ts).
     ...(answer.recipient.trim() ? [{ id: "recipient", label: FRAME_LABELS.recipient, text: recipientFromJob(answer.recipient, extracted, posting) }] : []),
     ...(answer.greeting.trim() ? [{ id: "greeting", label: FRAME_LABELS.greeting, text: answer.greeting.trim() }] : []),
     ...withoutFrame(answer.paragraphs, signOff)
       .filter((paragraph) => paragraph.text.trim())
-      .map((paragraph, index) => ({ id: `paragraph:${index + 1}`, label: paragraph.label.trim() || `Paragraph ${index + 1}`, text: paragraph.text.trim() })),
+      .map((paragraph, index) => {
+        const served = servedRequirements(paragraph.serves, requirements);
+        return {
+          id: `paragraph:${index + 1}`,
+          label: paragraph.label.trim() || `Paragraph ${index + 1}`,
+          text: paragraph.text.trim(),
+          ...(served.length > 0 ? { serves: [{ line: lineText(paragraph.text), requirements: served }] } : {}),
+        };
+      }),
     { id: SIGN_OFF_UNIT, label: "Sign-off", text: signOff },
   ]);
   return {

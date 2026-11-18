@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { DocumentKind, Tone } from "@/generated/prisma/enums";
-import { SIGN_OFF_UNIT, type Extracted, type Unit, type UnitEdit } from "@/lib/application-data";
+import { SIGN_OFF_UNIT, type Extracted, type Match, type Unit, type UnitEdit } from "@/lib/application-data";
 import { emailParts } from "@/lib/application-email";
 import { isFrameUnit } from "@/lib/letter-frame";
 import type { ProfileData } from "@/lib/profile";
@@ -18,17 +18,21 @@ import {
   languageRule,
   NO_EM_DASHES,
   profileForPrompt,
+  requirementTexts,
+  servedRequirements,
+  SERVES_RULE,
   system,
   truthfulness,
   UNTRUSTED_POSTING,
   type Task,
 } from "./prompt-parts";
 
-export const REFINE_CHAT_VERSION = "refine-chat@9";
+const REFINE_CHAT_VERSION = "refine-chat@10";
 
 const answerSchema = z.object({
   reply: z.string(),
-  edits: z.array(z.object({ document: z.enum(DocumentKind), unitId: z.string(), text: z.string() })),
+  /** With the requirements each new text serves (E30-12). */
+  edits: z.array(z.object({ document: z.enum(DocumentKind), unitId: z.string(), text: z.string(), serves: z.array(z.number().int()).nullable().optional() })),
   /** A different cover letter tone, only when asked for one. */
   tone: z.enum(Tone).nullable(),
   declined: z.boolean(),
@@ -41,7 +45,8 @@ const INSTRUCTIONS = `You help a candidate refine their tailored resume, cover l
 - The email goes out with the resume and cover letter attached. Its "to" unit is the recipient ("Name <address>"), "subject" its subject line and "body" the whole message, from the greeting to the sign-off and the candidate's name.
 - tone: set it (WARM, DIRECT or FORMAL) only when the request asks for a different tone for the letter; otherwise null. When you change the tone, rewrite the letter's paragraphs to match. A different tone for the email is an edit to the email, not a new tone.
 - If the request needs facts the profile doesn't have (a skill, employer, number, credential…), don't make them up: set declined to true, make no edits, and say in reply what the candidate could add to their profile first.
-- reply: one or two friendly sentences saying what you changed, or why you didn't.`;
+- reply: one or two friendly sentences saying what you changed, or why you didn't.
+- Each edit has its serves.`;
 
 export type ChatTurn = { role: "user" | "assistant"; text: string };
 
@@ -59,6 +64,8 @@ export type RefineInput = {
   email?: Unit[];
   profile: ProfileData;
   extracted: Extracted;
+  /** How the profile matches the posting, whose requirements an edit says it serves (E30-12). */
+  match?: Match | null;
   tone: Tone;
   /** What the candidate tells the AI for this application (APP-15). */
   facts: string[];
@@ -80,17 +87,18 @@ const HISTORY = 10;
 
 /** APP-7, APP-9: a reply plus unit edits (with what they replace, for Undo), or a decline with guidance. */
 export const refineChat: Task<RefineInput, Refinement> = async (provider, input, options) => {
-  const { request, history, target, viewing, resume, letter, email = [], profile, extracted, tone, facts, posting } = input;
+  const { request, history, target, viewing, resume, letter, email = [], profile, extracted, match = null, tone, facts, posting } = input;
+  const requirements = requirementTexts(extracted, match);
   const looking = viewing ? LOOKING_AT[viewing] : null;
   const answer = await provider.complete({
     task: "refine-chat",
-    system: system(INSTRUCTIONS, `Current letter tone: ${TONES[tone].label}.`, truthfulness(options.strict), candidateFacts(profile, facts), CREATIVITY[options.creativity], languageRule(options.language), UNTRUSTED_POSTING, NO_EM_DASHES),
+    system: system(INSTRUCTIONS, SERVES_RULE, `Current letter tone: ${TONES[tone].label}.`, truthfulness(options.strict), candidateFacts(profile, facts), CREATIVITY[options.creativity], languageRule(options.language), UNTRUSTED_POSTING, NO_EM_DASHES),
     messages: [
       {
         role: "user",
         content: [
           `The candidate's profile:\n${profileForPrompt(profile)}`,
-          `The job:\n${jobForPrompt(extracted, null)}`,
+          `The job:\n${jobForPrompt(extracted, match, { numbered: true })}`,
           `The resume's units:\n${JSON.stringify(resume, null, 2)}`,
           `The cover letter's units:\n${JSON.stringify(letter, null, 2)}`,
           email.length > 0 && `The email's units:\n${JSON.stringify(email, null, 2)}`,
@@ -124,11 +132,13 @@ export const refineChat: Task<RefineInput, Refinement> = async (provider, input,
         // E6-6: in strict mode, note what the profile and posting don't back.
         const checked = edit.document === DocumentKind.EMAIL ? unit.id !== "to" : unit.id !== SIGN_OFF_UNIT && !isFrameUnit(unit.id);
         const unverified = sources && checked ? unverifiedFacts(text, sources) : [];
+        const serves = servedRequirements(edit.serves, requirements);
         edits.set(`${edit.document} ${unit.id}`, {
           document: edit.document,
           unitId: unit.id,
           text,
           previousText: unit.text,
+          ...(serves.length > 0 ? { serves } : {}),
           ...(unverified.length > 0 ? { unverified } : {}),
           ...(unit.unverified?.length ? { previousUnverified: unit.unverified } : {}),
         });

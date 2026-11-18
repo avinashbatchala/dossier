@@ -16,7 +16,11 @@ import { googleConnectPath, mayOpenExternally, navigationFor, permissionAllowed,
 
 const RELEASES_URL = "https://github.com/AienTech/dossier/releases/latest";
 const REPOSITORY_URL = "https://github.com/AienTech/dossier";
+const COFFEE_URL = "https://buymeacoffee.com/aientech";
+const DISCORD_URL = "https://discord.gg/4pfxADVSf9";
 const SERVER_SESSION = "persist:dossier";
+/** Added to the user agent, so a sign-in from this window keeps its session across launches (#359; isDesktopClient in src/lib/desktop-client.ts). */
+const DESKTOP_CLIENT = "DossierDesktop";
 const LOCAL_SESSION = "persist:local";
 const DESKTOP_TOKEN_HEADER = "x-dossier-desktop-token";
 /** Where the server and Node that come with the app are. */
@@ -228,6 +232,7 @@ function stopLocal() {
 function prepareSessions() {
   for (const partition of [SERVER_SESSION, LOCAL_SESSION]) {
     const serverSession = session.fromPartition(partition);
+    serverSession.setUserAgent(`${serverSession.getUserAgent()} ${DESKTOP_CLIENT}/${app.getVersion()}`);
     serverSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permissionAllowed(permission)));
     serverSession.setPermissionCheckHandler((_contents, permission) => permissionAllowed(permission));
     serverSession.cookies.on("changed", (_event, cookie) => {
@@ -348,6 +353,8 @@ function buildMenu() {
           : []),
         { label: "Download the latest version", click: () => void shell.openExternal(RELEASES_URL) },
         { label: "Dossier on GitHub", click: () => void shell.openExternal(REPOSITORY_URL) },
+        { label: "Dossier on Discord", click: () => void shell.openExternal(DISCORD_URL) },
+        { label: "Buy me a coffee", click: () => void shell.openExternal(COFFEE_URL) },
         { type: "separator" },
         { role: "about" },
       ],

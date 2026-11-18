@@ -7,5 +7,11 @@ export function countPdfPages(pdf: Uint8Array): number {
   return (text.match(/\/Type\s*\/Page(?![A-Za-z])/g) ?? []).length;
 }
 
-/** The base resume's print path, squeezed `fit` steps for "Fit to one page" (public issue 69); the token is signed for exactly this. */
-export const printBasePath = (fit = 0) => (fit > 0 ? `/print/base?fit=${fit}` : "/print/base");
+/**
+ * A profile's Base resume print path (E24-2), squeezed `fit` steps for "Fit
+ * to one page" (public issue 69); the token is signed for exactly this.
+ */
+export const printBasePath = (fit = 0, profileId?: string) => {
+  const params = new URLSearchParams({ ...(profileId ? { profile: profileId } : {}), ...(fit > 0 ? { fit: String(fit) } : {}) }).toString();
+  return params ? `/print/base?${params}` : "/print/base";
+};

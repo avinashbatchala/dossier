@@ -94,12 +94,19 @@ describe("buildExport (E10-4)", () => {
     await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", title: "Designer", savedAt: now } });
 
     const without = await buildExport(prisma(), { now });
-    expect(without).not.toHaveProperty("jobSourceKeys");
-    expect(JSON.stringify(without)).not.toMatch(/jsearchKeyEnc|adzunaKeyEnc/);
+    expect(without).not.toHaveProperty("portalKeys");
+    expect(JSON.stringify(without)).not.toMatch(/jsearchKeyEnc|adzunaKeyEnc|portalKeysEnc/);
     expect(without.postings).toEqual([expect.objectContaining({ externalId: "job-1", title: "Designer", savedAt: now })]);
 
+    // Keys saved before E22-3 come out by portal and field (version 12).
     const withKeys = await buildExport(prisma(), { now, includeApiKey: true });
-    expect(withKeys.jobSourceKeys).toEqual({ jsearch: "ak-test" });
+    expect(withKeys.portalKeys).toEqual({ JSEARCH: { key: "ak-test" } });
+
+    await prisma().setting.deleteMany({ where: { key: { in: ["jsearchKeyEnc", "adzunaKeyEnc"] } } });
+    await prisma().setting.create({ data: { key: "portalKeysEnc", value: JSON.stringify({ ADZUNA: { key: encryptSecret(JOB_SOURCE_KEY, "adz-new", "s".repeat(32)) } }) } });
+    const fromPortals = await buildExport(prisma(), { now, includeApiKey: true });
+    expect(fromPortals.portalKeys).toEqual({ ADZUNA: { key: "adz-new" } });
+    expect(fromPortals.settings.map((setting) => setting.key)).not.toContain("portalKeysEnc");
   });
 
   it("names the file after the day", () => {

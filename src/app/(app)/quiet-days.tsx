@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 import { rememberQuietDays } from "./actions";
 
 /**
- * How long without news before "Worth a look" suggests a follow-up (E9-9),
+ * How long without news before Needs you suggests a follow-up (E9-9),
  * under the list it changes. A value set elsewhere (an import) stays listed.
  */
 export function QuietDays({ days }: { days: number }) {

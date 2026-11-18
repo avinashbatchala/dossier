@@ -34,7 +34,7 @@ describe("BasicsSection", () => {
   it("has every Basics field, labelled, with the optional ones marked (#216)", () => {
     render(<Harness />);
     for (const label of [
-      "Full name", "Headline", "Email", "Phone (optional)", "Date of birth (optional)", "Website (optional)",
+      "Full name", "Email", "Phone (optional)", "Date of birth (optional)", "Website (optional)",
       "Street address (optional)", "City", "Country", "LinkedIn (optional)",
     ]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
@@ -48,14 +48,14 @@ describe("BasicsSection", () => {
     await act(async () => vi.advanceTimersByTimeAsync(499));
     expect(saveBasics).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(saveBasics).toHaveBeenCalledWith({ ...empty, name: "Jane Doe" });
+    expect(saveBasics).toHaveBeenCalledWith({ profileId: "", ...empty, name: "Jane Doe" });
   });
 
   it("saves right away when leaving a field", async () => {
     render(<Harness />);
     fireEvent.change(screen.getByLabelText("City"), { target: { value: "Rotterdam" } });
     await act(async () => fireEvent.blur(screen.getByLabelText("City")));
-    expect(saveBasics).toHaveBeenCalledWith({ ...empty, city: "Rotterdam" });
+    expect(saveBasics).toHaveBeenCalledWith({ profileId: "", ...empty, city: "Rotterdam" });
   });
 
   it("explains the age option, with the computed age once there's a date of birth", () => {
@@ -76,7 +76,7 @@ describe("BasicsSection", () => {
 
     await act(async () => fireEvent.blur(email));
     expect(email).toHaveAccessibleDescription("That doesn't look like an email address yet.");
-    expect(saveBasics).toHaveBeenCalledWith({ ...empty, email: "jane@" });
+    expect(saveBasics).toHaveBeenCalledWith({ profileId: "", ...empty, email: "jane@" });
 
     fireEvent.change(email, { target: { value: "jane.doe@example.com" } });
     expect(email).not.toHaveAccessibleDescription();
@@ -93,6 +93,6 @@ describe("BasicsSection", () => {
     render(<Harness initial={{ ...empty, dob: "1992-04-18" }} />);
     fireEvent.click(screen.getByRole("checkbox", { name: /Show my age/ }));
     await act(async () => vi.advanceTimersByTimeAsync(500));
-    expect(saveBasics).toHaveBeenCalledWith({ ...empty, dob: "1992-04-18", showAge: true });
+    expect(saveBasics).toHaveBeenCalledWith({ profileId: "", ...empty, dob: "1992-04-18", showAge: true });
   });
 });

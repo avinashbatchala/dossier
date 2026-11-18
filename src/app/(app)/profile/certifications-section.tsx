@@ -10,6 +10,7 @@ import { createCertification, removeCertification, reorderCertifications, restor
 import { EntryList } from "./entry-list";
 import { MonthYearField } from "./month-year-field";
 import type { UpdateProfile } from "./skills-section";
+import { useProfileId } from "./profile-id";
 
 const optional = (label: string) => (
   <>
@@ -84,20 +85,21 @@ function CertificationForm({
  * order. Resumes show them as written; the AI never rewrites them.
  */
 export function CertificationsSection({ profile, update }: { profile: ProfileData; update: UpdateProfile }) {
+  const profileId = useProfileId();
   return (
     <EntryList
       items={profile.certifications}
       setItems={(change) => update((current) => ({ ...current, certifications: change(current.certifications) }))}
       addLabel="Add a certification"
-      ordering={{ mode: "manual", save: (ids) => reorderCertifications({ ids }) }}
+      ordering={{ mode: "manual", save: (ids) => reorderCertifications({ profileId, ids }) }}
       summary={(entry) => ({
         title: entry.name.trim() || "New certification",
         subtitle: entry.issuer.trim(),
         meta: entry.onResumes ? formatMonthYear(entry.year, entry.month) || undefined : "Not on resumes",
       })}
-      create={() => createCertification({})}
+      create={() => createCertification({ profileId })}
       remove={(entry) => removeCertification({ id: entry.id })}
-      restore={(entry) => restoreCertification(entry)}
+      restore={(entry) => restoreCertification({ ...entry, profileId })}
       renderForm={(entry, { onChange, autoFocus }) => (
         <CertificationForm entry={entry} onChange={onChange} autoFocus={autoFocus} />
       )}

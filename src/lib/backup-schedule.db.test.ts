@@ -57,7 +57,7 @@ describe("nightly backups (E10-7)", () => {
     const parsed = parseExport(await readFile(path.join(dataDir.path, "backups", (await backups())[0]), "utf8"));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(parsed.data.schemaVersion).toBe(11);
+    expect(parsed.data.schemaVersion).toBe(16);
     expect(parsed.data.agentSearches).toEqual([expect.objectContaining({ id: search.id, name: "Design", enabled: false })]);
     expect(parsed.data.agentCandidateSearches).toHaveLength(2);
     await prisma().agentCandidate.deleteMany();

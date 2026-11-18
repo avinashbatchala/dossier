@@ -12,9 +12,10 @@ import { ageOn, isOptionalBasic, type Basics, type BasicsField } from "@/lib/pro
 import { saveBasics } from "./actions";
 import { PhotoField } from "./photo-field";
 import { useTrackSave } from "@/components/save-tracker";
+import { useProfileId } from "./profile-id";
 
 type FieldSpec = {
-  field: Exclude<BasicsField, "summary">;
+  field: Exclude<BasicsField, "summary" | "headline">;
   label: string;
   wide?: boolean;
   placeholder?: string;
@@ -25,7 +26,6 @@ type FieldSpec = {
 // PRO-1, in the prototype's order and layout.
 const FIELDS: FieldSpec[] = [
   { field: "name", label: "Full name", wide: true, placeholder: "John Doe", autoComplete: "name" },
-  { field: "headline", label: "Headline", wide: true, placeholder: "Senior Product Designer" },
   { field: "email", label: "Email", type: "email", placeholder: "john.doe@example.com", autoComplete: "email" },
   { field: "phone", label: "Phone", type: "tel", placeholder: "+1 555 010 0000", autoComplete: "tel" },
   { field: "dob", label: "Date of birth", type: "date", autoComplete: "bday" },
@@ -71,8 +71,9 @@ export function BasicsSection({
   photo: ProfilePhoto | null;
   onPhotoChange: (photo: ProfilePhoto | null) => void;
 }) {
+  const profileId = useProfileId();
   const track = useTrackSave();
-  const { flush } = useAutosave(basics, (value) => track(saveBasics(value)));
+  const { flush } = useAutosave(basics, (value) => track(saveBasics({ ...value, profileId })));
   // Hints show once you've left a field, not while you're typing in it.
   const [visited, setVisited] = useState<Set<BasicsField>>(new Set());
 

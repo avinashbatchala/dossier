@@ -22,6 +22,7 @@ export function InboxScreen({
   configured,
   lastSync,
   problem,
+  aiReady,
   timeZone,
   applications,
 }: {
@@ -73,6 +74,15 @@ export function InboxScreen({
         }
       />
       <div className="flex max-w-[860px] flex-col gap-5 px-10 pb-[72px]">
+        {connected && !aiReady && (
+          // #358: said once for the page, not only when a mail is opened.
+          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-pretty text-warning">
+            Mail isn&apos;t read yet: without an AI provider, replies are linked to their applications, but nothing says what they ask or drafts an answer.{" "}
+            <Link href="/settings?section=ai" className="font-medium text-warning underline underline-offset-2">
+              Choose one in Settings → AI provider
+            </Link>
+          </p>
+        )}
         {empty ? (
           <p className={`${card} py-6! text-sm text-muted`}>{connected ? "Nothing yet. Replies to your applications will show up here." : "Nothing here yet."}</p>
         ) : (
