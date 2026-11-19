@@ -181,9 +181,10 @@ export async function scoreLevelsProblem(profiles: string | undefined, db: Db = 
 
 /**
  * A copy of a profile under a new name (E24-2): its headline, summary and
- * settings, and every one of its rows, each with an id of its own. Skills
- * stay attached to the copied roles and projects; a custom section keeps
- * what it counts as.
+ * settings, and every one of its rows, each with an id of its own and the
+ * same creation time, which orders custom sections and breaks ties in sort.
+ * Skills stay attached to the copied roles and projects; a custom section
+ * keeps what it counts as.
  */
 export async function copyProfile(fromId: string, name: string, db: PrismaClient = prisma): Promise<string> {
   return db.$transaction(async (tx) => {
@@ -203,12 +204,11 @@ export async function copyProfile(fromId: string, name: string, db: PrismaClient
       data: { name, sort: await nextProfileSort(tx), headline: from.headline, summary: from.summary, levelFrom: from.levelFrom, levelTo: from.levelTo, workplace: from.workplace ?? {}, workplaceSeenAt: from.workplaceSeenAt, settings: from.settings ?? {} },
       select: { id: true },
     });
-    const copied = <T extends { id: string; profileId: string; createdAt: Date; updatedAt?: Date }>(row: T) => {
+    const copied = <T extends { id: string; profileId: string; updatedAt?: Date }>(row: T) => {
       const rest: Partial<T> = { ...row };
       delete rest.id;
-      delete rest.createdAt;
       delete rest.updatedAt;
-      return { ...rest, profileId } as Omit<T, "id" | "createdAt" | "updatedAt">;
+      return { ...rest, profileId } as Omit<T, "id" | "updatedAt">;
     };
     const skillIds = new Map<string, string>();
     const renamed = new Map<string, string>();
@@ -234,6 +234,7 @@ export async function copyProfile(fromId: string, name: string, db: PrismaClient
         link: item.link,
         onResumes: item.onResumes,
         sort: item.sort,
+        createdAt: item.createdAt,
       }));
       const created = await tx.customSection.create({ data: { ...copied(section), items: { create: itemData } }, select: { id: true } });
       renamed.set(section.id, created.id);

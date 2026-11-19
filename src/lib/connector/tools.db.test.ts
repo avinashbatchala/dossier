@@ -107,6 +107,16 @@ const storeSearch = async (postings: unknown[]) => {
   return search;
 };
 
+/** save_job_scores' answers about one posting: one requirement, covered. */
+const answers = {
+  requirements: [{ text: "Go in production", must_have: true, covered: true, evidence: "Engineer at Northwind" }],
+  work: { level: 3, reason: "" },
+  extra: { level: 1, reason: "" },
+  education: { level: 2, reason: "" },
+  seniority: { fit: "fits", reason: "" },
+  location: { fit: "fits", reason: "" },
+};
+
 describe("the Claude connector's tools (#221)", () => {
   it("lists the applications, newest first, by status, and reads one without notes, sender or signature", async () => {
     const all = await tool("list_applications");
@@ -144,7 +154,7 @@ describe("the Claude connector's tools (#221)", () => {
 
     const row = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "p9", title: "UX Writer", company: "Acme", description: "The start", complete: false } });
     expect((await tool("get_posting", { posting_id: row.id })).json).toMatchObject({ title: "UX Writer", text: expect.stringContaining("The whole posting from its source") });
-    expect(await tool("get_posting", { posting_id: "gone" })).toMatchObject({ isError: true, text: "That posting is no longer in Dossier. Open it again from Find jobs." });
+    expect(await tool("get_posting", { posting_id: "gone" })).toMatchObject({ isError: true, text: "That posting is no longer in Dossier. Open it again from Positions." });
 
     const chat = await handOffPastedPosting({ text: "Pasted: Senior Designer at Acme", url: "https://jobs.example/pasted" });
     const pasteId = /paste_id "([^"]+)"/.exec(new URL(chat).searchParams.get("q")!)![1];
@@ -235,7 +245,14 @@ describe("the Claude connector's tools (#221)", () => {
     const first = await prisma().profile.findUniqueOrThrow({ where: { id: TEST_PROFILE_ID } });
     await prisma().profile.update({ where: { id: backend }, data: { headline: "Backend engineer" } });
 
-    expect((await tool("get_profile")).json).toMatchObject({ profile: first.name, profiles: [first.name, "Backend"], link: `https://dossier.example/profile?profile=${TEST_PROFILE_ID}` });
+    expect((await tool("get_profile")).json).toMatchObject({
+      profile: first.name,
+      profiles: [first.name, "Backend"],
+      // What save_job_scores judges seniority and location against.
+      jobsItsFor: "Senior to Lead or director",
+      whereItWantsToWork: { waysOfWorking: ["On-site", "Hybrid", "Remote"] },
+      link: `https://dossier.example/profile?profile=${TEST_PROFILE_ID}`,
+    });
     expect((await tool("get_profile", { profile: "backend" })).json).toMatchObject({ profile: "Backend", headline: "Backend engineer", link: `https://dossier.example/profile?profile=${backend}` });
     expect((await tool("get_profile", { profile: backend })).json).toMatchObject({ profile: "Backend" });
     expect(await tool("get_profile", { profile: "Frontend" })).toMatchObject({ isError: true, text: `There's no profile called "Frontend". The profiles are: "${first.name}", "Backend".` });
@@ -255,8 +272,8 @@ describe("the Claude connector's tools (#221)", () => {
 
     // Scores are kept per profile (E25-5).
     const search = await storeSearch([found("p1", "Backend Engineer")]);
-    expect((await tool("save_job_scores", { search_id: search.id, scores: [{ number: 1, score: 81, reasons: ["Go at Northwind."] }], profile: "Backend" })).isError).toBe(false);
-    expect(await prisma().postingScore.findMany({ select: { externalId: true, profileId: true, score: true } })).toEqual([{ externalId: "p1", profileId: backend, score: 81 }]);
+    expect((await tool("save_job_scores", { search_id: search.id, scores: [{ number: 1, ...answers }], profile: "Backend" })).isError).toBe(false);
+    expect(await prisma().postingScore.findMany({ select: { externalId: true, profileId: true } })).toEqual([{ externalId: "p1", profileId: backend }]);
 
     fake.aiUsable = true;
     await tool("draft_application", { posting_text: "Backend Engineer at Acme", profile: "Backend" });
@@ -271,10 +288,15 @@ describe("the Claude connector's tools (#221)", () => {
     expect(await tool("more_jobs", { search_id: "gone" })).toMatchObject({ isError: true, text: "That search is no longer kept. Search again." });
 
     const row = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "p7", title: "Design Lead", company: "Acme" } });
-    expect((await tool("save_job_scores", { scores: [{ posting_id: row.id, score: 91, reasons: ["Led a design system"] }] })).json).toMatchObject({
-      saved: [{ posting_id: row.id, score: 91 }],
+    expect((await tool("save_job_scores", { scores: [{ posting_id: row.id, ...answers }] })).json).toMatchObject({
+      saved: [{ posting_id: row.id, covered: "1 of 1", fit: "Strong fit" }],
       link: "https://dossier.example/jobs?view=saved",
     });
-    expect(await tool("save_job_scores", { search_id: "gone", scores: [{ number: 1, score: 1, reasons: ["?"] }] })).toMatchObject({ isError: true });
+    expect(await tool("save_job_scores", { search_id: "gone", scores: [{ number: 1, ...answers }] })).toMatchObject({ isError: true });
+
+    // As in Dossier, nothing is scored against a profile whose levels aren't chosen (E24-3).
+    await prisma().profile.update({ where: { id: TEST_PROFILE_ID }, data: { levelFrom: null, levelTo: null } });
+    expect(await tool("save_job_scores", { scores: [{ posting_id: row.id, ...answers }] })).toMatchObject({ isError: true, text: expect.stringContaining("Set the levels for") });
+    expect((await tool("get_profile")).json).not.toHaveProperty("jobsItsFor");
   });
 });

@@ -7,6 +7,9 @@ vi.mock("@/lib/profiles", () => ({
   loadProfileSettings: async () => settings,
   listProfiles: async () => [{ id: "first", name: "My profile" }],
   profileNamed: async () => ({ id: "first", name: "My profile" }),
+  levelsProblem: async () => null,
+  loadProfileLevels: async () => ({ from: "mid", to: "senior" }),
+  loadProfileWorkplace: async () => ({ workplace: (await import("@/lib/profile-workplace")).DEFAULT_WORKPLACE, seen: true }),
 }));
 const db = vi.hoisted(() => ({ postingSearch: { findUnique: vi.fn() }, postingFind: { findMany: vi.fn() }, postingScore: { upsert: vi.fn() } }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
@@ -145,21 +148,29 @@ describe("the Claude connector at /api/mcp (#221)", () => {
     expect(text).toContain("save_application");
   });
 
-  it("saves the fit scores Claude gives postings, so Find jobs shows them", async () => {
+  it("saves Claude's answers about postings as scores that count requirements, so Positions ranks them (#159)", async () => {
     const posting = { source: "JSEARCH", externalId: "j1", title: "Product Designer", company: "Acme", place: "Berlin", remote: null, salary: "", postedAt: null, url: "", via: "", description: "Figma", complete: true };
     // What the search found is in the library (E22-5).
     db.postingSearch.findUnique.mockResolvedValue({ id: "s1" });
     db.postingFind.findMany.mockResolvedValue([{ posting: { ...posting, id: "row-1" } }]);
-    const { text } = await tool("save_job_scores", {
-      search_id: "s1",
-      scores: [
-        { number: 1, score: 78, reasons: ["Figma in the Acme role"] },
-        { number: 9, score: 10, reasons: ["?"] },
+    const answers = {
+      requirements: [
+        { text: "3+ years with Figma", must_have: true, covered: true, evidence: "Designer at Acme", skill: "Figma" },
+        { text: "Experience with design tokens", must_have: false, covered: false },
       ],
-    });
-    expect(JSON.parse(text)).toMatchObject({ saved: [{ number: 1, score: 78 }], not_found: [9] });
-    expect(db.postingScore.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ create: expect.objectContaining({ externalId: "j1", score: 78, reasons: ["Figma in the Acme role"], redFlags: [], scoredWith: "claude-chat" }) }),
-    );
+      work: { level: 3, reason: "You've designed products before." },
+      extra: { level: 1, reason: "" },
+      education: { level: 2, reason: "" },
+      seniority: { fit: "fits", reason: "" },
+      location: { fit: "fits", reason: "" },
+    };
+    const { text } = await tool("save_job_scores", { search_id: "s1", scores: [{ number: 1, ...answers }, { number: 9, ...answers }] });
+    expect(JSON.parse(text)).toMatchObject({ saved: [{ number: 1, covered: "1 of 2", fit: "Good fit" }], not_found: [9] });
+    const { create } = db.postingScore.upsert.mock.calls.at(-1)![0];
+    expect(create).toMatchObject({ externalId: "j1", scoredWith: "claude-chat" });
+    expect(create.breakdown.requirements).toEqual([
+      { text: "3+ years with Figma", mustHave: true, covered: true, evidence: "Designer at Acme", skill: "Figma" },
+      { text: "Experience with design tokens", mustHave: false, covered: false, evidence: null, skill: null },
+    ]);
   });
 });

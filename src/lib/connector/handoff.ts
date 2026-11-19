@@ -48,7 +48,7 @@ function promptFor(kind: Handoff, ref: string, about: string, profile = ""): str
   if (kind === "score") {
     return (
       `Using my Dossier connector: score how well ${what} fits my profile. ` +
-      "Read it with get_posting and my profile with get_profile, give a score from 0 to 100 with the reasons and any red flags, and save it with save_job_scores."
+      "Read it with get_posting and my profile with get_profile, judge each of its requirements and the other questions save_job_scores asks, and save the answers with save_job_scores."
     );
   }
   return (

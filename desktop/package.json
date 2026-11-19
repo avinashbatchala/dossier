@@ -2,7 +2,7 @@
   "name": "dossier-desktop",
   "productName": "Dossier",
   "desktopName": "dossier-desktop.desktop",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Dossier as a desktop app",
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^24",
-    "electron": "45.3.3",
+    "electron": "45.3.4",
     "electron-builder": "^26",
     "typescript": "^5"
   },

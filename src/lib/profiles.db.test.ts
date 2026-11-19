@@ -73,6 +73,24 @@ describe("profiles (E24-2)", () => {
     expect((await listProfiles()).map((profile) => profile.name)).toEqual(["My profile", "Copy"]);
   });
 
+  it("keeps the order of custom sections and their items in a copy", async () => {
+    // Made in the opposite order to their dates, so the rows come back in an order the copy mustn't follow.
+    const day = (n: number) => new Date(`2026-01-0${n}T00:00:00Z`);
+    await prisma().customSection.create({ data: { profileId: TEST_PROFILE_ID, title: "Leadership", createdAt: day(2) } });
+    await prisma().customSection.create({
+      data: {
+        profileId: TEST_PROFILE_ID,
+        title: "Achievements",
+        createdAt: day(1),
+        items: { create: [{ title: "Finalist", createdAt: day(4) }, { title: "Winner", createdAt: day(3) }] },
+      },
+    });
+
+    const copy = await loadProfile(await copyProfile(TEST_PROFILE_ID, "Copy"));
+    expect(copy.customSections.map((section) => section.title)).toEqual(["Achievements", "Leadership"]);
+    expect(copy.customSections[0].items.map((item) => item.title)).toEqual(["Winner", "Finalist"]);
+  });
+
   it("starts where to work at the defaults, unseen, and keeps the answers and that they were seen (E24-4)", async () => {
     const { DEFAULT_WORKPLACE } = await import("./profile-workplace");
     expect(await loadProfileWorkplace(TEST_PROFILE_ID)).toEqual({ workplace: DEFAULT_WORKPLACE, seen: false });

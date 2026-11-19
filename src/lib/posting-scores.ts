@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 /** Keeps a posting's score, replacing an older one. */
 export async function saveScore(posting: Pick<FoundPosting, "source" | "externalId">, fit: PostingFit, scoredWith: string, profileId: string): Promise<void> {
   const where = { source_externalId_profileId: { source: posting.source, externalId: posting.externalId, profileId } };
-  // A score without a breakdown (one written in Claude chat) clears the one before.
+  // A score without a breakdown clears the one before.
   const data = { score: fit.score, reasons: fit.reasons, redFlags: fit.redFlags, breakdown: fit.breakdown ?? Prisma.DbNull, scoredWith };
   await prisma.postingScore.upsert({ where, create: { source: posting.source, externalId: posting.externalId, profileId, ...data }, update: data });
 }

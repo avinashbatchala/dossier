@@ -106,7 +106,8 @@ test("opens again from Settings, and leaving it goes back to the app for good", 
   await page.getByRole("navigation", { name: "Setup steps" }).getByRole("link", { name: /Scoring/ }).click();
   await expect(page.getByRole("heading", { name: "How to judge a posting" })).toBeVisible();
 
-  // Where it was left, until it's left for good.
+  // Where it was left, until it's left for good. A step is saved after it shows (#381): go back once it is.
+  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'setupGuide'`))[0]?.value ?? "").toContain("scoring");
   await page.goto("/welcome");
   await expect(page.getByRole("heading", { name: "How to judge a posting" })).toBeVisible();
   await page.getByRole("button", { name: "Leave setup" }).click();

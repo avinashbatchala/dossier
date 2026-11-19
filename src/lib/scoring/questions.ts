@@ -237,28 +237,36 @@ export function scoringState(posting: ScoringPosting, { data: profile, levels, w
         degrees: profile.education.map((entry) => ({ degree: entry.degree, school: entry.school, dates: formatDateRange(entry), notes: entry.notes })),
         ...(customEntries(profile.customSections, "EDUCATION").length > 0 ? { otherEducation: customEntries(profile.customSections, "EDUCATION") } : {}),
       },
-      seniority: {
-        levels: levelRangeLabel(levels),
-        // Models add up date ranges badly (#279): counted here, overlapping roles once.
-        yearsOfPaidWork: yearsOf(experienceMonths(profile, today)),
-        roles: paid.map((entry) => ({ role: entry.role, dates: formatDateRange(entry) })),
-      },
-      location: {
-        livesIn: [basics.city, basics.country].filter(Boolean).join(", "),
-        waysOfWorking: workplace.modes.map((mode) => WORK_MODES.find((option) => option.value === mode)?.label ?? mode),
-        ...(workplace.modes.some((mode) => mode !== "REMOTE")
-          ? { onSiteOrHybrid: { withinKmOfHome: workplace.radiusKm, otherPlaces: workplace.otherPlaces } }
-          : {}),
-        ...(workplace.modes.includes("REMOTE")
-          ? {
-              remoteForEmployersIn:
-                workplace.remoteOpenTo === "countries"
-                  ? workplace.remoteCountries.map((code) => code.toUpperCase())
-                  : (REMOTE_OPEN_TO.find((option) => option.value === workplace.remoteOpenTo)?.label ?? workplace.remoteOpenTo),
-            }
-          : {}),
-        willingToMove: workplace.relocate ? (workplace.relocatePlaces.length > 0 ? workplace.relocatePlaces : true) : false,
-      },
+      ...seniorityAndLocation({ data: profile, levels, workplace }, today),
+    },
+  };
+}
+
+/** The levels a profile is for and where it wants to work, as scoring models read them; the Claude connector's get_profile gives Claude the same. */
+export function seniorityAndLocation({ data: profile, levels, workplace }: ScoringProfile, today = new Date()) {
+  const { basics } = profile;
+  return {
+    seniority: {
+      levels: levelRangeLabel(levels),
+      // Models add up date ranges badly (#279): counted here, overlapping roles once.
+      yearsOfPaidWork: yearsOf(experienceMonths(profile, today)),
+      roles: paidRoles(profile.experience).map((entry) => ({ role: entry.role, dates: formatDateRange(entry) })),
+    },
+    location: {
+      livesIn: [basics.city, basics.country].filter(Boolean).join(", "),
+      waysOfWorking: workplace.modes.map((mode) => WORK_MODES.find((option) => option.value === mode)?.label ?? mode),
+      ...(workplace.modes.some((mode) => mode !== "REMOTE")
+        ? { onSiteOrHybrid: { withinKmOfHome: workplace.radiusKm, otherPlaces: workplace.otherPlaces } }
+        : {}),
+      ...(workplace.modes.includes("REMOTE")
+        ? {
+            remoteForEmployersIn:
+              workplace.remoteOpenTo === "countries"
+                ? workplace.remoteCountries.map((code) => code.toUpperCase())
+                : (REMOTE_OPEN_TO.find((option) => option.value === workplace.remoteOpenTo)?.label ?? workplace.remoteOpenTo),
+          }
+        : {}),
+      willingToMove: workplace.relocate ? (workplace.relocatePlaces.length > 0 ? workplace.relocatePlaces : true) : false,
     },
   };
 }

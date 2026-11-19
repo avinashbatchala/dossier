@@ -7,8 +7,9 @@ import { ApplicationStatus, DocumentKind } from "@/generated/prisma/enums";
 import { approveCandidate } from "@/lib/agent/draft";
 import { isAiUsable } from "@/lib/ai/config";
 import { profileForPrompt } from "@/lib/ai/tasks/prompt-parts";
+import { factorsFrom } from "@/lib/ai/tasks/score-posting";
 import { unitsSchema } from "@/lib/application-data";
-import { fitBand, fitFrom } from "@/lib/fit";
+import { fitFromAnswers } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
 import { withoutPrivateParts } from "@/lib/letter-frame";
+import { coverageOf, fitWords } from "@/lib/posting-coverage";
 import { FETCH_MESSAGES, fetchPosting } from "@/lib/posting-fetch";
 import { saveScore } from "@/lib/posting-scores";
 import { postingsOfSearch } from "@/lib/library";
@@ -34,7 +36,10 @@ import { foundFromPosting, storePosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
 import { withoutSectionsOff } from "@/lib/resume-sections";
-import { listProfiles, loadProfileSettings, profileNamed } from "@/lib/profiles";
+import { levelsProblem, listProfiles, loadProfileLevels, loadProfileSettings, loadProfileWorkplace, profileNamed } from "@/lib/profiles";
+import { LOCATION_FITS, SENIORITY_FITS } from "@/lib/scoring/factors";
+import { MAX_LINES } from "@/lib/scoring/posting-lines";
+import { EDUCATION_LEVELS, EXTRA_LEVELS, LOCATION_OPTIONS, REQUIREMENT_KINDS, SENIORITY_OPTIONS, seniorityAndLocation, WORK_LEVELS } from "@/lib/scoring/questions";
 import { statusInfo } from "@/lib/status";
 import { applyStatusChange } from "@/lib/status-changes";
 import { appVersion } from "@/lib/version";
@@ -117,7 +122,7 @@ type ResolvedPosting = { text: string; url: string; postingId: string | null; ti
 async function resolvePosting(source: PostingSource): Promise<ResolvedPosting | { error: string }> {
   if (source.posting_id) {
     const row = await prisma.posting.findUnique({ where: { id: source.posting_id } });
-    if (!row) return { error: "That posting is no longer in Dossier. Open it again from Find jobs." };
+    if (!row) return { error: "That posting is no longer in Dossier. Open it again from Positions." };
     const found = foundFromPosting(row);
     const description = found.complete ? found.description : ((await fullText(found)) ?? found.description);
     if (!description.trim()) return { error: "That posting has no text to write from. Give its link as posting_url instead." };
@@ -159,6 +164,36 @@ async function resolvePosting(source: PostingSource): Promise<ResolvedPosting | 
 /** Which of the user's profiles a tool reads (E24-6), by name or id. */
 const profileInput = z.string().max(200).optional().describe("The profile's name, as get_profile lists them; the first profile when left out");
 
+// save_job_scores takes the answers Dossier's scoring models give (E25-1), so
+// a score written in Claude chat counts requirements like any other.
+const scale = (levels: readonly { means: string }[]) => levels.map((level, index) => `${index}: ${level.means}`).join(" ");
+const choices = (options: Record<string, { means: string }>) =>
+  Object.entries(options)
+    .map(([value, { means }]) => `"${value}": ${means}`)
+    .join(" ");
+const reason = z.string().max(300).describe("One short sentence to the user (\"You…\"), pointing at the posting and the profile");
+const levelAnswer = (levels: readonly { means: string }[]) => z.object({ level: z.number().int().min(0).max(levels.length - 1).describe(scale(levels)), reason });
+const answersSchema = z.object({
+  requirements: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1).max(300).describe("One thing the posting asks of applicants, copied word for word from the posting"),
+        must_have: z.boolean().describe(`true for ${REQUIREMENT_KINDS.must.means} false for ${REQUIREMENT_KINDS.nice.means}`),
+        covered: z.boolean().describe("Whether the profile shows it, anywhere in it, directly or clearly, never a stretch"),
+        evidence: z.string().max(120).optional().describe("When covered: the part of the profile that shows it, in a few words, such as \"Senior Designer at Acme\" or \"Figma (skill)\""),
+        skill: z.string().max(60).optional().describe("The one skill, tool or language it's about, as the user would list it, such as \"Kubernetes\"; left out when it's about something else, such as years or a degree"),
+      }),
+    )
+    .max(MAX_LINES)
+    .describe("Each requirement once. Leave out what isn't asked of applicants, such as the company, the team, the job's tasks, benefits, pay or how to apply."),
+  work: levelAnswer(WORK_LEVELS).describe("How close the profile's paid work is to the job's day-to-day work"),
+  extra: levelAnswer(EXTRA_LEVELS).describe("How much the profile's projects, volunteering, certifications, publications and other activities support it for the job"),
+  education: levelAnswer(EDUCATION_LEVELS).describe("How well the profile's education meets what the posting asks for"),
+  seniority: z.object({ fit: z.enum(SENIORITY_FITS).describe(choices(SENIORITY_OPTIONS)), reason }).describe("The job's level against jobsItsFor from get_profile"),
+  location: z.object({ fit: z.enum(LOCATION_FITS).describe(choices(LOCATION_OPTIONS)), reason }).describe("Whether the user can work where and how the job is, by whereItWantsToWork from get_profile"),
+  thin: z.boolean().default(false).describe("true when the posting is too short or too vague to tell what it requires of applicants"),
+});
+
 /** Dossier as an MCP server, for one request; `origin` is the address links in answers point to. */
 export function createDossierServer(origin: string): McpServer {
   const linkTo = (path: string) => `${origin}${path}`;
@@ -182,6 +217,7 @@ export function createDossierServer(origin: string): McpServer {
       title: "Read the profile",
       description:
         "The user's profile in Dossier: headline, summary, facts about them, skills, languages, experience, projects, education, certifications, publications and sections they made, with the ids save_application uses. Contact details and links are left out. " +
+        "Once the user has chosen the levels it's for, it also has those levels, the years of paid work and where it wants to work, which save_job_scores judges against. " +
         "The user can have several profiles, one per kind of job; the answer names them all. Without profile it's the first.",
       inputSchema: z.object({ profile: profileInput }),
       annotations: { readOnlyHint: true },
@@ -189,11 +225,20 @@ export function createDossierServer(origin: string): McpServer {
     async (input) => {
       const chosen = await profileNamed(input.profile);
       if ("error" in chosen) return failure(chosen.error);
-      const [profile, own, all] = await Promise.all([loadProfile(chosen.id), loadProfileSettings(chosen.id), listProfiles()]);
+      const [profile, own, all, levels, { workplace }] = await Promise.all([
+        loadProfile(chosen.id),
+        loadProfileSettings(chosen.id),
+        listProfiles(),
+        loadProfileLevels(chosen.id),
+        loadProfileWorkplace(chosen.id),
+      ]);
+      // What save_job_scores judges seniority and location against, as Dossier's scoring models read it.
+      const target = levels ? seniorityAndLocation({ data: profile, levels, workplace }) : null;
       return text({
         profile: chosen.name,
         ...(all.length > 1 ? { profiles: all.map((entry) => entry.name) } : {}),
         ...JSON.parse(profileForPrompt(withoutSectionsOff(profile, own.resumeSections))),
+        ...(target ? { jobsItsFor: target.seniority.levels, yearsOfPaidWork: target.seniority.yearsOfPaidWork, whereItWantsToWork: target.location } : {}),
         link: linkTo(`/profile?profile=${chosen.id}`),
       });
     },
@@ -204,7 +249,7 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Search for jobs",
       description:
-        "Searches the job source set up in Dossier's settings and keeps the search in Find jobs → Past searches. Each search uses one search from the user's plan with that source. " +
+        "Searches every job portal switched on in Settings → Job search that lists jobs in the country, and keeps what they find in Positions. A portal that limits searches, such as JSearch, counts it as one of them. " +
         "Returns a search_id and numbered postings; pass both to get_posting, save_job_scores or save_application, or the search_id to more_jobs.",
       inputSchema: z.object({
         keywords: z.string().trim().min(1).max(200).describe("Job title, skill or company, e.g. 'product designer'"),
@@ -217,7 +262,7 @@ export function createDossierServer(origin: string): McpServer {
           .enum(LEVELS)
           .optional()
           .describe(
-            "The experience level, as Find jobs' Level: any, intern, junior (entry level), mid, senior or lead. Defaults to any. " +
+            "The experience level, as the Level in Positions' search: any, intern, junior (entry level), mid, senior or lead. Defaults to any. " +
               "Postings for another level are left out, so a page can come back short: more_jobs has the next.",
           ),
       }),
@@ -257,7 +302,7 @@ export function createDossierServer(origin: string): McpServer {
     "more_jobs",
     {
       title: "Show more jobs",
-      description: "The next page of a search from search_jobs. Uses one more search from the user's plan.",
+      description: "The next page of a search from search_jobs, from the portals that have more. A portal that limits searches counts it as one of them.",
       inputSchema: z.object({ search_id: z.string().min(1).max(100) }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -280,22 +325,17 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Save fit scores for postings",
       description:
-        "Saves how well postings fit the user (from a search_jobs search by number, or handed over by posting_id), so Find jobs shows each score with its reasons. " +
-        "Read the profile first, and the whole posting with get_posting when the snippet is too short to judge. " +
-        "Score each from 0 to 100 against the profile from get_profile: 85-100 excellent (clearly meets the core requirements), 70-84 good (most core requirements, a gap or two), 50-69 possible (meaningful gaps or a stretch), 0-49 poor. " +
-        "Judge skills and experience, seniority and scope, location, remote work and language, and salary when both say something. " +
-        "Give one to four short reasons, each tying a requirement to a specific role, project, skill or degree, and up to three real red flags. " +
+        "Saves how well postings fit a profile (from a search_jobs search by number, or handed over by posting_id), so Positions shows how many of each posting's requirements the profile covers, with the reasons. " +
+        "Read the profile with get_profile first, and the whole posting with get_posting when the snippet is too short to judge. " +
+        "For each posting, answer the questions Dossier's scoring models answer: each requirement, whether it's a must-have and whether the profile shows it; then work, extra activities, education, seniority and location. Dossier adds the answers up. " +
         "Never invent experience, and never use age, gender, nationality or any other protected characteristic.",
       inputSchema: z.object({
         search_id: z.string().max(100).optional().describe("The search the numbered postings are from"),
         scores: z
           .array(
-            z.object({
+            answersSchema.extend({
               number: z.number().int().min(1).optional().describe("The posting's number in the search"),
               posting_id: z.string().max(100).optional().describe("Instead of a number: a posting Dossier handed over"),
-              score: z.number().int().min(0).max(100),
-              reasons: z.array(z.string().max(300)).min(1).max(4),
-              red_flags: z.array(z.string().max(300)).max(3).default([]),
             }),
           )
           .min(1)
@@ -308,10 +348,13 @@ export function createDossierServer(origin: string): McpServer {
       // Each posting keeps a score per profile (E25-5).
       const chosen = await profileNamed(profile);
       if ("error" in chosen) return failure(chosen.error);
+      // As in Dossier, nothing scores against a profile until the user has chosen its levels (E24-3).
+      const waiting = await levelsProblem(chosen.id);
+      if (waiting) return failure(`${waiting.message} Ask the user to choose them in Profile → Jobs it's for: ${linkTo(waiting.href)}`);
       const search = search_id ? await prisma.postingSearch.findUnique({ where: { id: search_id }, select: { id: true } }) : null;
       if (search_id && !search) return failure("That search is no longer kept. Search again.");
       const kept = search ? await postingsOfSearch(search.id) : [];
-      const saved: { number?: number; posting_id?: string; title: string; score: number; band: string }[] = [];
+      const saved: { number?: number; posting_id?: string; title: string; covered: string; fit: string }[] = [];
       const missing: (number | string)[] = [];
       for (const entry of scores) {
         const row = entry.posting_id ? await prisma.posting.findUnique({ where: { id: entry.posting_id } }) : null;
@@ -320,9 +363,18 @@ export function createDossierServer(origin: string): McpServer {
           missing.push(entry.posting_id ?? entry.number ?? "?");
           continue;
         }
-        const fit = fitFrom({ score: entry.score, reasons: entry.reasons, redFlags: entry.red_flags });
+        // The requirements stand in for the posting's numbered lines, which the AI model answers by number.
+        const requirements = entry.requirements.map((requirement, line) => ({
+          line,
+          kind: requirement.must_have ? ("must" as const) : ("nice" as const),
+          covered: requirement.covered,
+          evidence: requirement.evidence ?? "",
+          skill: requirement.skill ?? "",
+        }));
+        const fit = fitFromAnswers(factorsFrom({ ...entry, requirements }, entry.requirements.map((requirement) => requirement.text)));
         await saveScore(posting, fit, WRITTEN_IN_CLAUDE, chosen.id);
-        saved.push({ number: entry.number, posting_id: entry.posting_id, title: posting.title, score: fit.score, band: fitBand(fit.score) });
+        const coverage = coverageOf(fit);
+        saved.push({ number: entry.number, posting_id: entry.posting_id, title: posting.title, covered: `${coverage.hit} of ${coverage.total}`, fit: fitWords(coverage) });
       }
       return text({ saved, not_found: missing.length > 0 ? missing : undefined, link: linkTo(search_id ? `/jobs?search=${search_id}` : "/jobs?view=saved") });
     },
