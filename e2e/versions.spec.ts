@@ -29,6 +29,8 @@ test("restores the first draft after a change from the chat", async ({ page }) =
   await expect(changes.getByRole("listitem").first()).toContainText("Done. I made the summary shorter.");
   const firstDraft = changes.getByRole("listitem").filter({ hasText: "Resume v1" });
   await expect(firstDraft).toContainText("Tailoring");
+  // Scan after the panel's fade-in: mid-animation opacity lightens its muted text under 4.5:1.
+  await expect(page.getByRole("region", { name: "History" })).toHaveCSS("opacity", "1");
   const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   expect(violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical")).toEqual([]);
 
