@@ -15,9 +15,9 @@ How this Dossier deployment is hosted on AWS, and how to operate it: SSH access,
 | OS | Ubuntu 24.04 LTS |
 | Static IP | Lightsail static IP named `dossier-ip` (actual address intentionally omitted) |
 | Hostname | `dossier.<STATIC_IP>.sslip.io` |
-| App image | `dossier:deepseek-fix` — local build from this fork at `v1.11.0-deepseek.1` (upstream `v1.11.0`, the DeepSeek output budget, country-wide job search and Startups, and cover-letter signatures) |
-| Rollback image | `dossier:deepseek-fix-20261026c` |
-| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.11.0-deepseek.1`) |
+| App image | `dossier:deepseek-fix` — local build from this fork at `v1.15.1-deepseek.1` (upstream `v1.15.1`: Positions, profiles, notifications, installed portals, scoring breakdowns, interviews and offers, SQLite support, plus the DeepSeek output budget, country-wide job search and Startups, and cover-letter signatures) |
+| Rollback image | `dossier:deepseek-fix-20261103` (the v1.11.0-deepseek.1 build) |
+| Build source | `/home/ubuntu/dossier-src` (this fork at `v1.15.1-deepseek.1`) |
 | Runtime | Docker Compose project `dossier` |
 | App directory | `/home/ubuntu/dossier` |
 | Compose file | `/home/ubuntu/dossier/compose.yml` |
@@ -265,7 +265,7 @@ Do not prune volumes unless you intend to delete data. Never run `docker compose
 
 ## Updating Dossier
 
-This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.11.0-deepseek.1` tag: upstream `v1.11.0`, a larger DeepSeek output budget, country-wide job search and Startups, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
+This deployment runs a **locally built image**, `dossier:deepseek-fix`, from this fork's `v1.15.1-deepseek.1` tag: upstream `v1.15.1`, a larger DeepSeek output budget, country-wide job search and Startups, and the cover-letter signature feature. `docker compose pull` cannot update that image; rebuild it instead. Treat every update as a small production change.
 
 ### 1. Back up first
 
@@ -292,7 +292,7 @@ cd /home/ubuntu/dossier-src
 
 git status --short        # should be empty
 git fetch origin --tags
-git checkout v1.11.0-deepseek.1   # the fork tag you want
+git checkout v1.15.1-deepseek.1   # the fork tag you want
 
 sudo docker build --target production -t dossier:deepseek-fix .
 ```
@@ -350,7 +350,7 @@ Release notes occasionally add environment variables, volumes, or services. Comp
 cd /home/ubuntu/dossier
 
 curl -fsSL -o compose.yml.new \
-  https://raw.githubusercontent.com/avinashbatchala/dossier/v1.9.1-deepseek.4/compose.production.yml
+  https://raw.githubusercontent.com/avinashbatchala/dossier/v1.15.1-deepseek.1/compose.production.yml
 
 diff -u compose.yml compose.yml.new
 ```
@@ -371,6 +371,8 @@ diff -u compose.yml compose.yml.new
 
 `v1.10.0` also defaults `TZ` to `UTC` in `compose.production.yml` and passes on `DOSSIER_FREEHIRE_URL`, `DOSSIER_JOBS_ARBEITSAGENTUR`, `DOSSIER_SCORER` and `DOSSIER_TYPESAFE_KEY`. This deployment takes the new compose file, which also moves the optional Ollama service to 0.40.10; no `.env` change is needed.
 
+`v1.15.1-deepseek.1` merges upstream `v1.12.0`, `v1.13.0`, `v1.14.0`, `v1.15.0` and `v1.15.1`. In short: Find jobs became **Positions**, one library of every posting the portals found (the same job from several portals is one posting), with an Archive and the job agent's finds inside it; the job agent now runs up to **three named recurring searches** on one shared daily schedule and budget, and the old single search imports as "My search"; the profile can hold **several profiles**, each with its own Base resume settings and scores; **notifications** over SMTP, webhook or ntfy; **installed portals**; **interviews and offers**; **certifications**, custom profile sections and volunteering; a frozen copy of each sent application, so it keeps the profile it was sent with; a scoring breakdown with per-profile scores; the desktop app; and **SQLite support** for running without PostgreSQL (not used here). Thirty-one migrations apply on the first start; no `.env` or `compose.yml` change is needed (the only compose change is the optional Ollama image, and it isn't used). Existing settings are migrated in place: the saved agent search becomes "My search", existing AI scores stay and get per-profile rows, and Startups keeps its country-wide default.
+
 If the diff is correct:
 
 ```bash
@@ -385,7 +387,7 @@ Your `.env` is not overwritten.
 The upstream image does not include the DeepSeek patch, so the cut-off error will return unless the provider is changed.
 
 ```dotenv
-DOSSIER_IMAGE=ghcr.io/aientech/dossier:v1.9.1
+DOSSIER_IMAGE=ghcr.io/aientech/dossier:v1.15.1
 ```
 
 ```bash
@@ -427,7 +429,8 @@ The image stays cached locally after it is pulled.
 The current image is tagged twice:
 
 - `dossier:deepseek-fix` — the image in use
-- `dossier:deepseek-fix-20261103` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261122` — the same image, kept for rollback
+- `dossier:deepseek-fix-20261103` — the previous build (upstream v1.11.0 with the DeepSeek budget, country-wide job search and Startups, and signatures)
 - `dossier:deepseek-fix-20261026c` — the previous build (upstream v1.9.1 with country-wide Startups)
 - `dossier:deepseek-fix-20261026b` — the previous build (country-wide job search)
 - `dossier:deepseek-fix-20261026` — the upstream v1.9.1 build, before country-wide search
@@ -450,7 +453,7 @@ sudo docker compose stop app
 sudo docker compose exec -T db pg_restore --clean --if-exists \
   -U dossier -d dossier < "$HOME/dossier-YYYY-MM-DD.dump"
 
-# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261026c (or 20261026b for the release before it)
+# edit DOSSIER_IMAGE to dossier:deepseek-fix-20261103 (or 20261026c for the release before it)
 sudo docker compose up -d
 ```
 
@@ -919,7 +922,7 @@ This is the condensed disaster-recovery path.
 9. Build the patched image:
 
    ```bash
-   git clone --depth 1 --branch v1.11.0-deepseek.1 \
+   git clone --depth 1 --branch v1.15.1-deepseek.1 \
      https://github.com/avinashbatchala/dossier.git /home/ubuntu/dossier-src
    cd /home/ubuntu/dossier-src
    # The DeepSeek fix is already committed on this tag.

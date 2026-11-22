@@ -14,14 +14,16 @@ async function expectAccessible(page: Page) {
   expect(violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical").map((violation) => violation.id)).toEqual([]);
 }
 
-/** A saved posting scored for the profile, asking for these skills. */
+/** A saved posting scored for the profile, asking for these skills; each is a minute newer than the one before. */
+let scoredAt = 0;
 async function scored(id: string, company: string, skills: [string, boolean][]) {
+  scoredAt += 1;
   await sql(`INSERT INTO "Posting" (id, source, "externalId", company, title, "savedAt", "updatedAt") VALUES ($1, 'JSEARCH', $1, $2, 'Product Designer', now(), now())`, [id, company]);
   const [{ id: profileId }] = await sql<{ id: string }>(`SELECT id FROM "Profile" ORDER BY sort, "createdAt" LIMIT 1`);
   const requirements = skills.map(([skill, covered], index) => ({ text: `Line ${index}`, mustHave: true, covered, evidence: null, skill }));
   await sql(
-    `INSERT INTO "PostingScore" (source, "externalId", "profileId", score, reasons, "redFlags", "scoredWith", breakdown, "updatedAt") VALUES ('JSEARCH', $1, $2, 70, '[]', '[]', 'score-posting@3', $3, now())`,
-    [id, profileId, JSON.stringify({ factors: [], cap: null, requirements })],
+    `INSERT INTO "PostingScore" (source, "externalId", "profileId", score, reasons, "redFlags", "scoredWith", breakdown, "updatedAt") VALUES ('JSEARCH', $1, $2, 70, '[]', '[]', 'score-posting@3', $3, now() - ($4 * interval '1 minute'))`,
+    [id, profileId, JSON.stringify({ factors: [], cap: null, requirements }), 1000 - scoredAt],
   );
 }
 

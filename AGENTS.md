@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Dossier is a self-hosted, single-user job-search app: Next.js 16 App Router, React 19, Prisma 7 + PostgreSQL 18, Tailwind v4, Yarn 4. `DEVELOPMENT.md` is the detailed engineering guide; `README.md` is the operator guide; `INFRASTRUCTURE.md` is the AWS/Lightsail operations runbook. Read the relevant section before changing behavior.
+Dossier is a self-hosted, single-user job-search app: Next.js 16 App Router, React 19, Prisma 7 + PostgreSQL 18 (or SQLite), Tailwind v4, Yarn 4. `DEVELOPMENT.md` is the detailed engineering guide; `README.md` is the operator guide; `INFRASTRUCTURE.md` is the AWS/Lightsail operations runbook. Read the relevant section before changing behavior.
 
 ## Bootstrap and Docker
 
@@ -17,7 +17,7 @@ Dossier is a self-hosted, single-user job-search app: Next.js 16 App Router, Rea
 
 - `DOSSIER_PASSWORD` must be the `argon2id:...` hash, never the password itself. The server refuses to start on missing/short secrets or invalid config.
 - `docker/bin/yarn <script>` runs Yarn in the running `app` container, or a one-off one if it is stopped. Do not run `yarn`, `next`, `vitest`, or `playwright` on the host.
-- The dev `app` container runs `prisma generate`, `prisma migrate deploy`, `prisma db seed`, then `next dev` on every start. Logs: `docker compose logs -f app`. Health: `GET /api/health`.
+- The dev `app` container runs `yarn generate`, `prisma migrate deploy`, `prisma db seed`, then `next dev` on every start. Logs: `docker compose logs -f app`. Health: `GET /api/health`.
 - After pulling changes to `yarn.lock`, run `docker/bin/yarn install`.
 - Never run `docker compose down -v` unless the user asks: it deletes the Postgres and `node_modules` volumes.
 
@@ -31,7 +31,7 @@ docker/bin/yarn test:coverage    # enforces the thresholds in vitest.config.mts
 docker/bin/yarn build && docker/bin/yarn test:e2e [spec]
 ```
 
-Run lint, typecheck, and tests before finishing. CI runs `prisma generate`, then lint → typecheck → test:coverage, and e2e in a separate job.
+Run lint, typecheck, and tests before finishing. CI runs `yarn generate`, then lint → typecheck → test:coverage, and e2e in a separate job.
 
 `typecheck` generates Next's route types. Pages use generated `LayoutProps`/`RouteContext` types, so run it after adding or renaming routes.
 
@@ -57,7 +57,7 @@ Run lint, typecheck, and tests before finishing. CI runs `prisma generate`, then
   docker compose restart app
   ```
 
-  Prisma 7's `migrate dev` no longer runs `prisma generate`; the restart does it and picks up the new client.
+  Prisma 7's `migrate dev` no longer runs `prisma generate`; the restart does it and picks up the new client. The SQLite schema and migrations are derived from the PostgreSQL ones (`yarn sqlite-schema`); see `DEVELOPMENT.md` → Database.
 
 - Use the shared client from `@/lib/prisma`; do not construct `PrismaClient` in app code.
 - Seed behavior: built-in themes, empty profile, and defaults on every start. `prisma db seed -- --demo` adds Jane Doe sample data; add `--reset` to replace an existing profile and applications.

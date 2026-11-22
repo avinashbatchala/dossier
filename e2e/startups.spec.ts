@@ -82,7 +82,7 @@ test("finds hiring startups with the addresses they publish, and leaves alone wh
   await expect(cards).toHaveCount(1);
   await expect(row("Harbourlight")).toBeVisible();
   // Back to the whole country, then anywhere in the world.
-  await where("anywhere in the Netherlands");
+  await where("anywhere in Netherlands");
   await expect(cards).toHaveCount(4);
   await where("anywhere in the world");
   await expect(cards).toHaveCount(5);
