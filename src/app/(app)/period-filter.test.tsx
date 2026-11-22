@@ -50,4 +50,16 @@ describe("the dashboard's period filter (E9-8)", () => {
     await user.click(screen.getByRole("radio", { name: "Last 90 days" }));
     expect(router.replace).toHaveBeenCalledWith("/?date=2026-11-01&period=90d", { scroll: false });
   });
+
+  it("filters another screen without touching the dashboard's choice, as on Usage (#290)", async () => {
+    const user = userEvent.setup();
+    render(
+      <PeriodFilter period="30d" path="/usage" remember={false}>
+        <p>The figures</p>
+      </PeriodFilter>,
+    );
+    await user.click(screen.getByRole("radio", { name: "All time" }));
+    expect(rememberDashboardPeriod).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith("/usage?period=all", { scroll: false });
+  });
 });

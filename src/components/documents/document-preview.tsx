@@ -8,7 +8,7 @@ import { PAGE_WIDTH } from "@/lib/themes";
 import styles from "./document.module.css";
 
 /** The canvas between two sheets of a paged preview, in page units. */
-export const SHEET_GAP = 32;
+const SHEET_GAP = 32;
 
 const never = () => () => {};
 
@@ -61,14 +61,20 @@ export function DocumentPreview({
   label,
   meta,
   notice,
+  onPages,
   className,
+  maxWidth = PAGE_WIDTH,
   children,
 }: {
   label: ReactNode;
   meta?: ReactNode | ((pages: number) => ReactNode);
   /** A note between the label row and the page, e.g. what was left out to fit the page limit. */
   notice?: ReactNode | ((pages: number) => ReactNode);
+  /** Told the number of pages after each measurement, for "Fit to one page" (public issue 69). */
+  onPages?: (pages: number) => void;
   className?: string;
+  /** How wide the page may grow, in pixels: its real size unless said, e.g. 820 on an application (E30-9). */
+  maxWidth?: number;
   /** A document component, e.g. ResumeDocument. */
   children: ReactNode;
 }) {
@@ -88,7 +94,9 @@ export function DocumentPreview({
       const page = pageRef.current?.firstElementChild;
       if (!(page instanceof HTMLElement)) return;
       const style = getComputedStyle(page);
-      setPages(countPages(page, { paged }));
+      const counted = countPages(page, { paged });
+      setPages(counted);
+      onPages?.(counted);
       setPageHeight(pageHeightOf(style, paged));
       setPadY(Number(style.getPropertyValue("--pad-y")) || 0);
     };
@@ -103,13 +111,13 @@ export function DocumentPreview({
   return (
     <div
       className={cn(
-        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-10 pt-10 pb-16",
+        "@container flex min-w-0 flex-[999_1_480px] flex-col items-center overflow-auto bg-canvas px-10 pt-10 pb-[var(--composer-space,4rem)]",
         className,
       )}
     >
-      <div className="flex flex-col gap-4" style={{ "--u": "min(1px, calc(100cqw / 640))" } as CSSProperties}>
-        <div className="flex w-[calc(var(--u)*640)] justify-between gap-3 text-meta text-muted">
-          <span>{label}</span>
+      <div className="flex flex-col gap-4" style={{ "--u": `min(${maxWidth / PAGE_WIDTH}px, calc(100cqw / ${PAGE_WIDTH}))` } as CSSProperties}>
+        <div className="flex w-[calc(var(--u)*640)] items-center justify-between gap-3 text-meta text-muted">
+          <span className="min-w-0">{label}</span>
           <span>{typeof meta === "function" ? meta(pages) : meta}</span>
         </div>
         {notice && <div className="w-[calc(var(--u)*640)]">{typeof notice === "function" ? notice(pages) : notice}</div>}

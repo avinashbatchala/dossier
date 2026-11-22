@@ -5,20 +5,36 @@ import localFont from "next/font/local";
 //
 // Each font sets a --typeface-* variable on <html>; globals.css maps them to
 // Tailwind's font-* utilities, and the resume themes use them directly.
+//
+// Static faces, one file per weight, never variable fonts: Chromium's PDF
+// printer can't embed a variable font and draws its glyphs as Type 3
+// outlines instead, which other viewers and parsers read wrongly (public
+// issues 64 and 67). Documents use 400 to 700; the UI's lighter weights fall
+// back to 400.
 
 /** UI text. */
-export const geist = localFont({
-  src: "./geist/Geist-Variable.woff2",
-  weight: "100 900",
+const geist = localFont({
+  src: [
+    { path: "./geist/Geist-Regular.woff2", weight: "400" },
+    { path: "./geist/Geist-Medium.woff2", weight: "500" },
+    { path: "./geist/Geist-SemiBold.woff2", weight: "600" },
+    { path: "./geist/Geist-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-geist",
   fallback: ["Helvetica", "Arial", "sans-serif"],
 });
 
 /** Page and section titles; also a resume theme font. */
-export const newsreader = localFont({
+const newsreader = localFont({
   src: [
-    { path: "./newsreader/Newsreader-Variable.woff2", weight: "200 800", style: "normal" },
-    { path: "./newsreader/Newsreader-Italic-Variable.woff2", weight: "200 800", style: "italic" },
+    { path: "./newsreader/Newsreader-Regular.woff2", weight: "400" },
+    { path: "./newsreader/Newsreader-Medium.woff2", weight: "500" },
+    { path: "./newsreader/Newsreader-SemiBold.woff2", weight: "600" },
+    { path: "./newsreader/Newsreader-Bold.woff2", weight: "700" },
+    { path: "./newsreader/Newsreader-Italic.woff2", weight: "400", style: "italic" },
+    { path: "./newsreader/Newsreader-MediumItalic.woff2", weight: "500", style: "italic" },
+    { path: "./newsreader/Newsreader-SemiBoldItalic.woff2", weight: "600", style: "italic" },
+    { path: "./newsreader/Newsreader-BoldItalic.woff2", weight: "700", style: "italic" },
   ],
   variable: "--typeface-newsreader",
   fallback: ["Georgia", "serif"],
@@ -28,18 +44,24 @@ export const newsreader = localFont({
 // The remaining fonts are only used on some screens (code-like values, resume
 // themes), so they load when a page uses them instead of being preloaded.
 
-export const plexSans = localFont({
-  src: "./ibm-plex-sans/IBMPlexSans-Variable.woff2",
-  weight: "100 700",
+const plexSans = localFont({
+  src: [
+    { path: "./ibm-plex-sans/IBMPlexSans-Regular.woff2", weight: "400" },
+    { path: "./ibm-plex-sans/IBMPlexSans-Medium.woff2", weight: "500" },
+    { path: "./ibm-plex-sans/IBMPlexSans-SemiBold.woff2", weight: "600" },
+    { path: "./ibm-plex-sans/IBMPlexSans-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-plex-sans",
   fallback: ["Helvetica", "Arial", "sans-serif"],
   preload: false,
 });
 
-export const plexMono = localFont({
+const plexMono = localFont({
   src: [
     { path: "./ibm-plex-mono/IBMPlexMono-Regular.woff2", weight: "400", style: "normal" },
     { path: "./ibm-plex-mono/IBMPlexMono-Medium.woff2", weight: "500", style: "normal" },
+    // Headings ask for 600: a real face, so Chromium doesn't embolden one (Type 3 again).
+    { path: "./ibm-plex-mono/IBMPlexMono-SemiBold.woff2", weight: "600", style: "normal" },
   ],
   variable: "--typeface-plex-mono",
   fallback: ["ui-monospace", "monospace"],
@@ -47,9 +69,13 @@ export const plexMono = localFont({
   preload: false,
 });
 
-export const ebGaramond = localFont({
-  src: "./eb-garamond/EBGaramond-Variable.woff2",
-  weight: "400 800",
+const ebGaramond = localFont({
+  src: [
+    { path: "./eb-garamond/EBGaramond-Regular.woff2", weight: "400" },
+    { path: "./eb-garamond/EBGaramond-Medium.woff2", weight: "500" },
+    { path: "./eb-garamond/EBGaramond-SemiBold.woff2", weight: "600" },
+    { path: "./eb-garamond/EBGaramond-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-eb-garamond",
   fallback: ["Garamond", "Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
@@ -58,86 +84,126 @@ export const ebGaramond = localFont({
 
 // More resume theme fonts: serifs, then sans, then mono.
 
-export const sourceSerif = localFont({
-  src: "./source-serif-4/SourceSerif4-Variable.woff2",
-  weight: "200 900",
+const sourceSerif = localFont({
+  src: [
+    { path: "./source-serif-4/SourceSerif4-Regular.woff2", weight: "400" },
+    { path: "./source-serif-4/SourceSerif4-Medium.woff2", weight: "500" },
+    { path: "./source-serif-4/SourceSerif4-SemiBold.woff2", weight: "600" },
+    { path: "./source-serif-4/SourceSerif4-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-source-serif",
   fallback: ["Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
   preload: false,
 });
 
-export const lora = localFont({
-  src: "./lora/Lora-Variable.woff2",
-  weight: "400 700",
+const lora = localFont({
+  src: [
+    { path: "./lora/Lora-Regular.woff2", weight: "400" },
+    { path: "./lora/Lora-Medium.woff2", weight: "500" },
+    { path: "./lora/Lora-SemiBold.woff2", weight: "600" },
+    { path: "./lora/Lora-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-lora",
   fallback: ["Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
   preload: false,
 });
 
-export const libreCaslon = localFont({
-  src: "./libre-caslon-text/LibreCaslonText-Variable.woff2",
-  weight: "400 700",
+const libreCaslon = localFont({
+  src: [
+    { path: "./libre-caslon-text/LibreCaslonText-Regular.woff2", weight: "400" },
+    { path: "./libre-caslon-text/LibreCaslonText-Medium.woff2", weight: "500" },
+    { path: "./libre-caslon-text/LibreCaslonText-SemiBold.woff2", weight: "600" },
+    { path: "./libre-caslon-text/LibreCaslonText-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-libre-caslon",
   fallback: ["Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
   preload: false,
 });
 
-export const playfair = localFont({
-  src: "./playfair-display/PlayfairDisplay-Variable.woff2",
-  weight: "400 900",
+const playfair = localFont({
+  src: [
+    { path: "./playfair-display/PlayfairDisplay-Regular.woff2", weight: "400" },
+    { path: "./playfair-display/PlayfairDisplay-Medium.woff2", weight: "500" },
+    { path: "./playfair-display/PlayfairDisplay-SemiBold.woff2", weight: "600" },
+    { path: "./playfair-display/PlayfairDisplay-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-playfair",
   fallback: ["Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
   preload: false,
 });
 
-export const fraunces = localFont({
-  src: "./fraunces/Fraunces-Variable.woff2",
-  weight: "100 900",
+const fraunces = localFont({
+  src: [
+    { path: "./fraunces/Fraunces-Regular.woff2", weight: "400" },
+    { path: "./fraunces/Fraunces-Medium.woff2", weight: "500" },
+    { path: "./fraunces/Fraunces-SemiBold.woff2", weight: "600" },
+    { path: "./fraunces/Fraunces-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-fraunces",
   fallback: ["Georgia", "serif"],
   adjustFontFallback: "Times New Roman",
   preload: false,
 });
 
-export const inter = localFont({
-  src: "./inter/Inter-Variable.woff2",
-  weight: "100 900",
+const inter = localFont({
+  src: [
+    { path: "./inter/Inter-Regular.woff2", weight: "400" },
+    { path: "./inter/Inter-Medium.woff2", weight: "500" },
+    { path: "./inter/Inter-SemiBold.woff2", weight: "600" },
+    { path: "./inter/Inter-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-inter",
   fallback: ["Helvetica", "Arial", "sans-serif"],
   preload: false,
 });
 
-export const manrope = localFont({
-  src: "./manrope/Manrope-Variable.woff2",
-  weight: "200 800",
+const manrope = localFont({
+  src: [
+    { path: "./manrope/Manrope-Regular.woff2", weight: "400" },
+    { path: "./manrope/Manrope-Medium.woff2", weight: "500" },
+    { path: "./manrope/Manrope-SemiBold.woff2", weight: "600" },
+    { path: "./manrope/Manrope-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-manrope",
   fallback: ["Helvetica", "Arial", "sans-serif"],
   preload: false,
 });
 
-export const workSans = localFont({
-  src: "./work-sans/WorkSans-Variable.woff2",
-  weight: "100 900",
+const workSans = localFont({
+  src: [
+    { path: "./work-sans/WorkSans-Regular.woff2", weight: "400" },
+    { path: "./work-sans/WorkSans-Medium.woff2", weight: "500" },
+    { path: "./work-sans/WorkSans-SemiBold.woff2", weight: "600" },
+    { path: "./work-sans/WorkSans-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-work-sans",
   fallback: ["Helvetica", "Arial", "sans-serif"],
   preload: false,
 });
 
-export const spaceGrotesk = localFont({
-  src: "./space-grotesk/SpaceGrotesk-Variable.woff2",
-  weight: "300 700",
+const spaceGrotesk = localFont({
+  src: [
+    { path: "./space-grotesk/SpaceGrotesk-Regular.woff2", weight: "400" },
+    { path: "./space-grotesk/SpaceGrotesk-Medium.woff2", weight: "500" },
+    { path: "./space-grotesk/SpaceGrotesk-SemiBold.woff2", weight: "600" },
+    { path: "./space-grotesk/SpaceGrotesk-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-space-grotesk",
   fallback: ["Helvetica", "Arial", "sans-serif"],
   preload: false,
 });
 
-export const jetbrainsMono = localFont({
-  src: "./jetbrains-mono/JetBrainsMono-Variable.woff2",
-  weight: "100 800",
+const jetbrainsMono = localFont({
+  src: [
+    { path: "./jetbrains-mono/JetBrainsMono-Regular.woff2", weight: "400" },
+    { path: "./jetbrains-mono/JetBrainsMono-Medium.woff2", weight: "500" },
+    { path: "./jetbrains-mono/JetBrainsMono-SemiBold.woff2", weight: "600" },
+    { path: "./jetbrains-mono/JetBrainsMono-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-jetbrains-mono",
   fallback: ["ui-monospace", "monospace"],
   adjustFontFallback: false,
@@ -153,9 +219,13 @@ export const jetbrainsMono = localFont({
 // (next/font only takes literal options, so the ranges are spelled out.)
 
 /** Greek for serif themes: Newsreader has none, EB Garamond does. */
-export const greekSerif = localFont({
-  src: "./eb-garamond/EBGaramond-Variable.woff2",
-  weight: "400 800",
+const greekSerif = localFont({
+  src: [
+    { path: "./eb-garamond/EBGaramond-Regular.woff2", weight: "400" },
+    { path: "./eb-garamond/EBGaramond-Medium.woff2", weight: "500" },
+    { path: "./eb-garamond/EBGaramond-SemiBold.woff2", weight: "600" },
+    { path: "./eb-garamond/EBGaramond-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-greek-serif",
   adjustFontFallback: false,
   preload: false,
@@ -163,9 +233,13 @@ export const greekSerif = localFont({
 });
 
 /** Greek for sans and mono themes: Geist and Plex Mono have none, Plex Sans does. */
-export const greekSans = localFont({
-  src: "./ibm-plex-sans/IBMPlexSans-Variable.woff2",
-  weight: "100 700",
+const greekSans = localFont({
+  src: [
+    { path: "./ibm-plex-sans/IBMPlexSans-Regular.woff2", weight: "400" },
+    { path: "./ibm-plex-sans/IBMPlexSans-Medium.woff2", weight: "500" },
+    { path: "./ibm-plex-sans/IBMPlexSans-SemiBold.woff2", weight: "600" },
+    { path: "./ibm-plex-sans/IBMPlexSans-Bold.woff2", weight: "700" },
+  ],
   variable: "--typeface-greek-sans",
   adjustFontFallback: false,
   preload: false,
@@ -173,7 +247,7 @@ export const greekSans = localFont({
 });
 
 /** Arabic and Persian. */
-export const plexSansArabic = localFont({
+const plexSansArabic = localFont({
   src: [
     { path: "./ibm-plex-sans-arabic/IBMPlexSansArabic-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-arabic/IBMPlexSansArabic-Medium.woff2", weight: "500" },
@@ -186,7 +260,7 @@ export const plexSansArabic = localFont({
 });
 
 /** Hindi. */
-export const plexSansDevanagari = localFont({
+const plexSansDevanagari = localFont({
   src: [
     { path: "./ibm-plex-sans-devanagari/IBMPlexSansDevanagari-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-devanagari/IBMPlexSansDevanagari-Medium.woff2", weight: "500" },
@@ -199,7 +273,7 @@ export const plexSansDevanagari = localFont({
 });
 
 /** Japanese: kana and the JIS kanji. */
-export const plexSansJp = localFont({
+const plexSansJp = localFont({
   src: [
     { path: "./ibm-plex-sans-jp/IBMPlexSansJP-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-jp/IBMPlexSansJP-Medium.woff2", weight: "500" },
@@ -212,7 +286,7 @@ export const plexSansJp = localFont({
 });
 
 /** Korean: every Hangul syllable. */
-export const plexSansKr = localFont({
+const plexSansKr = localFont({
   src: [
     { path: "./ibm-plex-sans-kr/IBMPlexSansKR-Regular.woff2", weight: "400" },
     { path: "./ibm-plex-sans-kr/IBMPlexSansKR-Medium.woff2", weight: "500" },
@@ -226,14 +300,27 @@ export const plexSansKr = localFont({
   ],
 });
 
-/** Simplified Chinese: the GB 2312 characters, weights 400–600 (see README.md). */
-export const notoSansSc = localFont({
-  src: "./noto-sans-sc/NotoSansSC-Variable.woff2",
-  weight: "400 600",
+/** Simplified Chinese: the GB 2312 characters, regular and semibold (see README.md). */
+const notoSansSc = localFont({
+  src: [
+    { path: "./noto-sans-sc/NotoSansSC-Regular.woff2", weight: "400" },
+    { path: "./noto-sans-sc/NotoSansSC-SemiBold.woff2", weight: "600" },
+  ],
   variable: "--typeface-noto-sans-sc",
   adjustFontFallback: false,
   preload: false,
   declarations: [{ prop: "unicode-range", value: "U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF" }],
+});
+
+/**
+ * The dashboard's daily note (E27-1, #523): Caveat, hand-written. UI only,
+ * never in a document, so it's a Latin subset and isn't preloaded (see README.md).
+ */
+const caveat = localFont({
+  src: [{ path: "./caveat/Caveat-Medium.woff2", weight: "500" }],
+  variable: "--typeface-caveat",
+  fallback: ["cursive"],
+  preload: false,
 });
 
 /** Class names that define every --typeface-* variable; set on <html>. */
@@ -260,6 +347,7 @@ export const fontVariables = [
   plexSansJp,
   plexSansKr,
   notoSansSc,
+  caveat,
 ]
   .map((font) => font.variable)
   .join(" ");

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { isNewer } from "@/lib/releases";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase } from "@/test/db";
 
@@ -8,7 +9,6 @@ import {
   checkForUpdate,
   checkIfNewDay,
   dailyCheckRuns,
-  isNewer,
   latestRelease,
   updateNotice,
   updateStatus,

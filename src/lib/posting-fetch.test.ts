@@ -50,11 +50,48 @@ describe("postingFromHtml (E7-8)", () => {
   it("falls back to the page's main text, without menus and scripts", () => {
     const html = `<html><body><nav>Jobs · About</nav><main><h1>Product Designer</h1><p>${DESCRIPTION}</p>
       <ul><li>Figma</li><li>User research</li></ul><script>track()</script></main><footer>© Acme</footer></body></html>`;
-    expect(postingFromHtml(html)).toEqual({ source: "page", text: `Product Designer\n${DESCRIPTION.trim()}\n- Figma\n- User research` });
+    expect(postingFromHtml(html)).toEqual({ source: "page", text: `Product Designer\n${DESCRIPTION.trim()}\n- Figma\n- User research`, doubtful: false });
   });
 
   it("gives up on a page with hardly any text", () => {
     expect(postingFromHtml("<html><body><div id=root></div><p>Loading…</p></body></html>")).toBeNull();
+  });
+});
+
+describe("what isn't a posting (#232)", () => {
+  const CONSENT_TEXT = "We use cookies to improve your experience, to personalise content and ads, and to analyse our traffic. You can accept all of them, or choose which ones we may use. ".repeat(3);
+  const page = (body: string) => `<!doctype html><html><body><div id="root"></div>${body}</body></html>`;
+
+  it("leaves out consent banners and dialogs in any language, however long", () => {
+    expect(postingFromHtml(page(`<div class="cookie-banner"><p>${CONSENT_TEXT}</p></div>`))).toBeNull();
+    expect(postingFromHtml(page(`<div id="onetrust-consent-sdk"><p>${CONSENT_TEXT}</p></div>`))).toBeNull();
+    expect(postingFromHtml(page(`<div role="dialog" aria-label="Datenschutz"><p>${"Wir verwenden Cookies, um Ihnen das beste Erlebnis zu bieten. ".repeat(6)}</p></div>`))).toBeNull();
+    expect(postingFromHtml(page(`<section aria-modal="true"><p>${CONSENT_TEXT}</p></section>`))).toBeNull();
+  });
+
+  it("leaves out a footer with a sign-up form", () => {
+    const footer = `<footer><h3>Stay in the loop</h3><p>${"Get the newest jobs in your inbox every week, and our tips for your next move. ".repeat(4)}</p>
+      <form><label>Email address<input type="email"></label><button>Subscribe</button></form></footer>`;
+    expect(postingFromHtml(page(footer))).toBeNull();
+  });
+
+  it("marks a page of links as doubtful", () => {
+    const links = ["Jobs", "Companies", "Salaries", "Career advice", "Remote jobs", "Jobs in Berlin", "Jobs in Munich", "Jobs in Hamburg", "Design jobs", "Engineering jobs", "Marketing jobs", "Sales jobs", "Data jobs", "Product jobs", "About us", "Press", "Contact", "Privacy", "Terms of use", "Imprint"];
+    const html = page(`<div class="menu">${links.map((name) => `<div><a href="/x">${name}</a></div>`).join("")}</div><p>All rights reserved.</p>`);
+    expect(postingFromHtml(html)).toMatchObject({ source: "page", doubtful: true });
+  });
+
+  it("takes real postings in other languages, short ones too, and their JobPosting data as before", () => {
+    const postings = {
+      English: `<h1>Product Designer</h1><p>${DESCRIPTION}</p>`,
+      German: "<h1>Produktdesigner (m/w/d)</h1><p>Du gestaltest unsere Zahlungsabläufe von Anfang bis Ende. Dafür bringst du fünf Jahre Erfahrung im Produktdesign mit, sicheren Umgang mit Figma und Freude an Nutzerforschung. Wir bieten ein hybrides Arbeitsmodell in Berlin.</p>",
+      Italian: "<h1>Product Designer</h1><p>Cerchiamo una persona che progetti i nostri flussi di pagamento dall'inizio alla fine. Servono cinque anni di esperienza nel design di prodotto, ottima conoscenza di Figma e passione per la ricerca con gli utenti. Lavoro ibrido a Milano.</p>",
+      Japanese: "<h1>プロダクトデザイナー</h1><p>決済フローの設計を最初から最後まで担当していただきます。プロダクトデザインの実務経験五年以上、Figmaの高い習熟度、ユーザーリサーチへの関心が必要です。勤務地は東京、ハイブリッド勤務です。応募をお待ちしています。私たちは成長中のチームで、デザインを大切にしています。年収は経験に応じて決定します。福利厚生も充実しています。ご質問はお気軽にどうぞ。皆様からのご応募を心よりお待ちしております。</p>",
+    };
+    for (const [language, body] of Object.entries(postings)) {
+      expect(postingFromHtml(page(`<main>${body}</main>`)), language).toMatchObject({ source: "page", doubtful: false });
+    }
+    expect(postingFromHtml(jobPage(posting))).toMatchObject({ source: "structured", doubtful: false });
   });
 });
 
@@ -96,7 +133,7 @@ describe("fetchPosting (E7-8)", () => {
   it("reads a posting, following redirects and unpacking gzip", async () => {
     for (const path of ["/job", "/gzip", "/moved"]) {
       const result = await fetchPosting(`${base}${path}`, { lookup });
-      expect(result, path).toMatchObject({ ok: true, source: "structured", url: `${base}/job`.replace("/job", path === "/gzip" ? "/gzip" : "/job") });
+      expect(result, path).toMatchObject({ ok: true, source: "structured", doubtful: false, url: `${base}/job`.replace("/job", path === "/gzip" ? "/gzip" : "/job") });
       if (result.ok) expect(result.text).toContain("Ledgerly: Senior Product Designer, Payments");
     }
   });

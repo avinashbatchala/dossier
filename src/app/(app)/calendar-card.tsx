@@ -10,7 +10,7 @@ import { addDays, AGENDA_DAYS, agenda, dayLabel, itemsOnDay, monthDays, monthTit
 import { cn } from "@/lib/cn";
 import type { CalendarSource } from "@/lib/google/calendar-data";
 
-import { itemDot, ItemLink, itemTime } from "./calendar-item";
+import { itemColor, ItemLink, itemTime } from "./calendar-item";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 /** The arrow keys move a day or a week through the month. */
@@ -138,10 +138,9 @@ export function CalendarCard({
                 >
                   {Number(day.slice(8))}
                 </span>
-                {/* What's on, which the label says in words: an interview, other events. */}
-                <span aria-hidden="true" className="flex h-1.5 gap-0.5">
-                  {interviews > 0 && <span className="size-1.5 rounded-full bg-primary" />}
-                  {others > 0 && <span className="size-1.5 rounded-full bg-faint" />}
+                {/* One 4px mark when something's on (E28-5), dark for an interview; the label says it in words. */}
+                <span aria-hidden="true" className="flex h-1">
+                  {list.length > 0 && <span className={cn("size-1 rounded-full", interviews > 0 ? "bg-primary" : "bg-faint")} />}
                 </span>
               </button>
             );
@@ -149,28 +148,38 @@ export function CalendarCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 border-t border-line pt-4">
+      {/* The week from the day picked (E28-5): a row per item, with a bar in its colour. */}
+      <div className="flex flex-col gap-2 border-t border-line pt-4">
+        <h3 id="agenda-heading" className="text-meta text-muted">
+          {picked === today ? `Next ${AGENDA_DAYS} days` : `${AGENDA_DAYS} days from ${shortDayLabel(picked)}`}
+        </h3>
         {entries.length === 0 ? (
           <p className="text-sm text-muted">
             {picked === today ? `Nothing in the next ${AGENDA_DAYS} days.` : `Nothing from ${shortDayLabel(picked)} to ${shortDayLabel(addDays(picked, AGENDA_DAYS - 1))}.`}
           </p>
         ) : (
-          entries.map(({ day, items: onDay }) => (
-            <div key={day} className="flex flex-col gap-1.5">
-              <h3 className="text-meta text-muted">{agendaDay(day, today)}</h3>
-              <ul className="-mx-2.5">
-                {onDay.map((item) => (
-                  <li key={item.id}>
-                    <ItemLink item={item} className="flex items-start gap-3 px-2.5 py-1.5 text-control">
-                      <span aria-hidden="true" className={cn("mt-[7px] size-1.5 shrink-0 rounded-full", itemDot(item))} />
-                      <span className="w-[84px] shrink-0 text-muted tabular-nums">{itemTime(item, timeZone)}</span>{" "}
-                      <span className={cn("min-w-0 break-words", item.kind === "interview" && "font-medium")}>{item.title}</span>
-                    </ItemLink>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))
+          <ul aria-labelledby="agenda-heading" className="flex flex-col gap-1.5">
+            {entries.flatMap(({ day, items: onDay }) =>
+              onDay.map((item) => (
+                <li key={`${day}-${item.id}`}>
+                  <ItemLink item={item} className="flex items-stretch gap-3 bg-hover px-3 py-2 text-control hover:bg-selected">
+                    <span aria-hidden="true" className="w-[3px] shrink-0 rounded-full" style={{ background: itemColor(item) }} />
+                    <span data-agenda-day className="w-[78px] shrink-0 pt-px text-meta text-muted">
+                      {agendaDay(day, today)}
+                    </span>{" "}
+                    {/* The spaces keep the link's name in words: "Today Interview · … 12:00–12:45". */}
+                    <span className="flex min-w-0 flex-col">
+                      <span className={cn("break-words", item.kind === "interview" && "font-medium")}>{item.title}</span>{" "}
+                      <span className="text-meta text-muted tabular-nums">
+                        {itemTime(item, timeZone)}
+                        {item.external && " · Google Calendar"}
+                      </span>
+                    </span>
+                  </ItemLink>
+                </li>
+              )),
+            )}
+          </ul>
         )}
       </div>
 
@@ -182,12 +191,11 @@ export function CalendarCard({
   );
 }
 
-/** "Today · Tue 20 Oct", "Tomorrow · Wed 21 Oct" or "Thu 22 Oct". */
+/** "Today", "Tomorrow" or "Thu 22 Oct". */
 function agendaDay(day: Day, today: Day) {
-  const label = shortDayLabel(day);
-  if (day === today) return `Today · ${label}`;
-  if (day === addDays(today, 1)) return `Tomorrow · ${label}`;
-  return label;
+  if (day === today) return "Today";
+  if (day === addDays(today, 1)) return "Tomorrow";
+  return shortDayLabel(day);
 }
 
 /** Why only interviews show, when Google Calendar isn't there. */

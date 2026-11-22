@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { useTrackSave } from "@/components/save-tracker";
 import { toast } from "@/components/toast";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClassName } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Toggle } from "@/components/ui/toggle";
 import { UPGRADE_GUIDE_URL, type Release } from "@/lib/releases";
@@ -104,6 +105,15 @@ export function AboutSection({ facts, usagePing, updates }: { facts: AboutFacts;
             </div>
           ))}
         </dl>
+      </Card>
+      <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-7 py-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium">Setup guide</span>
+          <span className="text-meta text-muted">Walks through the AI, job search, scoring, Gmail and Calendar, and your profile, one step at a time.</span>
+        </div>
+        <Link href="/welcome?step=start" className={buttonClassName("secondary", "sm")}>
+          Open the setup guide
+        </Link>
       </Card>
       <Card padding="none" className="px-7 py-4">
         <Toggle

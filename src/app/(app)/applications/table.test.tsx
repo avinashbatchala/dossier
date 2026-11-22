@@ -4,34 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeStatus } from "@/components/change-status";
 import type { ApplicationRow } from "@/lib/applications-data";
-import { DEFAULT_SORT, type ListParams } from "@/lib/applications-list";
+import { DEFAULT_SORT, type ListParams, sidebarStatuses } from "@/lib/applications-list";
 
 import { ApplicationsScreen } from "./applications-screen";
+import { applicationRow } from "@/test/application-row";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
-vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })) }));
+vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })), reorderBoard: vi.fn(async () => ({ ok: true, data: null })) }));
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 vi.mock("@/components/change-status", () => ({ changeStatus: vi.fn(async () => true) }));
 
-const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => ({
-  id,
-  company: "Ledgerly",
-  role: "Senior Product Designer",
-  location: "Amsterdam",
-  mode: "Hybrid",
-  status: "SENT",
-  archived: false,
-  deadline: null,
-  match: { hit: 5, total: 7 },
-  sent: "20 Sep",
-  updated: "2 days ago",
-  updatedAt: Date.UTC(2026, 8, 26),
-  ...extra,
-});
+const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => applicationRow(id, extra);
 const rows = [row("kestrel", { company: "Kestrel Maps", role: "Product Designer, Mobile", match: null }), row("draft", { status: "DRAFT", sent: null, location: "" })];
-const params: ListParams = { view: "table", filter: "all", q: "", sort: DEFAULT_SORT, archived: false };
+const params: ListParams = { view: "list", status: null, q: "", sort: DEFAULT_SORT, archived: false };
 const open = (extra: Partial<ListParams> = {}) =>
-  render(<ApplicationsScreen params={{ ...params, ...extra }} rows={rows} counts={{ all: 2, active: 2, closed: 0 }} summary="2 applications" empty={false} archivedCount={0} />);
+  render(<ApplicationsScreen params={{ ...params, ...extra }} rows={rows} tabs={{ all: 2, statuses: sidebarStatuses(new Map()) }} summary="2 applications" empty={false} archivedCount={0} />);
 
 beforeEach(() => {
   router.push.mockClear();
@@ -75,13 +62,13 @@ describe("the table (E9-3)", () => {
     const user = userEvent.setup();
     const { unmount } = open();
     await user.click(screen.getByRole("button", { name: "Match" }));
-    expect(router.push).toHaveBeenLastCalledWith("/applications?view=table&sort=match", { scroll: false });
+    expect(router.push).toHaveBeenLastCalledWith("/applications?view=list&sort=match", { scroll: false });
     unmount();
 
     open({ sort: { key: "match", reversed: false } });
     expect(screen.getByRole("columnheader", { name: /Match/ })).toHaveAttribute("aria-sort", "descending");
     await user.click(screen.getByRole("button", { name: "Match" }));
-    expect(router.push).toHaveBeenLastCalledWith("/applications?view=table&sort=-match", { scroll: false });
+    expect(router.push).toHaveBeenLastCalledWith("/applications?view=list&sort=-match", { scroll: false });
   });
 
   it("names A to Z ascending", () => {

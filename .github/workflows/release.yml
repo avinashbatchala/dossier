@@ -1,8 +1,12 @@
 name: Release
 
-# A version tag (v1.0.0) releases the image CI built for that commit: it's
+# A version tag (v1.0.0) releases the image that image.yml built for that commit: it's
 # tagged with the version and "latest" on GHCR, and a GitHub release is made
-# with the tag's message as its notes.
+# with the tag's message as its notes. The desktop app's downloads for Linux
+# and Windows are built from the same commit and attached to it (desktop.yml).
+# The release stays a draft until they are: the update notice reads the latest
+# release, which skips drafts, so it never points anyone at a release without
+# them.
 
 on:
   push:
@@ -33,7 +37,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # CI builds it once the checks pass on main, which takes a while when
+      # image.yml builds it once the checks pass on main, which takes a while when
       # the tag is pushed together with its commit.
       - name: Wait for the commit's image
         run: |
@@ -41,13 +45,14 @@ jobs:
             if docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" > /dev/null 2>&1; then exit 0; fi
             sleep 60
           done
-          echo "::error::There's no image for $GITHUB_SHA on GHCR after 80 minutes. Check this commit's CI run, then re-run this workflow."
+          echo "::error::There's no image for $GITHUB_SHA on GHCR after 80 minutes. Check this commit's Image run, then re-run this workflow."
           exit 1
 
+      # Both platforms (amd64 and arm64): the commit's tag is one for both.
       - name: Tag it with the version
         run: docker buildx imagetools create --tag "$IMAGE:$GITHUB_REF_NAME" --tag "$IMAGE:latest" "$IMAGE:$GITHUB_SHA"
 
-      - name: Create the GitHub release
+      - name: Create the GitHub release, as a draft
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -55,4 +60,13 @@ jobs:
           object=$(gh api "repos/$GH_REPO/git/ref/tags/$GITHUB_REF_NAME" --jq 'select(.object.type == "tag") | .object.sha')
           notes=""
           if [ -n "$object" ]; then notes=$(gh api "repos/$GH_REPO/git/tags/$object" --jq .message); fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Dossier ${GITHUB_REF_NAME#v}" --notes "${notes:-Dossier ${GITHUB_REF_NAME#v}}"
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Dossier ${GITHUB_REF_NAME#v}" --notes "${notes:-Dossier ${GITHUB_REF_NAME#v}}"
+
+  # The downloads, and then the release is published (desktop.yml). If this
+  # fails, start Desktop app by hand for the tag: no new tag needed.
+  desktop:
+    name: Desktop app
+    needs: release
+    uses: ./.github/workflows/desktop.yml
+    with:
+      tag: ${{ github.ref_name }}

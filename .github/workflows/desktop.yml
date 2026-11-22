@@ -1,0 +1,119 @@
+name: Desktop app
+
+# Builds the desktop app's downloads from a release's tagged commit, attaches
+# them to that release with SHA256SUMS.txt, and publishes it. release.yml calls
+# it for each version tag, once the image is tagged and the release made as a
+# draft. When it fails there, start it again by hand for that tag (Actions →
+# Desktop app → Run workflow), so a release can be finished without a new tag.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The release's tag, e.g. v1.12.0
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release's tag, e.g. v1.12.0
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    name: Desktop app
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag }}
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
+      BUILDER: electronuserland/builder:wine@sha256:f3a8d451994c881d0972e7b1846ee4d4fdc15eb41fc6b1f350b38cbf99ca90fe
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - name: The app's version is the release's
+        run: |
+          version="${TAG#v}"
+          for file in package.json desktop/package.json; do
+            actual=$(node -p "require('./$file').version")
+            [ "$actual" = "$version" ] || { echo "::error file=$file::$file says $actual, not $version."; exit 1; }
+          done
+
+      # Dossier itself, built as for the image: what "On this computer" runs.
+      - run: yarn install --immutable
+      - run: yarn generate
+      - run: yarn build
+      - name: The database setup, as one file
+        run: |
+          node_modules/.bin/esbuild prisma/seed.ts --bundle --platform=node --format=esm --target=node24 \
+            --external:pg-native --external:better-sqlite3 --outfile=.next/desktop-seed.mjs \
+            --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+      - name: Hand it to the desktop app
+        run: |
+          mkdir -p desktop/build-input
+          cp -R .next/standalone desktop/build-input/standalone
+          # Next.js copies .env files into its standalone folder.
+          rm -f desktop/build-input/standalone/.env*
+          cp -R .next/static desktop/build-input/static
+          cp .next/desktop-seed.mjs desktop/build-input/desktop-seed.mjs
+
+      - run: yarn install --immutable
+        working-directory: desktop
+      - run: yarn build
+        working-directory: desktop
+
+      # Both are packed in electron-builder's own image, pinned: the tools for the
+      # .deb, and Wine for the Windows installer, are in it.
+      - name: Linux (AppImage and .deb)
+        run: |
+          (cd desktop && yarn prepare-server --next build-input --seed build-input/desktop-seed.mjs --platform linux)
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo/desktop "$BUILDER" \
+            sh -c 'mkdir -p /tmp/home && node node_modules/electron-builder/cli.js --linux --x64 --publish never'
+
+      # electron-builder runs the 32-bit installer under Wine to make its
+      # uninstaller. Docker's default seccomp profile on GitHub's runners refuses
+      # the socket call that needs ("wine: socket : Function not implemented"),
+      # so this container runs without it.
+      - name: Windows (installer)
+        run: |
+          (cd desktop && yarn prepare-server --next build-input --seed build-input/desktop-seed.mjs --platform win32)
+          docker run --rm --security-opt seccomp=unconfined -u "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo/desktop "$BUILDER" \
+            sh -c 'mkdir -p /tmp/home && node node_modules/electron-builder/cli.js --win --x64 --publish never'
+
+      - name: Checksums
+        working-directory: desktop/release
+        run: |
+          ls -l Dossier-*
+          sha256sum Dossier-*.AppImage Dossier-*.deb Dossier-*.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attach them, and publish the release
+        working-directory: desktop/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "$TAG" Dossier-*.AppImage Dossier-*.deb Dossier-*.exe SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --latest
+
+      - name: Say what's left when it fails
+        if: failure()
+        run: echo "::error::The desktop app's downloads failed, so the release $TAG is still a draft and the update notice doesn't offer it yet. The image is released. Fix the build and start this workflow again for $TAG (Actions → Desktop app → Run workflow), or publish the draft from the Releases page without downloads."

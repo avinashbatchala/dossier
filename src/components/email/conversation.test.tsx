@@ -2,13 +2,15 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { toast } from "@/components/toast";
+import { toast, toastResult } from "@/components/toast";
 import {
   applySuggestedStatus,
   confirmInterview,
+  linkEmail,
   loadFreeSlots,
   markHandled,
   rereadEmail,
+  saveReplyDraft,
   sendReplyEmail,
   startDraftingReply,
 } from "@/lib/google/actions";
@@ -19,6 +21,7 @@ import { Conversation } from "./conversation";
 vi.mock("@/lib/google/actions", () => ({
   applySuggestedStatus: vi.fn(async () => ({ ok: true, data: { eventId: "ev" }, toast: "An interview! You've got this." })),
   confirmInterview: vi.fn(async () => ({ ok: true, data: { eventLink: null, eventId: null }, toast: "Interview added." })),
+  linkEmail: vi.fn(async () => ({ ok: true, data: null })),
   loadFreeSlots: vi.fn(async () => ({ ok: true, data: { slots: [{ start: "2026-10-20T08:00:00.000Z", label: "Tue 20 Oct, 10:00–10:45" }, { start: "2026-10-21T12:00:00.000Z", label: "Wed 21 Oct, 14:00–14:45" }], timeZone: "Europe/Berlin", fromCalendar: true } })),
   markHandled: vi.fn(async () => ({ ok: true, data: null })),
   rereadEmail: vi.fn(async () => ({ ok: true, data: null })),
@@ -28,7 +31,7 @@ vi.mock("@/lib/google/actions", () => ({
 }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
+vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: vi.fn((result: unknown) => result) }));
 vi.mock("@/components/change-status", () => ({ toastWithUndo: vi.fn() }));
 const jobs = vi.hoisted(() => ({ listener: undefined as ((job: unknown) => void) | undefined }));
 vi.mock("@/hooks/use-job", () => ({
@@ -90,14 +93,25 @@ describe("Conversation (E15-3, E15-4)", () => {
     expect(screen.getByRole("textbox", { name: "Your answer" })).toHaveValue("Hi Anna,\n\nTuesday works. My notice is […].");
     expect(screen.getByText("Start date?")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Review and send" }));
+    await user.click(screen.getByRole("button", { name: "Send reply" }));
     expect(toast).toHaveBeenCalledWith("Fill in the parts marked […] first.");
     const answer = screen.getByRole("textbox", { name: "Your answer" });
     await user.clear(answer);
     await user.type(answer, "Hi Anna, Tuesday works.");
-    await user.click(screen.getByRole("button", { name: "Review and send" }));
+    await user.click(screen.getByRole("button", { name: "Send reply" }));
     await user.click(screen.getByRole("button", { name: "Send now" }));
     expect(sendReplyEmail).toHaveBeenCalledWith({ emailId: "e1", body: "Hi Anna, Tuesday works." });
+  });
+
+  it("says so when the answer couldn't be saved", async () => {
+    const user = userEvent.setup();
+    const failed = { ok: false as const, error: "That email is no longer in Dossier." };
+    vi.mocked(saveReplyDraft).mockResolvedValueOnce(failed);
+    render(<Conversation emails={[email({ replyDraft: "Hi Anna," })]} aiReady timeZone="Europe/Berlin" />);
+    await user.type(screen.getByRole("textbox", { name: "Your answer" }), " Tuesday works.");
+    await user.tab();
+    expect(saveReplyDraft).toHaveBeenCalledWith({ emailId: "e1", body: "Hi Anna, Tuesday works." });
+    await waitFor(() => expect(toastResult).toHaveBeenCalledWith(failed));
   });
 
   it("offers to add an agreed interview", async () => {
@@ -128,5 +142,28 @@ describe("Conversation (E15-3, E15-4)", () => {
     expect(first).toHaveTextContent("You");
     await user.click(first);
     expect(screen.getByText("I'm applying.")).toBeInTheDocument();
+  });
+
+  it("moves a reply linked to the wrong application, or unlinks it (public #134)", async () => {
+    const user = userEvent.setup();
+    const sent = email({ id: "out", direction: "OUTGOING", body: "I'm applying.", summary: "", kind: null, handled: true, sentAt: new Date("2026-10-12T09:00:00Z") });
+    const { rerender } = render(<Conversation emails={[sent, email()]} moveTo={[{ id: "lg", label: "Ledgerly, Designer" }]} aiReady={false} />);
+    // Only replies can move; the user's own mail moves with its thread.
+    expect(screen.getAllByText("Not about this application?")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Move" })).toBeDisabled();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Move to application" }), "Ledgerly, Designer");
+    await user.click(screen.getByRole("button", { name: "Move" }));
+    expect(linkEmail).toHaveBeenCalledWith({ emailId: "e1", applicationId: "lg" });
+    expect(router.refresh).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Unlink" }));
+    expect(linkEmail).toHaveBeenLastCalledWith({ emailId: "e1", applicationId: null });
+
+    // With no other application, only Unlink; without the list, nothing.
+    rerender(<Conversation emails={[email()]} moveTo={[]} aiReady={false} />);
+    expect(screen.queryByRole("combobox", { name: "Move to application" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlink" })).toBeInTheDocument();
+    rerender(<Conversation emails={[email()]} aiReady={false} />);
+    expect(screen.queryByText("Not about this application?")).not.toBeInTheDocument();
   });
 });

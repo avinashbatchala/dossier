@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { controlBaseClassName } from "@/components/ui/field";
+import { SelectControl } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 
 const MONTHS = Array.from({ length: 12 }, (_, index) =>
@@ -48,13 +49,14 @@ export function MonthYearField({
     <fieldset className={cn("flex min-w-0 flex-col gap-[7px]", className)} disabled={disabled}>
       <legend className="mb-[7px] text-label text-muted">{label}</legend>
       <div className="flex gap-2">
-        <select
+        <SelectControl
           aria-label={`${label} month`}
           value={value.month ?? ""}
           onChange={(event) =>
             onChange({ ...value, month: event.target.value ? Number(event.target.value) : null })
           }
-          className={cn(controlBaseClassName, "min-w-0 flex-1 cursor-pointer px-2.5 py-2.5")}
+          wrapperClassName="flex-1"
+          className={cn(controlBaseClassName, "w-full min-w-0 py-2.5")}
         >
           <option value="">Month</option>
           {MONTHS.map((name, index) => (
@@ -62,7 +64,7 @@ export function MonthYearField({
               {name}
             </option>
           ))}
-        </select>
+        </SelectControl>
         <input
           aria-label={`${label} year`}
           inputMode="numeric"

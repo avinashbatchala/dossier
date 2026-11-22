@@ -33,6 +33,15 @@ describe("UpdateNotice", () => {
     expect(screen.getByRole("link", { name: "How to update (opens in a new tab)" })).toHaveAttribute("href", "https://github.com/AienTech/dossier/wiki/Upgrading");
   });
 
+  it("offers the download in the desktop app on this computer, and no server guide (#326)", () => {
+    render(<UpdateNotice release={release} currentVersion="1.5.0" desktop />);
+    const notice = screen.getByRole("region", { name: "Dossier 1.6.0 is out" });
+    expect(notice).toHaveTextContent("You have 1.5.0. Download the new one and install it over this one: your data stays as it is.");
+    expect(screen.getByRole("link", { name: "Download 1.6.0 (opens in your browser)" })).toHaveAttribute("href", release.url);
+    expect(screen.queryByRole("link", { name: /How to update/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeVisible();
+  });
+
   it("goes with Not now, until the next release, and focus moves on", async () => {
     const user = userEvent.setup();
     renderNotice();

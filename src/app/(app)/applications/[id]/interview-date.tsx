@@ -83,25 +83,35 @@ export function InterviewDate({
   );
 }
 
-/** The popover's form; mounted on every open, so it starts from what's saved. */
-function InterviewForm({
+/**
+ * The popover's form; mounted on every open, so it starts from what's saved.
+ * Also asked on the board after a card is dropped on Interview (E29-5),
+ * with "Add to Google Calendar" when Google's calendar is in use (LB3).
+ */
+export function InterviewForm({
   initial,
   asking,
+  calendar = false,
+  skipLabel = "Skip",
   onSave,
   onCancel,
 }: {
   initial: Date | null;
   asking: boolean;
-  onSave: (at: Date | null) => void;
+  /** Offer "Add to Google Calendar", ticked: interviews go there unless it's unticked. */
+  calendar?: boolean;
+  skipLabel?: string;
+  onSave: (at: Date | null, options: { calendar: boolean }) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(() => (initial ? localInputValue(initial) : ""));
+  const [inCalendar, setInCalendar] = useState(true);
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
-        if (value) onSave(new Date(value));
+        if (value) onSave(new Date(value), { calendar: inCalendar });
       }}
     >
       <div className="flex flex-col gap-1">
@@ -109,14 +119,20 @@ function InterviewForm({
         <p className="text-meta text-muted">{asking ? "Optional. " : ""}It shows on your dashboard, flagged the day before.</p>
       </div>
       <Input type="datetime-local" label="Date and time" value={value} onChange={(event) => setValue(event.target.value)} required />
+      {calendar && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={inCalendar} onChange={(event) => setInCalendar(event.target.checked)} className="size-4 accent-primary" />
+          Add to Google Calendar
+        </label>
+      )}
       <div className="flex items-center gap-2">
         {initial && (
-          <Button variant="danger-text" size="sm" onClick={() => onSave(null)}>
+          <Button variant="danger-text" size="sm" onClick={() => onSave(null, { calendar: true })}>
             Remove
           </Button>
         )}
         <Button variant="secondary" size="sm" className="ml-auto" onClick={onCancel}>
-          {asking ? "Skip" : "Cancel"}
+          {asking ? skipLabel : "Cancel"}
         </Button>
         <Button type="submit" size="sm">
           Save

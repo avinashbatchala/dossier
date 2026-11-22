@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'" />
+    <title>Dossier</title>
+    <link rel="stylesheet" href="start.css" />
+    <script src="start.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <img src="../icon.png" alt="" class="mark" width="44" height="44" />
+
+      <section id="choose" hidden>
+        <h1>Where should Dossier keep your data?</h1>
+        <p class="lead">You can change this later, and changing it deletes nothing.</p>
+        <div class="options">
+          <button type="button" class="option" id="pick-local" disabled aria-describedby="local-note">
+            <span class="option-title">On this computer</span>
+            <span class="option-text">Everything stays in one file on this computer, with no server or Docker. Scheduled work only runs while the app is open.</span>
+            <span id="local-note" class="option-note">Not ready yet</span>
+          </button>
+          <button type="button" class="option" id="pick-server">
+            <span class="option-title">On my server</span>
+            <span class="option-text">Connect to your own Dossier. Your data stays on your server, and this app is its window.</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="server" hidden>
+        <h1>Connect to your server</h1>
+        <p class="lead">The address you open Dossier at in a browser.</p>
+        <form id="server-form" novalidate>
+          <label for="address">Your server's address</label>
+          <input id="address" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://dossier.example.com" aria-describedby="server-message" />
+          <p id="server-message" class="message" role="alert"></p>
+          <div class="actions">
+            <button type="submit" class="primary" id="connect">Connect</button>
+            <button type="button" class="text" id="back">Back</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="starting" hidden>
+        <h1>Starting Dossier…</h1>
+        <p class="lead" role="status">This takes a moment, and longer after an update.</p>
+      </section>
+
+      <section id="local-problem" hidden>
+        <h1 id="problem-title">Dossier couldn't start</h1>
+        <p class="lead" id="problem-text" role="alert"></p>
+        <p class="log" id="problem-log"></p>
+        <div class="actions">
+          <button type="button" class="primary" id="problem-retry">Try again</button>
+          <button type="button" class="primary" id="problem-download" hidden>Download the latest version</button>
+          <button type="button" class="text" id="problem-choose">Where to keep your data</button>
+        </div>
+      </section>
+
+      <section id="unreachable" hidden>
+        <h1 id="unreachable-title">Can't reach your server</h1>
+        <p class="lead" id="unreachable-text"></p>
+        <p id="retry-message" class="message" role="alert"></p>
+        <div class="actions">
+          <button type="button" class="primary" id="retry">Try again</button>
+          <button type="button" class="text" id="change">Change server</button>
+        </div>
+      </section>
+    </main>
+    <p class="version" id="version"></p>
+  </body>
+</html>

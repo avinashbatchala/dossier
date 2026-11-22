@@ -76,38 +76,11 @@ describe("dashboardFigures (E9-6)", () => {
     expect(figures.funnel.map((step) => step.conversion)).toEqual([null, null, null, null, null]);
   });
 
-  it("counts archived applications, but doesn't list them as worth a look", () => {
+  it("counts archived applications, but they never need you", () => {
     const figures = dashboardFigures([app("offer", { status: "OFFER", furthestStage: "OFFER", archived: true })], now);
     expect(figures.byStatus.OFFER).toBe(1);
     expect(figures.funnel[3].count).toBe(1);
-    expect(figures.attention).toEqual([]);
-  });
-
-  it("orders what's worth a look: offers, drafts by deadline, quiet ones, interviews", () => {
-    const figures = dashboardFigures(
-      [
-        app("interview", { status: "INTERVIEW", furthestStage: "INTERVIEW" }),
-        app("quiet-9", { lastStatusChange: daysAgo(9) }),
-        app("quiet-14", { status: "SCREENING", furthestStage: "SCREENING", lastStatusChange: daysAgo(14) }),
-        app("recent", { lastStatusChange: daysAgo(3) }),
-        app("no-deadline", { status: "DRAFT", furthestStage: null }),
-        app("late", { status: "DRAFT", furthestStage: null, deadline: new Date("2026-10-15T00:00:00Z") }),
-        app("soon", { status: "DRAFT", furthestStage: null, deadline: new Date("2026-10-03T00:00:00Z") }),
-        app("past", { status: "DRAFT", furthestStage: null, deadline: new Date("2026-09-20T00:00:00Z") }),
-        app("offer", { status: "OFFER", furthestStage: "OFFER" }),
-      ],
-      now,
-    );
-    expect(figures.attention.map(({ id, reason, action }) => [id, reason, action])).toEqual([
-      ["offer", "An offer is waiting on your decision.", "Review"],
-      ["past", "Still a draft, and the deadline was 20 Sep.", "Finish"],
-      ["soon", "Still a draft, and applications close 3 Oct.", "Finish"],
-      ["late", "Still a draft, and applications close 15 Oct.", "Finish"],
-      ["no-deadline", "Still a draft. Ready when you are.", "Finish"],
-      ["quiet-14", "No news for 14 days. A short, friendly follow-up could help.", "Open"],
-      ["quiet-9", "No news for 9 days. A short, friendly follow-up could help.", "Open"],
-      ["interview", "You're interviewing. Add the next interview's date and it shows up here.", "Open"],
-    ]);
+    expect(figures.needsYou).toEqual([]);
   });
 });
 
@@ -128,9 +101,9 @@ describe("the period (E9-8)", () => {
     expect(dashboardFigures(applications, now).byStatus.DRAFT).toBe(1);
   });
 
-  it("keeps what's worth a look about now, whatever the period", () => {
+  it("keeps Needs you about now, whatever the period", () => {
     const quiet = [app("quiet", { createdAt: daysAgo(100), lastStatusChange: daysAgo(20), sentAt: daysAgo(20) })];
-    expect(dashboardFigures(quiet, now, { period: "30d" }).attention.map((item) => item.id)).toEqual(["quiet"]);
+    expect(dashboardFigures(quiet, now, { period: "30d" }).needsYou.map((item) => item.id)).toEqual(["quiet"]);
   });
 
   it("reads the period from the address", () => {
@@ -178,43 +151,53 @@ describe("the follow-up threshold (E9-9)", () => {
   const applications = [app("four", { lastStatusChange: daysAgo(4) }), app("eight", { lastStatusChange: daysAgo(8) })];
 
   it("nudges after 7 days by default", () => {
-    expect(dashboardFigures(applications, now).attention.map((item) => item.id)).toEqual(["eight"]);
+    expect(dashboardFigures(applications, now).needsYou.map((item) => item.id)).toEqual(["eight"]);
   });
 
   it("follows the setting", () => {
-    expect(dashboardFigures(applications, now, { quietDays: 3 }).attention.map((item) => item.id)).toEqual(["eight", "four"]);
-    expect(dashboardFigures(applications, now, { quietDays: 10 }).attention).toEqual([]);
+    expect(dashboardFigures(applications, now, { quietDays: 3 }).needsYou.map((item) => item.id)).toEqual(["eight", "four"]);
+    expect(dashboardFigures(applications, now, { quietDays: 10 }).needsYou).toEqual([]);
   });
 });
 
-describe("interviews in Worth a look (E9-9)", () => {
+describe("Needs you (E28-4)", () => {
   // Monday 28 September, 10:00 in Amsterdam.
   const monday = new Date("2026-09-28T08:00:00Z");
+  const options = { timeZone: "Europe/Amsterdam" };
   const interview = (id: string, at: string | null) =>
-    app(id, { status: "INTERVIEW", furthestStage: "INTERVIEW", nextInterviewAt: at ? new Date(at) : null });
+    app(id, { status: "INTERVIEW", furthestStage: "INTERVIEW", nextInterviewAt: at ? new Date(at) : null, updatedAt: new Date(monday.getTime() - 60_000) });
+  const draft = (id: string, deadline: string | null) => app(id, { status: "DRAFT", furthestStage: null, deadline: deadline ? new Date(deadline) : null });
+  const rows = (items: ReturnType<typeof dashboardFigures>["needsYou"]) => items.map(({ id, reason, due, soon, action }) => [id, reason, due, soon, action]);
 
-  it("lists interviews by date, flags today and tomorrow, and puts those first", () => {
+  it("puts what's due this week first, soonest first, then what has no date", () => {
     const figures = dashboardFigures(
       [
         interview("undated", null),
-        interview("next-week", "2026-10-05T12:00:00Z"),
+        interview("next-month", "2026-10-28T12:00:00Z"),
         interview("tomorrow", "2026-09-29T07:30:00Z"),
         interview("past", "2026-09-25T12:00:00Z"),
-        interview("earlier", "2026-09-28T06:00:00Z"),
-        interview("today", "2026-09-28T13:00:00Z"),
-        app("offer", { status: "OFFER", furthestStage: "OFFER" }),
+        interview("thursday", "2026-10-01T12:00:00Z"),
+        draft("no-deadline", null),
+        draft("far", "2026-10-20T00:00:00Z"),
+        draft("friday", "2026-10-02T00:00:00Z"),
+        draft("missed", "2026-09-26T00:00:00Z"),
+        app("quiet", { lastStatusChange: new Date("2026-09-14T08:00:00Z"), sentAt: new Date("2026-09-14T08:00:00Z") }),
+        app("offer", { status: "OFFER", furthestStage: "OFFER", updatedAt: monday }),
       ],
       monday,
-      { timeZone: "Europe/Amsterdam" },
+      options,
     );
-    expect(figures.attention.map(({ id, reason, soon }) => [id, reason, Boolean(soon)])).toEqual([
-      ["today", "Interview today at 15:00. Worth re-reading your tailored letter first.", true],
-      ["tomorrow", "Interview tomorrow at 09:30. Worth re-reading your tailored letter first.", true],
-      ["offer", "An offer is waiting on your decision.", false],
-      ["next-week", "Interview on Mon 5 Oct, 14:00. Worth re-reading your tailored letter first.", false],
-      ["earlier", "Your interview was earlier today. How did it go? Move it on, or add the next round's date.", false],
-      ["past", "Your interview was on Fri 25 Sep. How did it go? Move it on, or add the next round's date.", false],
-      ["undated", "You're interviewing. Add the next interview's date and it shows up here.", false],
+    expect(rows(figures.needsYou)).toEqual([
+      ["quiet", "Sent Mon 14 Sep, no reply.", "quiet for 14 days", true, "Follow up"],
+      ["past", "Your interview was on Fri 25 Sep. How did it go?", null, true, "Update"],
+      ["missed", "Still a draft.", "apply by Sat 26 Sep · passed", true, "Finish draft"],
+      ["tomorrow", "Interview.", "tomorrow, 09:30", true, "Prepare"],
+      ["thursday", "Interview.", "Thu 1 Oct, 14:00", true, "Prepare"],
+      ["friday", "Still a draft.", "apply by Fri 2 Oct · 4 days", true, "Finish draft"],
+      // No date: offers, then interviews, then drafts.
+      ["offer", "An offer is waiting on your decision.", null, false, "Review offer"],
+      ["undated", "You're interviewing. Add the next interview's date.", null, false, "Add the date"],
+      ["no-deadline", "Still a draft. Ready when you are.", null, false, "Finish draft"],
     ]);
   });
 
@@ -222,33 +205,29 @@ describe("interviews in Worth a look (E9-9)", () => {
     // 23:30 in Amsterdam, 17:30 in New York; the interview is at 01:30 or 19:30.
     const evening = new Date("2026-09-28T21:30:00Z");
     const applications = [interview("late", "2026-09-28T23:30:00Z")];
-    expect(dashboardFigures(applications, evening, { timeZone: "Europe/Amsterdam" }).attention[0].reason).toMatch(/^Interview tomorrow at 01:30\./);
-    expect(dashboardFigures(applications, evening, { timeZone: "America/New_York" }).attention[0].reason).toMatch(/^Interview today at 19:30\./);
+    expect(dashboardFigures(applications, evening, { timeZone: "Europe/Amsterdam" }).needsYou[0].due).toBe("tomorrow, 01:30");
+    expect(dashboardFigures(applications, evening, { timeZone: "America/New_York" }).needsYou[0].due).toBe("today, 19:30");
   });
 
-  it("ignores the date once the application has moved on", () => {
+  it("ignores the interview date once the application has moved on", () => {
     const moved = app("offer", { status: "OFFER", furthestStage: "OFFER", nextInterviewAt: new Date("2026-09-29T07:30:00Z") });
-    expect(dashboardFigures([moved], monday).attention).toEqual([
-      expect.objectContaining({ id: "offer", reason: "An offer is waiting on your decision." }),
-    ]);
+    expect(rows(dashboardFigures([moved], monday).needsYou)).toEqual([["offer", "An offer is waiting on your decision.", null, false, "Review offer"]]);
   });
-});
 
-describe("replies in Worth a look (E15-3)", () => {
-  it("puts replies waiting for an answer first, in place of the application's other item", () => {
+  it("puts replies waiting for an answer at the top, in place of the application's other item (E15-3)", () => {
     const replies = new Map([
       ["quiet", { count: 1, summary: "Invites you to a call." }],
       ["offer", { count: 2, summary: "Asks about your start date." }],
     ]);
-    const { attention } = dashboardFigures(
+    const { needsYou } = dashboardFigures(
       [app("quiet", { lastStatusChange: daysAgo(10), sentAt: daysAgo(10) }), app("offer", { status: "OFFER", furthestStage: "OFFER" }), app("other", { status: "OFFER", furthestStage: "OFFER" })],
       now,
       { replies },
     );
-    expect(attention.map((item) => [item.id, item.action, item.tab ?? null, item.reason])).toEqual([
-      ["quiet", "Answer", "conversation", "A reply is waiting: Invites you to a call."],
-      ["offer", "Answer", "conversation", "2 replies are waiting. Asks about your start date."],
-      ["other", "Review", null, "An offer is waiting on your decision."],
+    expect(needsYou.map((item) => [item.id, item.action, item.tab ?? null, item.reason, item.soon])).toEqual([
+      ["quiet", "Answer", "conversation", "A reply is waiting: Invites you to a call.", true],
+      ["offer", "Answer", "conversation", "2 replies are waiting. Asks about your start date.", true],
+      ["other", "Review offer", null, "An offer is waiting on your decision.", false],
     ]);
   });
 });

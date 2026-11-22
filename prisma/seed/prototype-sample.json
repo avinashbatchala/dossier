@@ -93,6 +93,17 @@
         "notes": ""
       }
     ],
+    "certifications": [
+      {
+        "id": "c1",
+        "name": "Certified Accessibility Specialist",
+        "issuer": "Inclusive Design Institute",
+        "obtained": "Jun 2022",
+        "expires": "Jun 2028",
+        "credentialId": "IDI-20481",
+        "link": "https://verify.example.org/IDI-20481"
+      }
+    ],
     "publications": [
       {
         "id": "u1",

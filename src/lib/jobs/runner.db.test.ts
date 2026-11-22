@@ -15,6 +15,7 @@ vi.mock("@/lib/prisma", async () => {
 const ai = vi.hoisted(() => ({ provider: "LOCAL" }));
 vi.mock("@/lib/ai/config", () => ({ loadAiConfig: async () => ({ provider: ai.provider }) }));
 vi.spyOn(console, "error").mockImplementation(() => {});
+vi.spyOn(console, "warn").mockImplementation(() => {});
 
 const prisma = () => db.client!;
 
@@ -48,7 +49,7 @@ const gated = defineJob({
     });
     await step("Greeting");
     if (fail === "error") throw new Error("database exploded: secret details");
-    if (fail === "ai") throw AiError.of("unreachable");
+    if (fail === "ai") throw AiError.of("unreachable", "ECONNREFUSED");
     return { greeting: `Hello, ${name}` };
   },
 });
@@ -83,6 +84,42 @@ describe("the job runner", () => {
     expect(row.finishedAt).not.toBeNull();
   });
 
+  it("saves a result whose text holds a NUL character, which PostgreSQL's jsonb refuses", async () => {
+    const nul = defineJob({
+      type: "test-nul",
+      input: z.object({}),
+      result: z.object({
+        text: z.string(),
+        list: z.array(z.string()),
+        nested: z.object({ deep: z.array(z.object({ note: z.string().nullable(), count: z.number() })) }),
+      }),
+      run: async () => ({
+        text: "a\u0000b",
+        list: ["\u0000", "c\\u0000d"],
+        nested: { deep: [{ note: "x\u0000", count: 2 }, { note: null, count: 0 }] },
+      }),
+    });
+    const id = await startJob(nul, {});
+    await eventually(async () => (await status(id)).toBe("DONE"));
+    // A literal backslash-u-0-0-0-0 in the text is not a NUL and stays; null and numbers are untouched.
+    expect((await getJob(id))?.result).toEqual({
+      text: "ab",
+      list: ["", "c\\u0000d"],
+      nested: { deep: [{ note: "x", count: 2 }, { note: null, count: 0 }] },
+    });
+  });
+
+  it("checks a result's schema on the text without its NUL characters", async () => {
+    const lone = defineJob({
+      type: "test-nul-lone",
+      input: z.object({}),
+      result: z.object({ text: z.string().min(1) }),
+      run: async () => ({ text: "\u0000" }),
+    });
+    const id = await startJob(lone, {});
+    await eventually(async () => (await status(id)).toBe("FAILED"));
+  });
+
   it("keeps AI errors' plain words and hides everything else", async () => {
     const ai = await startJob(gated, { name: "Ai", fail: "ai" });
     const other = await startJob(gated, { name: "Other", fail: "error" });
@@ -92,6 +129,8 @@ describe("the job runner", () => {
     await eventually(async () => (await status(other)).toBe("FAILED"));
     expect((await getJob(ai))?.error).toBe("Couldn't reach the server. Check the address and that it's running.");
     expect((await getJob(other))?.error).toBe("Something went wrong while working on this. Try again.");
+     // The kind and the server's status for the log, which the page leaves out (public issue 128).
+    expect(console.warn).toHaveBeenCalledWith(`[job ${ai}] test-gated failed: AI unreachable (ECONNREFUSED)`);
   });
 
   it("retries a failed job as the same job, without a duplicate", async () => {

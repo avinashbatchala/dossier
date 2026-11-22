@@ -6,64 +6,96 @@ import { z } from "zod";
 import { AgentCandidateStatus } from "@/generated/prisma/enums";
 import { agentDraftJob, approveCandidate, dismissCandidate, draftJobKey, restoreCandidate } from "@/lib/agent/draft";
 import { AGENT_JOB_KEY, agentScanJob } from "@/lib/agent/jobs";
-import { agentQueryReady, agentSetupProblem } from "@/lib/agent/run";
+import { agentSetupProblem, agentSlots } from "@/lib/agent/run";
 import { runLimitProblem } from "@/lib/agent/runs";
+import { agentSearchInputSchema, agentSearchSetupProblem } from "@/lib/agent/search";
+import { deleteAgentSearch, listAgentSearches, moveAgentSearch, saveAgentSearch, setAgentSearchEnabled } from "@/lib/agent/searches";
 import { action, ActionError } from "@/lib/action";
-import { safeLink, searchQuerySchema } from "@/lib/job-search/search";
+import { safeLink } from "@/lib/job-search/search";
 import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
+import { lastKnownTimeZone } from "@/lib/time-zone";
+import { COVERS } from "@/lib/posting-coverage";
 
 // The Agent screen's actions (E16). Nothing here ever sends anything:
 // approving only makes a draft a normal Draft application.
 
 /**
- * Settings → Job agent (E16-7): each change saves at once. Turning the agent
- * on needs a search with keywords and a country.
+ * Shared settings save at once. Search edits use the collection actions below.
  */
 export const saveAgentSettings = action(
   z.object({
     enabled: z.boolean().optional(),
-    query: searchQuerySchema.optional(),
     hour: z.number().int().min(0).max(23).optional(),
-    minScore: z.number().int().min(0).max(100).optional(),
+    /** The queue's cut-off (E32-2). */
+    covers: z.enum(COVERS).optional(),
     maxScores: z.number().int().min(1).max(30).optional(),
     maxDrafts: z.number().int().min(0).max(10).optional(),
     autoDraft: z.boolean().optional(),
-  }),
+  }).strict(),
   async (changes) => {
-    const settings = await loadSettings();
-    const query = changes.query ?? settings.agentQuery;
-    if (changes.enabled && !agentQueryReady(query)) {
-      throw new ActionError(query.keywords.trim() ? "Choose a country for the search before turning the agent on." : "Type what the agent should look for before turning it on.");
+    if (changes.enabled) {
+      const problem = agentSearchSetupProblem(await listAgentSearches());
+      if (problem) throw new ActionError(problem);
     }
     await saveSettings({
       agentEnabled: changes.enabled,
-      agentQuery: changes.query,
       agentHour: changes.hour,
-      agentMinScore: changes.minScore,
+      agentCovers: changes.covers,
       agentMaxScores: changes.maxScores,
       agentMaxDrafts: changes.maxDrafts,
       agentAutoDraft: changes.autoDraft,
     });
     revalidatePath("/agent");
+    revalidatePath("/settings");
     return null;
   },
 );
 
+const searchId = z.string().min(1).max(100);
+export const setRecurringSearchEnabled = action(z.object({ id: searchId, enabled: z.boolean() }).strict(), async ({ id, enabled }) => {
+  const search = await setAgentSearchEnabled(id, enabled);
+  revalidatePath("/agent");
+  revalidatePath("/settings");
+  return search;
+});
+export const saveRecurringSearch = action(
+  agentSearchInputSchema.extend({ id: searchId.optional() }).strict(),
+  async ({ id, ...input }) => {
+    if (input.enabled && !input.query.country) throw new ActionError(`Choose a country for “${input.name}”.`);
+    const search = await saveAgentSearch(input, id);
+    revalidatePath("/agent");
+    revalidatePath("/settings");
+    return search;
+  },
+);
+export const deleteRecurringSearch = action(z.object({ id: searchId }).strict(), async ({ id }) => {
+  await deleteAgentSearch(id);
+  revalidatePath("/agent");
+  revalidatePath("/settings");
+  return null;
+});
+export const moveRecurringSearch = action(z.object({ id: searchId, direction: z.enum(["up", "down"]) }).strict(), async ({ id, direction }) => {
+  await moveAgentSearch(id, direction);
+  revalidatePath("/agent");
+  revalidatePath("/settings");
+  return listAgentSearches();
+});
+
 /**
- * Run now (E16-4): one more run, at most once an hour after the previous
- * one and within the daily limit. A run already queued or running is
+ * Run all now: at most once an hour after the previous run and only when
+ * the whole enabled batch fits the rolling request quota. An unfinished job is
  * reused rather than started again.
  */
 export const runAgentNow = action(z.object({}), async () => {
   const settings = await loadSettings();
   if (!settings.agentEnabled) throw new ActionError("Turn the job agent on in Settings → Job agent first.");
-  const setup = await agentSetupProblem(settings.agentQuery);
+  const setup = await agentSetupProblem();
   if (setup) throw new ActionError(setup);
   const [unfinished] = await findUnfinishedJobs(AGENT_JOB_KEY);
   if (unfinished) return { jobId: unfinished.id, reused: true };
-  const limit = runLimitProblem(settings.agentRuns, new Date(), { manual: true });
+  const limit = runLimitProblem(settings.agentRuns, new Date(), { manual: true, slots: await agentSlots(), timeZone: await lastKnownTimeZone() });
   if (limit) throw new ActionError(limit);
   const jobId = await startJob(agentScanJob, { manual: true }, { key: AGENT_JOB_KEY });
   revalidatePath("/agent");
@@ -91,7 +123,7 @@ export const prepareAgentDraft = action(z.object({ candidateId }), async ({ cand
   const [unfinished] = await findUnfinishedJobs(draftJobKey(candidateId));
   if (unfinished) return { jobId: unfinished.id, applicationId: null };
   if (candidate.status !== AgentCandidateStatus.SCORED) throw new ActionError("That posting is no longer waiting for a draft.");
-  const jobId = await startJob(agentDraftJob, { candidateId }, { key: draftJobKey(candidateId) });
+  const jobId = await startJob(agentDraftJob, { candidateId, auto: false }, { key: draftJobKey(candidateId) });
   revalidatePath("/agent");
   return { jobId, applicationId: null };
 });

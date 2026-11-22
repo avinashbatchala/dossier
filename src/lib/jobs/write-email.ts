@@ -47,7 +47,7 @@ export const writeEmailJob = defineJob({
     };
     const match = matchSchema.safeParse(application.match);
 
-    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(), loadFactTexts(applicationId)]);
+    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(application.profileId), loadFactTexts(applicationId)]);
     const { data, promptVersion } = await writeEmail(
       provider,
       {

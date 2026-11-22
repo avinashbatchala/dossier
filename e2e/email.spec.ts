@@ -45,9 +45,10 @@ test("rewrites the email, and Undo brings the first one back", async ({ page }) 
   await page.goto(url);
   const message = page.getByRole("group", { name: "Message" });
   await expect(message).toContainText("I'm applying");
-  await page.getByRole("button", { name: "Rewrite" }).click();
+  await page.getByRole("button", { name: "Write it again" }).click();
   await expect(message).toContainText("I'd love to help");
-  await page.getByRole("button", { name: "Undo" }).click();
+  // The toast's Undo; the latest change above the composer has one too.
+  await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
   await expect(message).toContainText("I'm applying");
 });
 

@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, type PointerEvent } from "react";
 
 import type { ApplicationStatus, FunnelStage } from "@/generated/prisma/enums";
+import { statusHref } from "@/lib/applications-list";
 import { FUNNEL_OUTCOMES, type FunnelOutcome, type FunnelStep } from "@/lib/dashboard";
 import { statusInfo } from "@/lib/status";
 
@@ -11,7 +13,8 @@ import { statusInfo } from "@/lib/status";
 // the next stage along the top. Those that went no further branch off below
 // into one node per outcome: still open, rejected, declined or archived.
 // Stage names and counts are text above the picture; the picture itself is
-// hidden from screen readers, and the table under it has every number.
+// hidden from screen readers, and the table under it has every number. Each
+// stage and each end node links to its applications (E28-2).
 
 /** The picture's width in SVG units. It stretches to the card, so x is a share of the width; y is in pixels. */
 const WIDTH = 1000;
@@ -21,9 +24,9 @@ const DROP = 20;
 /** The room an outcome's label needs, however few it holds, and the space between two. */
 const SLOT = 20;
 const SPACE = 4;
-/** The tallest Sent gets, and the most one application adds to a node. */
-const MAX_HEIGHT = 160;
-const MAX_UNIT = 16;
+/** The tallest Sent gets, and the most one application adds to a node: about 26px each (E28-2). */
+const MAX_HEIGHT = 260;
+const MAX_UNIT = 26;
 
 const OUTCOME_COLORS: Record<Exclude<FunnelOutcome, "open">, string> = {
   rejected: "var(--color-status-rejected)",
@@ -49,6 +52,14 @@ const AT: Partial<Record<FunnelStage, string>> = {
   INTERVIEW: "after interviewing",
   OFFER: "at the offer",
 };
+
+/** The applications at a stage now, or that ended a way: that status's list (E27-4, LB1). */
+const stageHref = (stage: FunnelStage) => statusHref(stage as ApplicationStatus);
+function outcomeHref(stage: FunnelStage, outcome: FunnelOutcome): string {
+  if (outcome === "open") return stageHref(stage);
+  if (outcome === "archived") return "/applications?archived=1&view=list";
+  return statusHref(outcome === "rejected" ? "REJECTED" : "DECLINED");
+}
 
 const outcomeLabel = (stage: FunnelStage, outcome: FunnelOutcome) => (outcome === "open" ? (OPEN[stage]?.short ?? "open") : outcome);
 const outcomeSentence = (stage: FunnelStage, outcome: FunnelOutcome, count: number) =>
@@ -156,9 +167,14 @@ export function FunnelChart({ funnel }: { funnel: readonly FunnelStep[] }) {
           className={`absolute top-0 flex flex-col gap-1 whitespace-nowrap ${index === last ? "right-0 items-end text-right" : ""}`}
           style={index === last ? undefined : { left: percentOf(column(index, last)) }}
         >
-          <span className="text-sm">{stageLabel(step.stage)}</span>
-          <span className="font-serif text-2xl leading-none tabular-nums">{step.count}</span>
-          <span className="text-label leading-[1.35] text-muted">{note(index)}</span>
+          <Link
+            href={stageHref(step.stage)}
+            className={`flex flex-col gap-1 rounded-control text-ink no-underline hover:text-ink [&:hover>span:first-child]:underline ${index === last ? "items-end" : ""}`}
+          >
+            <span className="text-sm underline-offset-3">{stageLabel(step.stage)}</span>
+            <span className="font-serif text-2xl leading-none tabular-nums">{step.count}</span>
+            <span className="text-label leading-[1.35] text-muted">{note(index)}</span>
+          </Link>
         </li>
       ))}
     </ol>
@@ -222,125 +238,131 @@ export function FunnelChart({ funnel }: { funnel: readonly FunnelStep[] }) {
         <div className="min-w-[760px] pb-1">
           {labels}
           {/* The picture; the labels above and the table below have the same numbers for screen readers and keyboards. */}
-          <div ref={picture} aria-hidden="true" className="relative" style={{ height }}>
-            <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible">
-              {funnel.map((step, index) => {
-                const key = `stage-${step.stage}`;
-                const size = step.count * unit;
-                const x = column(index, last);
-                return (
-                  <g key={step.stage} {...hover(key)}>
-                    {index > 0 && size > 0 && (
+          <div className="relative" style={{ height }}>
+            <div ref={picture} aria-hidden="true" className="absolute inset-0">
+              <svg viewBox={`0 0 ${WIDTH} ${height}`} preserveAspectRatio="none" className="absolute inset-0 size-full overflow-visible">
+                {funnel.map((step, index) => {
+                  const key = `stage-${step.stage}`;
+                  const size = step.count * unit;
+                  const x = column(index, last);
+                  return (
+                    <g key={step.stage} {...hover(key)}>
+                      {index > 0 && size > 0 && (
+                        <rect
+                          x={column(index - 1, last) + NODE}
+                          width={x - column(index - 1, last) - NODE}
+                          height={size}
+                          style={{ fill: stageColor(step.stage), opacity: bandOpacity(key) }}
+                          className="motion-safe:transition-opacity"
+                        />
+                      )}
+                      {size > 0 ? (
+                        <rect
+                          x={x}
+                          width={NODE}
+                          height={size}
+                          rx={2}
+                          style={{ fill: stageColor(step.stage), opacity: nodeOpacity(key) }}
+                          className="motion-safe:transition-opacity"
+                        />
+                      ) : (
+                        // Nothing reached it yet: a hairline keeps its place.
+                        <rect x={x} width={NODE} height={2} rx={1} className="fill-line-strong" />
+                      )}
+                      <rect x={x - NODE / 2} width={NODE * 2} height={Math.max(size, 14)} fill="transparent" />
+                    </g>
+                  );
+                })}
+                {stops.map((stop) => {
+                  const color = outcomeColor(stop.stage, stop.outcome);
+                  return (
+                    <g key={stop.key} {...hover(stop.key)}>
+                      <path d={stop.band} style={{ fill: color, opacity: bandOpacity(stop.key) }} className="motion-safe:transition-opacity" />
+                      <path d={stop.spine} fill="none" stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" pointerEvents="stroke" />
                       <rect
-                        x={column(index - 1, last) + NODE}
-                        width={x - column(index - 1, last) - NODE}
-                        height={size}
-                        style={{ fill: stageColor(step.stage), opacity: bandOpacity(key) }}
-                        className="motion-safe:transition-opacity"
-                      />
-                    )}
-                    {size > 0 ? (
-                      <rect
-                        x={x}
+                        x={stop.x}
+                        y={stop.y}
                         width={NODE}
-                        height={size}
+                        height={stop.height}
                         rx={2}
-                        style={{ fill: stageColor(step.stage), opacity: nodeOpacity(key) }}
+                        style={{ fill: color, opacity: nodeOpacity(stop.key) }}
                         className="motion-safe:transition-opacity"
                       />
-                    ) : (
-                      // Nothing reached it yet: a hairline keeps its place.
-                      <rect x={x} width={NODE} height={2} rx={1} className="fill-line-strong" />
-                    )}
-                    <rect x={x - NODE / 2} width={NODE * 2} height={Math.max(size, 14)} fill="transparent" />
-                  </g>
-                );
-              })}
-              {stops.map((stop) => {
-                const color = outcomeColor(stop.stage, stop.outcome);
-                return (
-                  <g key={stop.key} {...hover(stop.key)}>
-                    <path d={stop.band} style={{ fill: color, opacity: bandOpacity(stop.key) }} className="motion-safe:transition-opacity" />
-                    <path d={stop.spine} fill="none" stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" pointerEvents="stroke" />
-                    <rect
-                      x={stop.x}
-                      y={stop.y}
-                      width={NODE}
-                      height={stop.height}
-                      rx={2}
-                      style={{ fill: color, opacity: nodeOpacity(stop.key) }}
-                      className="motion-safe:transition-opacity"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
+                    </g>
+                  );
+                })}
+              </svg>
 
+              {tooltip && (
+                <span
+                  className={`pointer-events-none absolute z-10 -mt-3 -translate-y-full rounded-card border border-line-popover bg-card px-3 py-2 text-meta whitespace-nowrap shadow-menu ${
+                    pointer.left ? "-ml-3 -translate-x-full" : "ml-3"
+                  }`}
+                  style={{ left: pointer.x, top: pointer.y }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: tooltip.color }} />
+                    <strong className="font-medium text-ink tabular-nums">{tooltip.value}</strong> {tooltip.text}
+                  </span>
+                  <span className="block text-muted">{tooltip.detail}</span>
+                </span>
+              )}
+            </div>
+            {/* The end nodes' labels, over the picture: each opens its applications. */}
             {stops.map((stop) => (
-              <span
+              <Link
                 key={stop.key}
+                href={outcomeHref(stop.stage, stop.outcome)}
                 {...hover(stop.key)}
-                className={`absolute -translate-y-1/2 text-meta whitespace-nowrap text-muted motion-safe:transition-opacity ${hovered !== null && hovered !== stop.key ? "opacity-50" : ""}`}
+                className={`absolute -translate-y-1/2 rounded-control text-meta whitespace-nowrap text-muted no-underline hover:text-ink hover:underline motion-safe:transition-opacity ${hovered !== null && hovered !== stop.key ? "opacity-50" : ""}`}
                 style={{ left: `calc(${percentOf(stop.x + NODE)} + 6px)`, top: stop.middle }}
               >
                 <span className="text-ink tabular-nums">{stop.count}</span> {outcomeLabel(stop.stage, stop.outcome)}
-              </span>
+              </Link>
             ))}
-
-            {tooltip && (
-              <span
-                className={`pointer-events-none absolute z-10 -mt-3 -translate-y-full rounded-card border border-line-popover bg-card px-3 py-2 text-meta whitespace-nowrap shadow-menu ${
-                  pointer.left ? "-ml-3 -translate-x-full" : "ml-3"
-                }`}
-                style={{ left: pointer.x, top: pointer.y }}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span className="h-0.5 w-3 rounded-full" style={{ backgroundColor: tooltip.color }} />
-                  <strong className="font-medium text-ink tabular-nums">{tooltip.value}</strong> {tooltip.text}
-                </span>
-                <span className="block text-muted">{tooltip.detail}</span>
-              </span>
-            )}
           </div>
         </div>
       </div>
 
-      <details className="text-meta text-muted">
-        <summary className="w-fit cursor-pointer hover:text-ink">Show the numbers</summary>
-        <div className="relative overflow-x-auto">
-          <table className="mt-3 w-full max-w-[640px] text-left tabular-nums">
-            <caption className="sr-only">How far your sent applications got, and where the ones that stopped at each stage are now</caption>
-            <thead>
-              <tr>
-                <th scope="col" className="py-1 font-medium text-ink">
-                  Stage
-                </th>
-                {["Reached", "Of the stage before", "Still open", "Rejected", "Declined", "Archived"].map((heading) => (
-                  <th key={heading} scope="col" className="py-1 pl-4 text-right font-medium text-ink">
-                    {heading}
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-1">
+        <details className="text-meta text-muted">
+          <summary className="w-fit cursor-pointer hover:text-ink">Show the numbers</summary>
+          <div className="relative overflow-x-auto">
+            <table className="mt-3 w-full max-w-[640px] text-left tabular-nums">
+              <caption className="sr-only">How far your sent applications got, and where the ones that stopped at each stage are now</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="py-1 font-medium text-ink">
+                    Stage
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {funnel.map((step, index) => (
-                <tr key={step.stage} className="border-t border-line">
-                  <th scope="row" className="py-1 font-normal">
-                    {stageLabel(step.stage)}
-                  </th>
-                  <td className="py-1 pl-4 text-right text-ink">{step.count}</td>
-                  <td className="py-1 pl-4 text-right text-ink">{step.conversion === null ? "" : `${step.conversion}%`}</td>
-                  {FUNNEL_OUTCOMES.map((outcome) => (
-                    <td key={outcome} className="py-1 pl-4 text-right text-ink">
-                      {index === last ? "" : step.stopped[outcome]}
-                    </td>
+                  {["Reached", "Of the stage before", "Still open", "Rejected", "Declined", "Archived"].map((heading) => (
+                    <th key={heading} scope="col" className="py-1 pl-4 text-right font-medium text-ink">
+                      {heading}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+              </thead>
+              <tbody>
+                {funnel.map((step, index) => (
+                  <tr key={step.stage} className="border-t border-line">
+                    <th scope="row" className="py-1 font-normal">
+                      {stageLabel(step.stage)}
+                    </th>
+                    <td className="py-1 pl-4 text-right text-ink">{step.count}</td>
+                    <td className="py-1 pl-4 text-right text-ink">{step.conversion === null ? "" : `${step.conversion}%`}</td>
+                    {FUNNEL_OUTCOMES.map((outcome) => (
+                      <td key={outcome} className="py-1 pl-4 text-right text-ink">
+                        {index === last ? "" : step.stopped[outcome]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <p className="text-meta text-muted">Click a stage to see its applications</p>
+      </div>
     </div>
   );
 }

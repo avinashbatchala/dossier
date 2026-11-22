@@ -27,12 +27,15 @@ export class DemoRefused extends Error {
 type Db = Pick<
   PrismaClient,
   | "$transaction"
+  | "profile"
   | "profileField"
   | "skill"
   | "language"
   | "experience"
   | "project"
   | "education"
+  | "certification"
+  | "customSection"
   | "publication"
   | "reference"
   | "fact"
@@ -60,14 +63,19 @@ function statusPath(status: string, reached?: string): ApplicationStatus[] {
 }
 
 /** Whether the database has anything of the user's that demo data would replace. */
-export async function hasUserData(db: Db): Promise<boolean> {
+async function hasUserData(db: Db): Promise<boolean> {
   const [fields, ...counts] = await Promise.all([
     db.profileField.findMany(),
+    // A headline or summary, or more than one profile (E24-1).
+    db.profile.count({ where: { OR: [{ headline: { not: "" } }, { summary: { not: "" } }] } }),
+    db.profile.count().then((profiles) => Math.max(0, profiles - 1)),
     db.skill.count(),
     db.language.count(),
     db.experience.count(),
     db.project.count(),
     db.education.count(),
+    db.certification.count(),
+    db.customSection.count(),
     db.publication.count(),
     db.reference.count(),
     db.fact.count(),
@@ -103,6 +111,8 @@ export async function seedDemo(
         await tx.experience.deleteMany();
         await tx.project.deleteMany();
         await tx.education.deleteMany();
+        await tx.certification.deleteMany();
+        await tx.customSection.deleteMany();
         await tx.publication.deleteMany();
         await tx.reference.deleteMany();
         await tx.fact.deleteMany();
@@ -110,6 +120,15 @@ export async function seedDemo(
 
       // ── Profile ──
       const { experience, projects, education, publications, skills, languages, references, facts } = sample.profile;
+      // One profile (E24-1): the first, named after its headline, and no other; the shared basics in ProfileField.
+      const { headline, summary } = demoProfile().basics;
+      const first = await tx.profile.findFirst({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }], select: { id: true } });
+      // A senior designer, so the demo's postings can be scored (E24-3).
+      const own = { name: headline, headline, summary, levelFrom: "senior", levelTo: "lead" };
+      const { id: profileId } = first
+        ? await tx.profile.update({ where: { id: first.id }, data: own, select: { id: true } })
+        : await tx.profile.create({ data: own, select: { id: true } });
+      await tx.profile.deleteMany({ where: { id: { not: profileId } } });
       await tx.profileField.deleteMany();
       await tx.profileField.createMany({
         data: Object.entries(fieldsFromBasics(demoProfile().basics)).flatMap(([key, value]) =>
@@ -119,7 +138,7 @@ export async function seedDemo(
 
       const skillIds = new Map<string, string>();
       for (const [sort, name] of skills.entries()) {
-        const skill = await tx.skill.create({ data: { name, sort } });
+        const skill = await tx.skill.create({ data: { profileId, name, sort } });
         skillIds.set(name, skill.id);
       }
       await tx.language.createMany({
@@ -130,6 +149,7 @@ export async function seedDemo(
       for (const [sort, entry] of experience.entries()) {
         const created = await tx.experience.create({
           data: {
+            profileId,
             role: entry.role,
             company: entry.company,
             location: entry.location,
@@ -146,6 +166,7 @@ export async function seedDemo(
       for (const [sort, entry] of projects.entries()) {
         const created = await tx.project.create({
           data: {
+            profileId,
             name: entry.name,
             link: entry.link,
             bullets: entry.bullets,
@@ -159,17 +180,23 @@ export async function seedDemo(
       const educationIds = new Map<string, string>();
       for (const [sort, { id, degree, school, notes, start, end }] of education.entries()) {
         const created = await tx.education.create({
-          data: { degree, school, notes, sort, ...dateSpan(start, end) },
+          data: { profileId, degree, school, notes, sort, ...dateSpan(start, end) },
         });
         educationIds.set(id, created.id);
       }
+      const certificationIds = new Map<string, string>();
+      for (const [sort, { id, ...entry }] of demoProfile().certifications.entries()) {
+        const created = await tx.certification.create({ data: { ...entry, profileId, sort } });
+        certificationIds.set(id, created.id);
+      }
       const publicationIds = new Map<string, string>();
       for (const [sort, { id, citation, link }] of publications.entries()) {
-        const created = await tx.publication.create({ data: { citation, link, sort } });
+        const created = await tx.publication.create({ data: { profileId, citation, link, sort } });
         publicationIds.set(id, created.id);
       }
       await tx.reference.createMany({
         data: references.map(({ name, relation, company, email, phone }, sort) => ({
+          profileId,
           name,
           relation,
           company,
@@ -285,6 +312,7 @@ export async function seedDemo(
         (id) => educationIds.get(id)!,
         (id) => projectIds.get(id)!,
         (id) => publicationIds.get(id)!,
+        (id) => certificationIds.get(id)!,
       );
       const letterUnits = demoLetterUnits();
       const extract = ledgerly.extract;

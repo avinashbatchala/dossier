@@ -17,7 +17,7 @@ export const backupsDir = () => path.join(env.DOSSIER_DATA_DIR, "backups");
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** "dossier-backup-nightly-2026-09-28-030000.json", in the server's time zone. */
-export function backupFileName(reason: BackupReason, now: Date): string {
+function backupFileName(reason: BackupReason, now: Date): string {
   const day = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   return `dossier-backup-${reason}-${day}-${time}.json`;

@@ -5,6 +5,8 @@
 // punctuation or the end. So an asterisk on a name for equal contribution,
 // as in "Dombrowe, V.*", stays an asterisk, and "\*" is always one.
 
+import { webHref } from "@/lib/web-link";
+
 /** A run of a citation's text, bold, italic or both. */
 export type CitationSpan = { text: string; bold?: true; italic?: true };
 
@@ -116,6 +118,23 @@ export function citationText(source: string): string {
     .trim();
 }
 
+/**
+ * The bold of a profile's bullets, put back on a tailored text where it keeps
+ * those words (#368). The AI gets bullets without their marks, so what it
+ * writes has none; a text that has some, edited by hand, is left as it is.
+ */
+export function keepBold(text: string, profileText: string): string {
+  if (text.includes("**")) return text;
+  const phrases = [...new Set(citationSpans(profileText).flatMap((span) => (span.bold ? [span.text.trim()] : [])))]
+    .filter((phrase) => phrase && !phrase.includes("\n"))
+    // Longest first, so "Scaled by 40%" wins over "40%" inside it.
+    .sort((a, b) => b.length - a.length);
+  if (phrases.length === 0) return text;
+  const escaped = phrases.map((phrase) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // Only at a word's edge, where a mark counts.
+  return text.replace(new RegExp(`(?<![\\p{L}\\p{N}*])(?:${escaped.join("|")})(?![\\p{L}\\p{N}*])`, "gu"), (phrase) => `**${phrase}**`);
+}
+
 /** Asterisks escaped, so text read from elsewhere (an imported resume) shows as it was. */
 export const escapeMarks = (text: string) => text.replace(/\*/g, "\\*");
 
@@ -191,13 +210,5 @@ export function publicationLink(link: string): string {
 
 /** The link a resume can open: http(s) only, with "https://" added when it's missing. */
 export function publicationHref(link: string): string | null {
-  const value = publicationLink(link);
-  if (!value) return null;
-  const withScheme = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(withScheme);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
-  } catch {
-    return null;
-  }
+  return webHref(publicationLink(link));
 }

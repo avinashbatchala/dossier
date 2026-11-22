@@ -1,14 +1,17 @@
 // The AI tasks of PRD §7 (E6-5). Each takes a provider, its input and the
 // task options, and returns its data with the prompt version to save.
-export { EXTRACT_POSTING_VERSION, extractPosting } from "./extract-posting";
-export { EXTRACT_PROFILE_VERSION, extractProfile } from "./extract-profile";
-export { MATCH_REQUIREMENTS_VERSION, matchRequirements } from "./match-requirements";
-export type { TaskOptions, TaskResult } from "./prompt-parts";
-export { REFINE_CHAT_VERSION, refineChat, type ChatTurn, type Refinement } from "./refine-chat";
-export { REGENERATE_UNIT_VERSION, regenerateUnit } from "./regenerate-unit";
-export { TAILOR_RESUME_VERSION, tailorResume } from "./tailor-resume";
-export { WRITE_COVER_LETTER_VERSION, writeCoverLetter } from "./write-cover-letter";
-export { WRITE_EMAIL_VERSION, writeEmail } from "./write-email";
-export { CLASSIFY_REPLY_VERSION, classifyReply, type Classified } from "./classify-reply";
-export { DRAFT_REPLY_VERSION, draftReply, type DraftedReply } from "./draft-reply";
-export { SCORE_POSTING_VERSION, scorePosting, type PostingScore } from "./score-posting";
+export { extractPosting } from "./extract-posting";
+export { extractProfile } from "./extract-profile";
+export { guessLevels } from "./guess-levels";
+export type { TaskOptions } from "./prompt-parts";
+export { refineChat, type ChatTurn } from "./refine-chat";
+export { regenerateUnit } from "./regenerate-unit";
+export { tailorResume } from "./tailor-resume";
+export { writeCoverLetter } from "./write-cover-letter";
+export { writeEmail } from "./write-email";
+export { classifyReply } from "./classify-reply";
+export { draftReply } from "./draft-reply";
+export { scorePosting } from "./score-posting";
+export { answerQuestion } from "./answer-question";
+export { prepareInterview } from "./prepare-interview";
+export { writeMessage } from "./write-message";

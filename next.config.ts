@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
     serverFunctions: false,
   },
   poweredByHeader: false,
+  // Nothing uses next/image: photos are data URLs, drawn as they are. Without
+  // this, /_next/image still answers anyone, signed in or not, and it's where
+  // Next.js has had its worst advisories (CVE-2026-96889, CVE-2026-119347).
+  images: { unoptimized: true },
   // The calendar moved onto the dashboard (E15-6). The query goes along, so
   // an old link's ?date= opens that day there.
   async redirects() {

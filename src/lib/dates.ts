@@ -45,6 +45,14 @@ function dayIn(date: Date, timeZone?: string): number {
   return Date.UTC(part("year"), part("month") - 1, part("day"));
 }
 
+/**
+ * Calendar days from today in a time zone to a calendar date stored at UTC
+ * midnight, such as a deadline: 0 when it's today, 1 tomorrow, -1 yesterday.
+ */
+export function daysUntilCalendarDate(date: Date, now: Date, timeZone?: string): number {
+  return Math.round((date.getTime() - dayIn(now, timeZone)) / 86_400_000);
+}
+
 /** Calendar days from `from` to `to` in a time zone: 0 on the same day, 1 the next day, -1 the day before. */
 export function daysBetween(from: Date, to: Date, timeZone?: string): number {
   return Math.round((dayIn(to, timeZone) - dayIn(from, timeZone)) / 86_400_000);
@@ -85,6 +93,19 @@ export function formatDay(date: Date, timeZone?: string, now = new Date()): stri
   const year = new Date(dayIn(date, timeZone)).getUTCFullYear() !== new Date(dayIn(now, timeZone)).getUTCFullYear();
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone }).format(date);
   return `${weekday} ${format(date, { year, timeZone })}`;
+}
+
+/** "2 Nov" in a time zone, with the year when it isn't `now`'s. */
+export function formatShortDay(date: Date, timeZone?: string, now = new Date()): string {
+  const year = new Date(dayIn(date, timeZone)).getUTCFullYear() !== new Date(dayIn(now, timeZone)).getUTCFullYear();
+  return format(date, { year, timeZone });
+}
+
+/** "Monday, 16 November" in a time zone: the dashboard's date (E28-1). */
+export function longDate(date: Date, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", { weekday: "long", day: "numeric", month: "long", timeZone }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("weekday")}, ${part("day")} ${part("month")}`;
 }
 
 /** "Thu 8 Oct, 14:00" in a time zone, with the year when it isn't the same as `now`'s. */

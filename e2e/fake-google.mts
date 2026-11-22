@@ -5,6 +5,7 @@
 // agrees at once. The first application sent gets a reply in its thread, from
 // the address it went to.
 
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const port = Number(process.env.FAKE_GOOGLE_PORT ?? 3997);
@@ -18,6 +19,8 @@ type Mail = { id: string; threadId: string; labels: string[]; headers: Record<st
 
 let historyId = 1000;
 let granted = "";
+/** The PKCE challenge of the last sign-in (#358). */
+let challenge = "";
 const mailbox: Mail[] = [];
 /** What the app sent: the raw message it built, its text and the attachments' names, for specs to check. */
 const sent: { id: string; threadId: string; raw: string; text: string; attachments: string[] }[] = [];
@@ -118,6 +121,9 @@ createServer(async (request, response) => {
   if (path === "/accounts/o/oauth2/v2/auth") {
     if (url.searchParams.get("client_id") !== CLIENT_ID) return send(response, 400, { error: "invalid_client" });
     granted = url.searchParams.get("scope") ?? "";
+    // PKCE (#358): the token request must bring the verifier for this challenge.
+    if (url.searchParams.get("code_challenge_method") !== "S256" || !url.searchParams.get("code_challenge")) return send(response, 400, { error: "invalid_request" });
+    challenge = url.searchParams.get("code_challenge") ?? "";
     const back = new URL(url.searchParams.get("redirect_uri") ?? "");
     back.searchParams.set("code", "e2e-code");
     back.searchParams.set("state", url.searchParams.get("state") ?? "");
@@ -129,6 +135,7 @@ createServer(async (request, response) => {
     if (form.get("client_id") !== CLIENT_ID || form.get("client_secret") !== CLIENT_SECRET) return send(response, 401, { error: "invalid_client" });
     if (form.get("grant_type") === "authorization_code") {
       if (form.get("code") !== "e2e-code") return send(response, 400, { error: "invalid_grant" });
+      if (createHash("sha256").update(form.get("code_verifier") ?? "").digest("base64url") !== challenge) return send(response, 400, { error: "invalid_grant" });
       return send(response, 200, { access_token: ACCESS_TOKEN, expires_in: 3600, refresh_token: "e2e-refresh-token", scope: granted, id_token: idToken() });
     }
     if (form.get("refresh_token") !== "e2e-refresh-token") return send(response, 400, { error: "invalid_grant" });

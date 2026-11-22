@@ -3,12 +3,15 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
+import type { TokenCount, UsageSink } from "@/lib/usage";
+
 import { AiError } from "../errors";
 import { BaseProvider, SCHEMA_REFUSED, withJsonSchema, type ChatAnswer, type ChatCall, type Effort } from "../provider";
 import { keyGuardedFetch } from "./guarded-fetch";
+import { timedFetch } from "./timed-fetch";
 
 /** Offered when the model list can't be fetched, e.g. before a key is saved. */
-export const ANTHROPIC_FALLBACK_MODELS = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5", "claude-haiku-4-5"];
+export const ANTHROPIC_FALLBACK_MODELS = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
 
 /**
  * Current models think before they answer unless told otherwise, and the
@@ -27,6 +30,15 @@ const effortLevels = new Map<string, ReadonlySet<Effort>>();
 // instead (#230).
 const promptSchemas = new Set<string>();
 
+/** An answer's tokens. With prompt caching, the input is counted in three parts. */
+function tokensOf(usage: Partial<Anthropic.Usage> | undefined): TokenCount {
+  const input = usage?.input_tokens ?? null;
+  return {
+    input: input === null ? null : input + (usage?.cache_creation_input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0),
+    output: usage?.output_tokens ?? null,
+  };
+}
+
 /** Claude through the Messages API with the user's own key. */
 export class AnthropicProvider extends BaseProvider {
   readonly kind = "ANTHROPIC" as const;
@@ -37,14 +49,15 @@ export class AnthropicProvider extends BaseProvider {
     apiKey: string | null,
     model: string | null,
     timeoutMs: number,
+    onUsage?: UsageSink,
   ) {
-    super(model, timeoutMs);
+    super(model, timeoutMs, onUsage);
     // The SDK sends the key as a bearer token since 1.0. The Claude API takes
     // either header, but a gateway at a base URL of the user's own may only
     // read X-Api-Key, as every request before did.
     const keyHeader = { "X-Api-Key": apiKey, Authorization: null };
     this.client = apiKey
-      ? new Anthropic({ apiKey, baseURL, timeout: timeoutMs, maxRetries: 1, fetch: keyGuardedFetch(), defaultHeaders: keyHeader })
+      ? new Anthropic({ apiKey, baseURL, timeout: timeoutMs, maxRetries: 1, fetch: keyGuardedFetch(timedFetch(timeoutMs)), defaultHeaders: keyHeader })
       : null;
   }
 
@@ -81,6 +94,8 @@ export class AnthropicProvider extends BaseProvider {
       },
       { signal: call.signal },
     );
+    // A gateway may leave the usage out.
+    call.used(tokensOf(message.usage as Partial<Anthropic.Usage> | undefined));
     if (message.stop_reason === "refusal") {
       throw new AiError("provider", "The model declined to answer this one. Try rewording it, or try again.", "refusal");
     }

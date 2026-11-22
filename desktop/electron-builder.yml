@@ -1,0 +1,30 @@
+# How the desktop app is packed. See "The desktop app" in DEVELOPMENT.md.
+appId: me.aien.dossier
+productName: Dossier
+copyright: Free software under the AGPL-3.0
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+# What "On this computer" runs. Copied by a script, because extraResources quietly
+# leaves out every node_modules folder.
+afterPack: scripts/after-pack.mjs
+artifactName: Dossier-${version}-${os}-${arch}.${ext}
+# There's no auto-update: people download each new version from the release page.
+publish: null
+linux:
+  category: Office
+  # The window belongs to the menu entry the .deb installs, dossier-desktop.desktop.
+  syncDesktopName: true
+  icon: assets/icon.png
+  # AppImage for any distribution, and .deb since Ubuntu 24.04's AppArmor can break AppImage's sandbox.
+  target: [AppImage, deb]
+win:
+  icon: assets/icon.png
+  target: [nsis]
+nsis:
+  # For this user, with no admin rights needed, and a new version installs over the old one.
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false

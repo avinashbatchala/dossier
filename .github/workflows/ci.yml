@@ -1,59 +1,25 @@
 name: CI
 
 on:
-  pull_request:
+  # Only release branches (release/1.12.0): when one is pushed, and on each push
+  # after that. Other branches, pull requests and main aren't checked.
   push:
-    branches: [main]
+    branches: ["release/**"]
+  # The public repository's image.yml (publish/overlay) runs these checks on
+  # each publish to its main before building the image.
+  workflow_call:
 
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request stops the run it replaces.
+# A newer push to the same release branch stops the run it replaces.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # On main, a pull request's merge commit holds exactly the code its pull
-  # request's run checked when its tree is the branch head's (the branch was
-  # up to date with main). Then main only builds the image. Anything else
-  # pushed to main is checked in full: direct pushes, merges of a branch that
-  # was behind, and publishes to the public repository.
-  checked:
-    name: Checked in its pull request?
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      skip: ${{ steps.find.outputs.skip }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The commit and its parents.
-          fetch-depth: 2
-
-      - id: find
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          skip=false
-          if head=$(git rev-parse -q --verify 'HEAD^2') && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
-            passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head&event=pull_request&status=success" \
-              -q '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")] | length' || echo 0)
-            if [ "${passed:-0}" -gt 0 ]; then skip=true; fi
-          fi
-          echo "skip=$skip" >> "$GITHUB_OUTPUT"
-          if [ "$skip" = true ]; then
-            echo "Same code as $head, which passed CI in its pull request: only the image is built." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
   check:
     name: Lint, type-check and test
-    needs: checked
-    # Runs on pull requests too, where "checked" is skipped.
-    if: ${{ !cancelled() && needs.checked.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     services:
       # For the database tests (*.db.test.ts), which create and migrate their own
@@ -97,19 +63,22 @@ jobs:
           restore-keys: yarn-${{ runner.os }}-
 
       - run: yarn install --immutable
-      - run: yarn prisma generate
+      - run: yarn generate
       - run: yarn lint
       - run: yarn typecheck
       # Fails when coverage drops below the thresholds in vitest.config.mts (E11-1).
       - run: yarn test:coverage
+      # The database tests again, against SQLite (DATABASE_URL=file:…).
+      - name: Database tests on SQLite
+        run: yarn vitest run --project db
+        env:
+          DATABASE_URL: file:${{ runner.temp }}/dossier.db
       - name: Coverage summary
         if: always()
         run: node .github/scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
     name: End-to-end tests
-    needs: checked
-    if: ${{ !cancelled() && needs.checked.outputs.skip != 'true' }}
     runs-on: ubuntu-latest
     services:
       # The tests create and migrate their own "dossier_e2e" database here.
@@ -150,7 +119,7 @@ jobs:
           restore-keys: yarn-${{ runner.os }}-
 
       - run: yarn install --immutable
-      - run: yarn prisma generate
+      - run: yarn generate
       # Headless Chromium, for the tests and for the app's PDFs.
       - run: yarn playwright install --with-deps --only-shell chromium
       - run: yarn build
@@ -164,43 +133,3 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
-
-  # After both checks pass on main, or when its pull request passed them: the
-  # production image on GHCR, tagged with the commit SHA (and "main"). A
-  # version tag then tags it with the version.
-  image:
-    name: Production image
-    needs: [checked, check, e2e]
-    if: ${{ !cancelled() && !failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Image name
-        # GHCR names must be lower case.
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: production
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
-            ${{ env.IMAGE }}:main
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max

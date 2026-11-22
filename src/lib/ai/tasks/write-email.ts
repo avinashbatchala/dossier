@@ -24,7 +24,7 @@ import {
 } from "./prompt-parts";
 import { withoutFrame } from "./write-cover-letter";
 
-export const WRITE_EMAIL_VERSION = "write-email@2";
+const WRITE_EMAIL_VERSION = "write-email@2";
 
 const answerSchema = z.object({
   contactName: z.string().nullable(),
@@ -65,6 +65,7 @@ export type EmailInput = {
  */
 export const writeEmail: Task<EmailInput, Unit[]> = async (provider, { profile, extracted, match, tone, facts, posting, letter }, options) => {
   const answer = await provider.complete({
+    task: "write-email",
     system: system(
       INSTRUCTIONS,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,

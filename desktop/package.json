@@ -1,0 +1,34 @@
+{
+  "name": "dossier-desktop",
+  "productName": "Dossier",
+  "desktopName": "dossier-desktop.desktop",
+  "version": "1.15.1",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Dossier as a desktop app",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepare-server": "node scripts/prepare-server.mjs",
+    "package:linux": "yarn build && electron-builder --linux --x64",
+    "package:windows": "yarn build && electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "electron": "45.3.4",
+    "electron-builder": "^26",
+    "typescript": "^5"
+  },
+  "dependenciesMeta": {
+    "electron": {
+      "built": true
+    }
+  },
+  "packageManager": "yarn@4.18.1",
+  "author": {
+    "name": "Dossier",
+    "email": "dossier.app@pm.me"
+  },
+  "homepage": "https://dossier.aien.me"
+}

@@ -69,7 +69,7 @@ export type Crop = { zoom: number; x: number; y: number };
 export const MAX_ZOOM = 4;
 
 /** How much the image is scaled in the frame at a zoom. */
-export const cropScale = (image: Size, frame: Size, zoom: number) =>
+const cropScale = (image: Size, frame: Size, zoom: number) =>
   Math.max(frame.width / image.width, frame.height / image.height) * zoom;
 
 /** The crop with the zoom in range and the frame covered: the image can't move past its edges. */

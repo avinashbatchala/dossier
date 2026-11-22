@@ -154,6 +154,13 @@ describe("Nightly backups (E10-7)", () => {
     expect(screen.getByRole("switch")).toHaveAccessibleDescription("Kept for 14 days in /data/backups. The first one runs tonight at 03:00.");
   });
 
+  it("says on this computer that they only run while Dossier is open (#325)", () => {
+    render(<DataSection jobRetentionHours={24} hasApiKey={false} exportName="x.json" backups={{ ...backups, onlyWhileOpen: true }} />);
+    expect(screen.getByRole("switch")).toHaveAccessibleDescription(
+      "Kept for 14 days in /data/backups. Last one ran today at 03:00. On this computer, they only run while Dossier is open: a night it was closed is made up soon after you open it.",
+    );
+  });
+
   it("shows a failure", () => {
     render(<DataSection jobRetentionHours={24} hasApiKey={false} exportName="x.json" backups={{ ...backups, problem: "EACCES: permission denied" }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("The last backup failed: EACCES: permission denied");

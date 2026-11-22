@@ -22,8 +22,9 @@ test("changes the summary from the chat, and puts it back with Undo", async ({ p
   await expect(log.getByText("Done. I made the summary shorter.")).toBeVisible();
   await expect(summary).not.toHaveText(before);
 
+  // Undo on the latest change brings the version before it back (E30-11).
   await log.getByRole("button", { name: "Undo" }).click();
-  await expect(log.getByText("Undone")).toBeVisible();
+  await expect(page.getByText("Undone. It's in the history if you want it back.")).toBeVisible();
   await expect(summary).toHaveText(before);
 });
 

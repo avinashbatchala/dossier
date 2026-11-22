@@ -42,7 +42,16 @@ export type GoogleClientView = {
 export type GoogleConnectionView =
   | { status: "not-configured" }
   | { status: "disconnected" }
-  | { status: "connected"; email: string; canSend: boolean; canRead: boolean; canUseCalendar: boolean; lastSync: string | null; syncProblem: string | null };
+  | {
+      status: "connected";
+      email: string;
+      canSend: boolean;
+      canRead: boolean;
+      canUseCalendar: boolean;
+      lastSync: string | null;
+      syncProblem: string | null;
+      signInProblem: string | null;
+    };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const INTERVALS = [5, 10, 15, 30, 60];
@@ -70,6 +79,7 @@ export function GoogleSection({
   initial,
   browserTimeZone,
   redirectUri,
+  inDesktopApp = false,
 }: {
   connection: GoogleConnectionView;
   client: GoogleClientView;
@@ -77,6 +87,8 @@ export function GoogleSection({
   browserTimeZone: string | null;
   /** The address to register in Google Cloud. */
   redirectUri: string;
+  /** On this computer, in the desktop app: Google's sign-in opens in the browser, signed in by the app (#327). */
+  inDesktopApp?: boolean;
 }) {
   const track = useTrackSave();
   const router = useRouter();
@@ -128,6 +140,16 @@ export function GoogleSection({
                 Disconnect
               </Button>
             </div>
+            {connection.signInProblem && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-4 py-3">
+                <p role="alert" className="text-control text-error">
+                  {connection.signInProblem} Until then, Dossier doesn&apos;t check your mail or calendar.
+                </p>
+                <a href="/api/google/connect" className={buttonClassName("secondary", "sm")}>
+                  Connect again
+                </a>
+              </div>
+            )}
             <ul className="flex flex-col gap-1.5 text-meta text-muted">
               <Permission granted={connection.canSend} group="send" label="Send email from your address" />
               <Permission granted={connection.canRead} group="read" label="Read your mail, to find replies to your applications" />
@@ -143,6 +165,14 @@ export function GoogleSection({
             <a href="/api/google/connect" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
               Connect Google account
             </a>
+            {inDesktopApp && (
+              <p className="flex flex-wrap items-center gap-x-2 text-meta text-muted">
+                Google&apos;s sign-in opens in your browser. Once it says Connected, come back here.
+                <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => router.refresh()}>
+                  Check again
+                </button>
+              </p>
+            )}
           </div>
         )}
       </Card>
@@ -371,7 +401,7 @@ const SECRET_PLACEHOLDER: Record<GoogleClientView["secretState"], string> = {
  * leave its field. Saved here, they override the DOSSIER_GOOGLE_CLIENT_*
  * variables. A different client ID disconnects the account.
  */
-function ClientCard({ initial, connected }: { initial: GoogleClientView; connected: boolean }) {
+export function ClientCard({ initial, connected }: { initial: GoogleClientView; connected: boolean }) {
   const track = useTrackSave();
   const router = useRouter();
   const [view, setView] = useState(initial);

@@ -64,6 +64,12 @@ describe("handing work to Claude chat (#221)", () => {
     expect(await readPastedPosting(id, now)).toEqual({ text, url: "https://jobs.example/1" });
     expect(await readPastedPosting("../nope", now)).toBeNull();
 
+    // One of several profiles chosen in New application (E24-6) is named for get_profile and save_application.
+    const backend = promptOf(await handOffPastedPosting({ text, url: "", profile: "Backend" }, now));
+    expect(backend).toContain('get_profile (profile "Backend")');
+    expect(backend).toContain('save_application (profile "Backend")');
+    expect(promptOf(url)).not.toContain("profile \"");
+
     const later = new Date(now.getTime() + PASTE_DAYS * DAY + 1);
     expect(await readPastedPosting(id, later)).toBeNull();
     await sweepFinishedJobs(later, 24);

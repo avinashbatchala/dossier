@@ -8,43 +8,50 @@ import { changeStatus } from "@/components/change-status";
 
 import { PageHeader } from "@/components/page-header";
 import { buttonClassName } from "@/components/ui/button";
+import { toastResult } from "@/components/toast";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
 import type { ApplicationRow } from "@/lib/applications-data";
-import { FILTERS, listHref, statusesIn, type Filter, type ListParams, type View } from "@/lib/applications-list";
+import { listHref, statusesIn, statusParamLabel, type ListParams, type StatusParam, type View } from "@/lib/applications-list";
 import { cn } from "@/lib/cn";
 
-import { rememberListView } from "./actions";
+import { rememberListView, reorderBoard } from "./actions";
 import { Board } from "./board";
+import { hasOwnColumns, StatusTable } from "./status-table";
 import { Table } from "./table";
 
 export type ApplicationsScreenProps = {
   params: ListParams;
-  /** The applications in view: filtered, searched and sorted. */
+  /** The applications in view: searched and sorted, and for a list, of the status on show. */
   rows: ApplicationRow[];
-  /** How many each filter holds, before searching. */
-  counts: Record<Filter, number>;
+  /** The status tabs (E29-1): every application that isn't archived, then each status's. */
+  tabs: { all: number; statuses: { status: StatusParam; label: string; color: string; count: number; href: string }[] };
   summary: string;
   /** No applications at all yet. */
   empty: boolean;
   /** Archived applications, hidden unless shown (E9-5). */
   archivedCount: number;
+  /** Each open lane's sub-line (E29-3). */
+  laneNotes?: Partial<Record<ApplicationStatus, string>>;
+  /** Google's calendar is in use, for the interview popover (E29-5). */
+  calendar?: boolean;
 };
 
 const HINTS: Record<View, string> = {
   board: "Drag a card to change its status",
-  table: "Click a row to open it",
+  list: "Click a row to open it",
 };
 
 /** How long typing pauses before the search runs. */
 const SEARCH_DELAY_MS = 250;
 
 /**
- * The Applications screen (LST-1, LST-2): the summary, Board / Table, search
- * and filters. Every change goes into the URL and the server answers with
- * the matching applications.
+ * The Applications screen (LST-1, LST-2, E29-1): the title (a status's, with
+ * its dot, when one is on show), a line on what stands out, Board / List,
+ * the search and the status tabs. Every change goes into the URL and the
+ * server answers with the matching applications.
  */
-export function ApplicationsScreen({ params, rows, counts, summary, empty, archivedCount }: ApplicationsScreenProps) {
+export function ApplicationsScreen({ params, rows, tabs, summary, empty, archivedCount, laneNotes, calendar = false }: ApplicationsScreenProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState(params.q);
@@ -56,27 +63,44 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
   }
   const typing = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // A moved card shows in its new column at once; if the move fails, it goes back (LST-4).
-  const [shown, showMove] = useOptimistic(rows, (current, { id, to }: { id: string; to: ApplicationStatus }) =>
-    current.map((row) => (row.id === id ? { ...row, status: to, updated: "Today", updatedAt: Date.now() } : row)),
+  // A moved or reordered card shows in its new place at once; if the
+  // change fails, it goes back (LST-4).
+  const [shown, showMove] = useOptimistic(
+    rows,
+    (
+      current,
+      change: { kind: "status"; id: string; to: ApplicationStatus } | { kind: "reorder"; ordered: ApplicationRow[] },
+    ) =>
+      change.kind === "status"
+        ? current.map((row) => (row.id === change.id ? { ...row, status: change.to, boardSort: null, updated: "Today", updatedAt: Date.now() } : row))
+        : current.map((row) => {
+            const index = change.ordered.findIndex((entry) => entry.id === row.id);
+            return index < 0 ? row : { ...row, boardSort: index };
+          }),
   );
   const [, startMove] = useTransition();
   const move = (row: ApplicationRow, to: ApplicationStatus) =>
     startMove(async () => {
-      showMove({ id: row.id, to });
+      showMove({ kind: "status", id: row.id, to });
       await changeStatus(row.id, to);
     });
+  // A reordered column shows in its new order at once, then writes it (public issue 60).
+  const reorder = (ordered: ApplicationRow[]) =>
+    startMove(async () => {
+      showMove({ kind: "reorder", ordered });
+      toastResult(await reorderBoard({ status: ordered[0].status, ids: ordered.map((row) => row.id) }));
+    });
 
-  // Each view, filter or sort gets its own history entry, so Back returns to
-  // it, and is remembered for the next visit (LST-7) before the page asks
-  // for it. Typing a search only updates the current entry.
+  // Each view or sort gets its own history entry, so Back returns to it, and
+  // is remembered for the next visit (LST-7), per status for the view (LB1),
+  // before the page asks for it. Typing a search only updates the current entry.
   const go = (next: Partial<ListParams>, { replace = false } = {}) => {
     clearTimeout(typing.current);
     const state = { ...params, q: query.trim(), ...next };
     const href = listHref(state);
-    const remember = "view" in next || "filter" in next || "sort" in next;
+    const remember = "view" in next || "sort" in next;
     startTransition(async () => {
-      if (remember) await rememberListView({ view: state.view, filter: state.filter, sort: state.sort });
+      if (remember) await rememberListView({ view: state.view, status: state.status, sort: state.sort });
       if (replace) router.replace(href, { scroll: false });
       else router.push(href, { scroll: false });
     });
@@ -89,30 +113,38 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
   };
 
   // On the board the screen keeps to the window and each column scrolls on
-  // its own; the table scrolls with the page.
+  // its own; the list scrolls with the page.
   const board = !empty && rows.length > 0 && params.view === "board";
+  const status = params.status;
+  // A tab keeps the view, the search and "Show archived".
+  const tabHref = (to: StatusParam | null) => listHref({ ...params, q: query.trim(), status: to, view: to ? "list" : params.view });
 
   return (
     <div className={cn("flex flex-col", board ? "h-panel min-h-[520px]" : "flex-1")}>
       <PageHeader
-        title="Applications"
+        title={
+          status ? (
+            <span className="flex items-center gap-3">
+              <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: tabs.statuses.find((tab) => tab.status === status)?.color }} />
+              {statusParamLabel(status)}
+            </span>
+          ) : (
+            "Applications"
+          )
+        }
         description={summary}
+        // New application is the sidebar's (E27-7).
         actions={
-          <>
-            <SegmentedControl<View>
-              aria-label="View"
-              size="sm"
-              options={[
-                { value: "board", label: "Board" },
-                { value: "table", label: "Table" },
-              ]}
-              value={params.view}
-              onValueChange={(view) => go({ view })}
-            />
-            <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
-              + New application
-            </Link>
-          </>
+          <SegmentedControl<View>
+            aria-label="View"
+            size="sm"
+            options={[
+              { value: "board", label: "Board" },
+              { value: "list", label: "List" },
+            ]}
+            value={params.view}
+            onValueChange={(view) => go({ view })}
+          />
         }
       />
 
@@ -128,25 +160,15 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
               value={query}
               onChange={(event) => search(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && go({ q: query.trim() }, { replace: true })}
-              className="min-w-[180px] flex-[0_1_300px] rounded-control border border-line-input bg-input px-3 py-2.5 text-sm placeholder:text-muted focus-visible:border-primary focus-visible:outline-offset-0"
+              className="min-w-[180px] flex-[0_1_260px] rounded-control border border-line-input bg-input px-3 py-2.5 text-sm placeholder:text-muted focus-visible:border-primary focus-visible:outline-offset-0"
             />
-            <div role="group" aria-label="Show" className="flex flex-wrap gap-1.5">
-              {FILTERS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={params.filter === value}
-                  onClick={() => go({ filter: value })}
-                  className={cn(
-                    "flex items-baseline gap-1.5 rounded-control border px-3 py-2 text-control",
-                    params.filter === value ? "border-primary bg-selected font-medium text-primary-text" : "border-line-field bg-card hover:border-line-strong hover:bg-hover",
-                  )}
-                >
-                  {label}{" "}
-                  <span className="text-xs opacity-65">{counts[value]}</span>
-                </button>
+            {/* The sidebar's statuses, as tabs (E29-1). */}
+            <nav aria-label="Statuses" className="flex flex-wrap gap-1.5">
+              <StatusTab href={tabHref(null)} current={!status} label="All" count={tabs.all} />
+              {tabs.statuses.map((tab) => (
+                <StatusTab key={tab.status} href={tabHref(tab.status)} current={status === tab.status} label={tab.label} count={tab.count} color={tab.color} />
               ))}
-            </div>
+            </nav>
             {archivedCount > 0 && (
               <button
                 type="button"
@@ -165,14 +187,37 @@ export function ApplicationsScreen({ params, rows, counts, summary, empty, archi
             {rows.length === 0 ? (
               <Nothing>{params.q ? `No applications match “${params.q}”.` : "Nothing in this view yet."}</Nothing>
             ) : board ? (
-              <Board rows={shown} statuses={statusesIn(params.filter)} onMove={move} />
+              <Board rows={shown} statuses={statusesIn("all")} onMove={move} onReorder={reorder} notes={laneNotes} openClosed={status === "closed"} calendar={calendar} highlight={status} />
             ) : (
-              <Table rows={shown} sort={params.sort} onSort={(sort) => go({ sort })} onMove={move} />
+              // A status's own columns (E29-2); All and Closed keep the general list.
+              hasOwnColumns(status) ? (
+                <StatusTable status={status} rows={shown} onMove={move} />
+              ) : (
+                <Table rows={shown} sort={params.sort} onSort={(sort) => go({ sort })} onMove={move} />
+              )
             )}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/** One status tab: its dot, name and count; the one on show is marked. */
+function StatusTab({ href, current, label, count, color }: { href: string; current: boolean; label: string; count: number; color?: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-1.5 rounded-control border px-3 py-2 text-control text-ink no-underline",
+        current ? "border-primary bg-selected font-medium" : "border-line-field bg-card hover:border-line-strong hover:bg-hover",
+      )}
+    >
+      {color && <span aria-hidden="true" className="size-[7px] rounded-full" style={{ background: color }} />}
+      {label}
+      <span className="text-xs opacity-65">{count}</span>
+    </Link>
   );
 }
 

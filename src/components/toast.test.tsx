@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   toast,
   TOAST_DURATION_MS,
-  TOAST_WITH_ACTION_DURATION_MS,
   Toaster,
   toastResult,
 } from "./toast";
@@ -77,25 +76,27 @@ describe("toasts", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
-  it("keeps a toast with an action up longer", () => {
+  it("keeps a toast with an action until it's dismissed", () => {
     render(<Toaster />);
     act(() => toast("Marked as sent.", { action: { label: "Undo", onClick: () => {} } }));
-    act(() => vi.advanceTimersByTime(TOAST_DURATION_MS));
+    // It has no timer at all, so not even running every pending one takes it away.
+    act(() => vi.runAllTimers());
     expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(TOAST_WITH_ACTION_DURATION_MS - TOAST_DURATION_MS));
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("pauses while hovered or focused, and never pauses the next toast", () => {
     render(<Toaster />);
-    act(() => toast("Marked as sent.", { action: { label: "Undo", onClick: () => {} } }));
-    const button = screen.getByRole("button", { name: "Undo" });
+    act(() => toast("Saved."));
+    const message = screen.getByText("Saved.");
 
-    fireEvent.focus(button);
-    act(() => vi.advanceTimersByTime(TOAST_WITH_ACTION_DURATION_MS * 2));
-    expect(button).toBeInTheDocument();
+    fireEvent.mouseEnter(message);
+    act(() => vi.advanceTimersByTime(TOAST_DURATION_MS * 2));
+    expect(message).toBeInTheDocument();
 
-    // Replaced while still focused: the new toast times out normally.
+    // Replaced while still hovered: the new toast times out normally.
     act(() => toast("Something else."));
     act(() => vi.advanceTimersByTime(TOAST_DURATION_MS));
     expect(screen.getByRole("status")).toBeEmptyDOMElement();

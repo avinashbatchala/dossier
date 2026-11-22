@@ -4,6 +4,7 @@ import {
   afterFailure,
   GLOBAL,
   PER_IP,
+  pausedForNewBrowsersMessage,
   tooManyAttemptsMessage,
   waitMs,
   type ThrottleState,
@@ -81,5 +82,11 @@ describe("message", () => {
     expect(tooManyAttemptsMessage(400)).toBe("Too many attempts. Try again in 1 second.");
     expect(tooManyAttemptsMessage(119.5 * S)).toBe("Too many attempts. Try again in 2 minutes.");
     expect(tooManyAttemptsMessage(15 * 60 * S)).toBe("Too many attempts. Try again in 15 minutes.");
+  });
+
+  it("tells a new browser stopped by the limit on everyone how to get in anyway (#334)", () => {
+    expect(pausedForNewBrowsersMessage(90 * S)).toBe(
+      "Too many wrong passwords were tried lately, so new browsers have to wait 90 seconds. A browser you've signed in with before can sign in now, and restarting Dossier ends the wait.",
+    );
   });
 });

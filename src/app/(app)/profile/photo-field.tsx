@@ -28,6 +28,8 @@ import { removePhoto, savePhoto, setPhotoOnResumes } from "./actions";
 const FRAME: Size = { width: 240, height: 320 };
 /** How far an arrow key moves the photo, in screen pixels (with Shift, four times as far). */
 const STEP = 8;
+/** How far a press may move, in screen pixels, and still be a click rather than a drag. */
+const CLICK_SLOP = 4;
 
 /**
  * The profile photo (#224) in Basics: add one, crop it, change or remove it,
@@ -151,8 +153,9 @@ export function PhotoField({ photo, onChange }: { photo: ProfilePhoto | null; on
 }
 
 /**
- * Crops the picked image to 3:4: drag it, or use the arrow keys, to move it,
- * and the slider, or + and −, to zoom. The circle shows what round and
+ * Crops the picked image to 3:4: drag it, click the part that should be in
+ * the middle, or use the arrow keys, to move it, and the slider, or + and −,
+ * to zoom. The circle shows what round and
  * square themes keep.
  */
 function CropDialog({ image, onCancel, onUse }: { image: HTMLImageElement; onCancel: () => void; onUse: (src: string) => Promise<void> }) {
@@ -173,6 +176,15 @@ function CropDialog({ image, onCancel, onUse }: { image: HTMLImageElement; onCan
     const start = drag.current;
     if (!start || start.pointer !== event.pointerId) return;
     move(event.clientX - start.startX, event.clientY - start.startY, start.from);
+  }
+
+  // A click moves the point clicked to the middle, for people who can't drag (WCAG 2.5.7).
+  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
+    const start = drag.current;
+    drag.current = null;
+    if (!start || Math.hypot(event.clientX - start.startX, event.clientY - start.startY) > CLICK_SLOP) return;
+    const frame = event.currentTarget.getBoundingClientRect();
+    move(frame.left + frame.width / 2 - event.clientX, frame.top + frame.height / 2 - event.clientY, start.from);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -200,7 +212,7 @@ function CropDialog({ image, onCancel, onUse }: { image: HTMLImageElement; onCan
         <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-32px)] w-[min(400px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-dialog border border-line-popover bg-card p-6 shadow-menu">
           <Dialog.Title className="font-serif text-[22px] leading-tight">Crop your photo</Dialog.Title>
           <Dialog.Description className="text-sm text-muted">
-            Drag it, or use the arrow keys, to move it. Themes with a round or square photo show what&apos;s inside the circle.
+            Drag it, click the part that should be in the middle, or use the arrow keys, to move it. Themes with a round or square photo show what&apos;s inside the circle.
           </Dialog.Description>
           <div
             role="group"
@@ -210,7 +222,7 @@ function CropDialog({ image, onCancel, onUse }: { image: HTMLImageElement; onCan
             style={{ width: FRAME.width, height: FRAME.height }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
-            onPointerUp={() => (drag.current = null)}
+            onPointerUp={onPointerUp}
             onPointerCancel={() => (drag.current = null)}
             onKeyDown={onKeyDown}
           >

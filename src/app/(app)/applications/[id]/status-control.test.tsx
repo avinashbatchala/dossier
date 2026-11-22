@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/dates";
 
 import { setInterviewDate } from "./actions";
 import { ApplicationHeader } from "./application-header";
-import { StatusControl } from "./status-control";
+import { MarkAsSent, StatusControl } from "./status-control";
 
 vi.mock("@/components/change-status", () => ({ changeStatus: vi.fn(async () => true) }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
@@ -18,23 +18,22 @@ beforeEach(() => {
   vi.mocked(setInterviewDate).mockClear();
 });
 
-describe("the application header (E8-1)", () => {
-  it("has the breadcrumb back to Applications, the title and the meta line", () => {
-    render(
-      <ApplicationHeader
-        title="Senior Product Designer · Ledgerly"
-        meta={["Amsterdam", "Hybrid", "Apply by 15 Oct 2026", "Created 27 Sep 2026"]}
-        actions={null}
-      />,
-    );
+describe("the application header (E30-2)", () => {
+  const header = { role: "Senior Product Designer", company: "Ledgerly", title: "Senior Product Designer · Ledgerly", status: "DRAFT" as const, tabs: null, actions: null };
+
+  it("has the breadcrumb with its status and flag as links (public issue 112), and “Role at Company”", () => {
+    render(<ApplicationHeader {...header} flag={{ kind: "apply-by", text: "Apply by Thu 19 Nov · 3 days", due: new Date(), soon: true }} />);
     const breadcrumb = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(within(breadcrumb).getByRole("link", { name: "Applications" })).toHaveAttribute("href", "/applications");
-    expect(screen.getByRole("heading", { level: 1, name: "Senior Product Designer · Ledgerly" })).toBeInTheDocument();
-    expect(screen.getByText("Apply by 15 Oct 2026")).toBeInTheDocument();
+    expect(within(breadcrumb).getByRole("link", { name: "Draft" })).toHaveAttribute("href", "/applications?status=draft");
+    expect(within(breadcrumb).getByText("apply by Thu 19 Nov · 3 days")).toHaveClass("text-warning");
+    expect(screen.getByRole("heading", { level: 1, name: "Senior Product Designer at Ledgerly" })).toBeInTheDocument();
   });
 
-  it("names an application without a title", () => {
-    render(<ApplicationHeader title=" " meta={[]} actions={null} />);
+  it("falls back to the title, and names an application without one", () => {
+    const { rerender } = render(<ApplicationHeader {...header} role="" company="" flag={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Senior Product Designer · Ledgerly" })).toBeInTheDocument();
+    rerender(<ApplicationHeader {...header} role="" company="" title=" " flag={null} />);
     expect(screen.getByRole("heading", { level: 1, name: "Untitled application" })).toBeInTheDocument();
   });
 });
@@ -86,14 +85,17 @@ describe("the status control (E8-1)", () => {
     expect(changeStatus).not.toHaveBeenCalled();
   });
 
-  it("offers “Mark as sent” only on a draft", async () => {
+  it("asks how it went out on “Mark as sent” (E29-7)", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<StatusControl id="app-1" status="DRAFT" />);
+    render(<MarkAsSent id="app-1" />);
     await user.click(screen.getByRole("button", { name: "Mark as sent" }));
-    expect(changeStatus).toHaveBeenCalledWith("app-1", "SENT");
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["By email", "On their site or a job portal", "Another way", "Just mark it as sent"]);
+    await user.click(screen.getByRole("menuitem", { name: "By email" }));
+    expect(changeStatus).toHaveBeenCalledWith("app-1", "SENT", "EMAIL");
 
-    rerender(<StatusControl id="app-1" status="SENT" />);
-    expect(screen.queryByRole("button", { name: "Mark as sent" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Mark as sent" }));
+    await user.click(screen.getByRole("menuitem", { name: "Just mark it as sent" }));
+    expect(changeStatus).toHaveBeenLastCalledWith("app-1", "SENT");
   });
 });
 

@@ -6,10 +6,12 @@ import { z } from "zod";
 
 import { ActionError, publicAction } from "@/lib/action";
 import { clientIp } from "@/lib/auth/client-ip";
-import { loginWaitMs, recordLoginFailure, recordLoginSuccess } from "@/lib/auth/login-throttle";
+import { knownBrowser, rememberBrowser } from "@/lib/auth/known-browser";
+import { startLoginAttempt } from "@/lib/auth/login-throttle";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { passwordMatches, startSession } from "@/lib/auth/session";
-import { tooManyAttemptsMessage } from "@/lib/auth/throttle";
+import { pausedForNewBrowsersMessage, tooManyAttemptsMessage } from "@/lib/auth/throttle";
+import { isDesktopClient } from "@/lib/desktop-client";
 import { prisma } from "@/lib/prisma";
 import { loadProfileName } from "@/lib/profile-data";
 
@@ -17,7 +19,8 @@ import { loginMessages } from "./messages";
 
 /**
  * Signs in with the password that DOSSIER_PASSWORD is a hash of (PRD AUTH-1, AUTH-4).
- * Failed attempts are rate-limited per IP and globally (AUTH-5). Returns
+ * Attempts are rate-limited per IP and globally, or per IP and browser for a
+ * browser that signed in before (AUTH-5, #334). Returns
  * where to go next: the requested page if it's on this site, or the dashboard.
  */
 export const signIn = publicAction(
@@ -27,18 +30,20 @@ export const signIn = publicAction(
     next: z.string().optional(),
   }),
   async ({ password, remember, next }, { toast }) => {
-    const ip = clientIp(await headers());
-    const wait = await loginWaitMs(prisma, ip);
-    if (wait > 0) throw new ActionError(tooManyAttemptsMessage(wait));
-
     if (!password) throw new ActionError(loginMessages.empty);
-    if (!(await passwordMatches(password))) {
-      await recordLoginFailure(prisma, ip);
-      throw new ActionError(loginMessages.wrong);
-    }
-    await recordLoginSuccess(prisma, ip);
 
-    await startSession({ persistent: remember });
+    // Counted before the password is checked, so a burst can't get past the limit (#329).
+    const attempt = await startLoginAttempt(prisma, { ip: clientIp(await headers()), browser: await knownBrowser() });
+    if (!attempt.allowed) {
+      const message = attempt.limit === "everyone" ? pausedForNewBrowsersMessage : tooManyAttemptsMessage;
+      throw new ActionError(message(attempt.waitMs));
+    }
+    if (!(await passwordMatches(password))) throw new ActionError(loginMessages.wrong);
+    await attempt.succeeded();
+
+    // The desktop app keeps its sign-in across launches (#359); a browser only when asked.
+    await startSession({ persistent: remember || isDesktopClient((await headers()).get("user-agent")) });
+    await rememberBrowser();
     const firstName = (await loadProfileName()).trim().split(/\s+/)[0] || "there";
     toast(`Welcome back, ${firstName}.`);
     return { redirectTo: safeNextPath(next) };

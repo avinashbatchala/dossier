@@ -63,6 +63,7 @@ function checks(name: string, make: () => AIProvider, model: string) {
     it("answers a prompt and a connection test", async () => {
       const provider = make();
       const text = await provider.complete({
+        task: "connection-check",
         system: "Answer in one short sentence.",
         messages: [{ role: "user", content: "What colour is the sky on a clear day?" }],
         creativity: "FAITHFUL",
@@ -73,6 +74,7 @@ function checks(name: string, make: () => AIProvider, model: string) {
 
     it("returns JSON that matches a schema", async () => {
       const result = await make().complete({
+        task: "extract-posting",
         system: "Extract the job details from the posting.",
         messages: [{ role: "user", content: posting }],
         schema: Posting,
@@ -127,6 +129,7 @@ describe.runIf(mistral)("live: Mistral", () => {
 
   it("answers a reading task in plain JSON", async () => {
     const result = await make().complete({
+      task: "extract-posting",
       system: "Extract the job details from the posting.",
       messages: [{ role: "user", content: posting }],
       schema: Posting,
@@ -150,6 +153,7 @@ describe.runIf(lmStudio)("live: LM Studio", () => {
 
   it("answers a reading task in plain JSON, with thinking off", async () => {
     const result = await make().complete({
+      task: "extract-posting",
       system: "Extract the job details from the posting.",
       messages: [{ role: "user", content: posting }],
       schema: Posting,

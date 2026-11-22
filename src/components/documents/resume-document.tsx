@@ -6,11 +6,12 @@ import { cn } from "@/lib/cn";
 import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
 import type { ProfileData } from "@/lib/profile";
-import { resumeContent, type ResumeContent, type ResumeOptions } from "@/lib/resume-content";
+import { resumeContent, type ResumeContent, type ResumeOptions, type ResumeRole } from "@/lib/resume-content";
+import { customKey, DEFAULT_SECTION_LAYOUT, inSidebar, sectionHeading, type SectionLayout, shownSections } from "@/lib/resume-sections";
 import { skillLine } from "@/lib/skill-groups";
 import { PHOTO_SHAPES, resolveTheme, type ThemeData } from "@/lib/themes";
 
-import { Contact, ContactLine, DocumentPage, DocumentSection, plainUnit, type UnitRenderer } from "./document-page";
+import { Contact, ContactDetail, ContactLine, DocumentPage, DocumentSection, plainUnit, type UnitRenderer } from "./document-page";
 import styles from "./document.module.css";
 
 type ResumeDocumentProps = ResumeOptions & {
@@ -19,10 +20,14 @@ type ResumeDocumentProps = ResumeOptions & {
   paper: PaperSize;
   /** Overrides the theme's layout, e.g. a tailored resume in a single column. */
   layout?: ThemeLayout;
+  /** The sections' order and which are off (#297); without it, the order resumes have always had. */
+  sections?: SectionLayout;
   /** The language it's written in (SET-7), for its headings too; without one, it's read from the text and the headings are English. */
   language?: string | null;
   /** Draws each tailored part; the preview's adds editing (E8-3). */
   renderUnit?: UnitRenderer;
+  /** How far the spacing and type are squeezed to fit one page (public issue 69); 0 for the theme as it is. */
+  fit?: number;
 };
 
 /** Enough of a resume's own words to tell its script and direction. */
@@ -31,8 +36,9 @@ const sampleText = (content: ResumeContent) =>
     content.name,
     content.headline,
     content.summary,
-    ...content.experience.flatMap((role) => [role.role, ...role.bullets]),
+    ...[...content.experience, ...content.volunteering].flatMap((role) => [role.role, ...role.bullets]),
     ...content.projects.flatMap((project) => [project.name, ...project.bullets]),
+    ...content.customSections.flatMap((section) => section.items.flatMap((item) => [item.title, ...item.bullets])),
   ].join(" ");
 
 /**
@@ -43,79 +49,79 @@ const sampleText = (content: ResumeContent) =>
  * Sections without content are left out. Each tailored part is drawn by
  * `renderUnit` with its unit id, for editing it in place (E8-3).
  */
-export function ResumeDocument({ theme, profile, paper, layout, language, renderUnit = plainUnit, ...options }: ResumeDocumentProps) {
-  const resolved = resolveTheme(theme, layout);
+export function ResumeDocument({ theme, profile, paper, layout, sections = DEFAULT_SECTION_LAYOUT, language, renderUnit = plainUnit, fit = 0, ...options }: ResumeDocumentProps) {
+  const resolved = resolveTheme(theme, layout, fit);
   const labels = documentLabels(language);
   const content = resumeContent(profile, options, labels);
   const { lang, dir } = documentLanguage(language, sampleText(content));
   const { shape, position } = resolved.photo;
   const photo = (size: "header" | "sidebar", className?: string) =>
     content.photo && <ResumePhoto key="photo" src={content.photo} name={content.name} shape={shape} size={size} className={className} />;
+  // A role, paid or volunteering (#294).
+  const role = (entry: ResumeRole) => (
+    <Fragment key={entry.id}>
+      {renderUnit({
+        id: `experience:${entry.id}`,
+        className: styles.entry,
+        head: <EntryHead title={entry.role} at={entry.company} dates={entry.dates} timeline={resolved.timeline} />,
+        children: (
+          <>
+            {entry.descriptor && <p className={styles.descriptor}>{entry.descriptor}</p>}
+            {entry.bullets.length > 0 && (
+              <ul className={styles.bullets}>
+                {entry.bullets.map((bullet, index) => (
+                  <li key={index}>
+                    <CitationText text={bullet} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {entry.skills.length > 0 && (
+              <p className={styles.entrySkills}>
+                <span className={styles.accent}>{`${labels.skills} · `}</span>
+                {entry.skills.join(", ")}
+              </p>
+            )}
+          </>
+        ),
+      })}
+    </Fragment>
+  );
 
-  const sidebar = [
+  // What the sidebar starts with, in a sidebar layout: these don't move.
+  const sidebarTop = [
     position === PhotoPosition.SIDEBAR && photo("sidebar"),
     resolved.split && content.contacts.length > 0 && (
       <DocumentSection key="contact" title={labels.contact}>
         <ul className={styles.contactList}>
           {content.contacts.map((item, index) => (
             <li key={index}>
-              <Contact>{item}</Contact>
+              <ContactDetail>{item}</ContactDetail>
             </li>
           ))}
         </ul>
       </DocumentSection>
     ),
-    content.skills && (
-      <DocumentSection key="skills" title={labels.skills}>
-        {renderUnit({ id: "skills", children: <SkillLines text={content.skills} /> })}
-      </DocumentSection>
-    ),
-    content.languages && (
-      <DocumentSection key="languages" title={labels.languages}>
-        {renderUnit({ id: "languages", children: <p>{content.languages}</p> })}
-      </DocumentSection>
-    ),
   ].filter(Boolean);
 
-  const main = [
-    content.summary && (
-      <DocumentSection key="summary" title={labels.profile}>
+  const drawn: Record<string, ReactNode> = {
+    summary: content.summary && (
+      <DocumentSection key="summary" title={sectionHeading(sections, "summary", labels.profile)}>
         {renderUnit({ id: "summary", children: <p className={styles.summary}>{content.summary}</p> })}
       </DocumentSection>
     ),
-    content.experience.length > 0 && (
-      <DocumentSection key="experience" title={labels.experience}>
-        {content.experience.map((role) => (
-          <Fragment key={role.id}>
-            {renderUnit({
-              id: `experience:${role.id}`,
-              className: styles.entry,
-              head: <EntryHead title={role.role} at={role.company} dates={role.dates} timeline={resolved.timeline} />,
-              children: (
-                <>
-                  {role.descriptor && <p className={styles.descriptor}>{role.descriptor}</p>}
-                  {role.bullets.length > 0 && (
-                    <ul className={styles.bullets}>
-                      {role.bullets.map((bullet, index) => (
-                        <li key={index}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {role.skills.length > 0 && (
-                    <p className={styles.entrySkills}>
-                      <span className={styles.accent}>{`${labels.skills} · `}</span>
-                      {role.skills.join(", ")}
-                    </p>
-                  )}
-                </>
-              ),
-            })}
-          </Fragment>
-        ))}
+    experience: content.experience.length > 0 && (
+      <DocumentSection key="experience" title={sectionHeading(sections, "experience", labels.experience)}>
+        {content.experience.map(role)}
       </DocumentSection>
     ),
-    content.projects.length > 0 && (
-      <DocumentSection key="projects" title={labels.projects}>
+    volunteering: content.volunteering.length > 0 && (
+      <DocumentSection key="volunteering" title={sectionHeading(sections, "volunteering", labels.volunteering)}>
+        {content.volunteering.map(role)}
+      </DocumentSection>
+    ),
+    projects: content.projects.length > 0 && (
+      <DocumentSection key="projects" title={sectionHeading(sections, "projects", labels.projects)}>
         {content.projects.map((project) => (
           <Fragment key={project.id}>
             {renderUnit({
@@ -124,7 +130,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
               head: (
                 <EntryHead
                   title={project.name}
-                  at={project.link && <Contact>{project.link}</Contact>}
+                  at={project.link && <DocumentLink link={project.link} href={project.href} />}
                   dates={project.dates}
                   timeline={resolved.timeline}
                 />
@@ -134,7 +140,9 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
                   {project.bullets.length > 0 && (
                     <ul className={styles.bullets}>
                       {project.bullets.map((bullet, index) => (
-                        <li key={index}>{bullet}</li>
+                        <li key={index}>
+                          <CitationText text={bullet} />
+                        </li>
                       ))}
                     </ul>
                   )}
@@ -151,8 +159,8 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </DocumentSection>
     ),
-    content.education.length > 0 && (
-      <DocumentSection key="education" title={labels.education}>
+    education: content.education.length > 0 && (
+      <DocumentSection key="education" title={sectionHeading(sections, "education", labels.education)}>
         {content.education.map((entry) => (
           <Fragment key={entry.id}>
             {renderUnit({
@@ -165,8 +173,31 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </DocumentSection>
     ),
-    content.publications.length > 0 && (
-      <DocumentSection key="publications" title={labels.publications}>
+    certifications: content.certifications.length > 0 && (
+      <DocumentSection key="certifications" title={sectionHeading(sections, "certifications", labels.certifications)}>
+        {content.certifications.map((entry) => (
+          <Fragment key={entry.id}>
+            {renderUnit({
+              id: `certification:${entry.id}`,
+              className: styles.entry,
+              head: <EntryHead title={entry.name} at={entry.issuer} dates={entry.date} timeline={resolved.timeline} />,
+              children: (entry.details.length > 0 || entry.link) && (
+                <p className={styles.muted}>
+                  {[...entry.details, ...(entry.link ? [<DocumentLink key="link" link={entry.link} href={entry.href} />] : [])].map((part, index) => (
+                    <Fragment key={index}>
+                      {index > 0 && " · "}
+                      {part}
+                    </Fragment>
+                  ))}
+                </p>
+              ),
+            })}
+          </Fragment>
+        ))}
+      </DocumentSection>
+    ),
+    publications: content.publications.length > 0 && (
+      <DocumentSection key="publications" title={sectionHeading(sections, "publications", labels.publications)}>
         {content.publications.map((entry) => (
           <Fragment key={entry.id}>
             {renderUnit({
@@ -178,15 +209,7 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
                   {entry.link && (
                     <>
                       {" "}
-                      {entry.href ? (
-                        <a href={entry.href} target="_blank" rel="noreferrer" className={styles.link}>
-                          <Contact>{entry.link}</Contact>
-                        </a>
-                      ) : (
-                        <span className={styles.link}>
-                          <Contact>{entry.link}</Contact>
-                        </span>
-                      )}
+                      <DocumentLink link={entry.link} href={entry.href} />
                     </>
                   )}
                 </p>
@@ -196,8 +219,8 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         ))}
       </DocumentSection>
     ),
-    content.references.length > 0 && (
-      <DocumentSection key="references" title={labels.references}>
+    references: content.references.length > 0 && (
+      <DocumentSection key="references" title={sectionHeading(sections, "references", labels.references)}>
         <div className={styles.references}>
           {content.references.map((reference) => (
             <div key={reference.id}>
@@ -209,13 +232,37 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         </div>
       </DocumentSection>
     ),
-  ].filter(Boolean);
+    skills: content.skills && (
+      <DocumentSection key="skills" title={sectionHeading(sections, "skills", labels.skills)}>
+        {renderUnit({ id: "skills", children: <SkillLines text={content.skills} /> })}
+      </DocumentSection>
+    ),
+    languages: content.languages && (
+      <DocumentSection key="languages" title={sectionHeading(sections, "languages", labels.languages)}>
+        {renderUnit({ id: "languages", children: <p>{content.languages}</p> })}
+      </DocumentSection>
+    ),
+  };
+
+  for (const section of content.customSections) {
+    const key = customKey(section.id);
+    drawn[key] = (
+      <DocumentSection key={key} title={sectionHeading(sections, key, section.title)}>
+        <CustomSectionItems section={section} timeline={resolved.timeline} renderUnit={renderUnit} />
+      </DocumentSection>
+    );
+  }
+
+  const order = shownSections(sections, Object.keys(drawn).filter((key) => drawn[key]));
+  const isSidebar = (key: string) => inSidebar(key, profile.customSections);
+  const sidebar = [...sidebarTop, ...order.filter(isSidebar).map((key) => drawn[key])];
+  const main = order.filter((key) => !isSidebar(key)).map((key) => drawn[key]);
 
   // Reading order matches what you see: the sidebar comes first in sidebar
   // layouts (and keeps its column even when empty) unless it's at the end of
-  // the line, and its sections follow the main ones in a single column.
+  // the line. A single column simply follows the order.
   const columns = !resolved.split
-    ? [main, sidebar].filter((sections) => sections.length > 0)
+    ? [[...sidebarTop, ...order.map((key) => drawn[key])]].filter((column) => column.length > 0)
     : resolved.sidebarEnd
       ? [main, sidebar]
       : [sidebar, main];
@@ -241,9 +288,9 @@ export function ResumeDocument({ theme, profile, paper, layout, language, render
         {position === PhotoPosition.HEADER_END && photo("header")}
       </header>
       <div className={styles.columns}>
-        {columns.map((sections, index) => (
-          <div key={index} className={cn(styles.column, sections === panel && styles.sidebarPanel)}>
-            {sections}
+        {columns.map((column, index) => (
+          <div key={index} className={cn(styles.column, column === panel && styles.sidebarPanel)}>
+            {column}
           </div>
         ))}
       </div>
@@ -301,6 +348,67 @@ function EntryHead({ title, at, dates, timeline }: { title: string; at: ReactNod
       </p>
       {!timeline && datesSpan}
     </div>
+  );
+}
+
+/** A custom section's items in its format (#298). */
+function CustomSectionItems({ section, timeline, renderUnit }: { section: ResumeContent["customSections"][number]; timeline: boolean; renderUnit: UnitRenderer }) {
+  if (section.format === "INLINE") {
+    return renderUnit({ id: `custom-inline:${section.id}`, children: <p>{section.items.map((item) => item.title).join(" · ")}</p> });
+  }
+  return section.items.map((item) => (
+    <Fragment key={item.id}>
+      {section.format === "LINES"
+        ? renderUnit({
+            id: `custom-line:${item.id}`,
+            className: styles.publication,
+            children: (
+              <p>
+                <CitationText text={item.title} />
+                {item.link && (
+                  <>
+                    {" "}
+                    <DocumentLink link={item.link} href={item.href} />
+                  </>
+                )}
+              </p>
+            ),
+          })
+        : renderUnit({
+            id: `custom-entry:${item.id}`,
+            className: styles.entry,
+            head: <EntryHead title={item.title} at={item.subtitle} dates={item.dates} timeline={timeline} />,
+            children: (
+              <>
+                {item.bullets.length > 0 && (
+                  <ul className={styles.bullets}>
+                    {item.bullets.map((bullet, index) => (
+                      <li key={index}>{bullet}</li>
+                    ))}
+                  </ul>
+                )}
+                {item.link && (
+                  <p className={styles.muted}>
+                    <DocumentLink link={item.link} href={item.href} />
+                  </p>
+                )}
+              </>
+            ),
+          })}
+    </Fragment>
+  ));
+}
+
+/** A publication's, certification's or custom item's link: clickable in the PDF when it's a web address. */
+function DocumentLink({ link, href }: { link: string; href: string | null }) {
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" className={styles.link}>
+      <Contact>{link}</Contact>
+    </a>
+  ) : (
+    <span className={styles.link}>
+      <Contact>{link}</Contact>
+    </span>
   );
 }
 

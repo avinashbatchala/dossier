@@ -3,11 +3,15 @@
 // (DOSSIER_JOBS_TEST_BASE_URL), and this answers in that source's own shape,
 // so the adapters' real request and response handling runs end to end.
 
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const port = Number(process.env.FAKE_JOBS_PORT ?? 3998);
 /** The JSearch key the app is given in e2e/support.ts. */
 const JSEARCH_KEY = "e2e-jsearch-key";
+// Equal fixture dates keep shared score-cap ordering stable even if creating
+// the three postings straddles a millisecond boundary.
+const postedAt = new Date(Date.now() - 2 * 86_400_000).toISOString();
 /** The TypeSafe key a spec saves in Settings → Scoring (#274). */
 const TYPESAFE_KEY = "e2e-typesafe-key";
 
@@ -20,7 +24,7 @@ const job = (id: string, title: string, company: string, extra: Record<string, u
   apply_options: [{ publisher: "LinkedIn", apply_link: `https://jobs.example/${id}`, is_direct: false }],
   job_description: `${company} is hiring a ${title}.\n\nWhat you'll do\n- Design checkout flows\n- Work with research\n\nWhat we're looking for\n- 5+ years of product design\n- Strong prototyping skills in Figma`,
   job_is_remote: false,
-  job_posted_at_datetime_utc: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  job_posted_at_datetime_utc: postedAt,
   job_location: "Rotterdam  •  via LinkedIn",
   job_country: "NL",
   ...extra,
@@ -88,14 +92,75 @@ function startups(path: string, request: IncomingMessage, response: ServerRespon
 let searches = 0;
 /** The usage pings the app sent here (DOSSIER_USAGE_PING_TEST_URL), so a spec can tell whether one went (#172). */
 const pings: unknown[] = [];
+/** What the notification webhook got (E26-2): its headers and body, newest last. */
+const webhookPosts: { signature: string | undefined; event: string | undefined; body: string }[] = [];
+
+// The project's backend (DOSSIER_API_URL, E18), in the shape of its contract.
+// A spec says what it answers; it's "ok" with no notices until then.
+let announcements: unknown = [];
+let announcementsAnswer: "ok" | "down" | "silent" = "ok";
+const announcementRequests: { url: string | undefined; headers: IncomingMessage["headers"] }[] = [];
+
+function answerAnnouncements(request: IncomingMessage, response: ServerResponse) {
+  announcementRequests.push({ url: request.url, headers: request.headers });
+  // It never answers, so the app's own timeout has to end the request.
+  if (announcementsAnswer === "silent") return;
+  if (announcementsAnswer === "down") return send(response, 503, { error: { code: "unavailable", message: "Down for maintenance." } });
+  const body = JSON.stringify({ announcements });
+  const headers = { "cache-control": "public, max-age=21600", etag: `"${createHash("sha256").update(body).digest("hex").slice(0, 16)}"` };
+  if (request.headers["if-none-match"] === headers.etag) return void response.writeHead(304, headers).end();
+  response.writeHead(200, { "content-type": "application/json", ...headers }).end(body);
+}
+
+/** The portal catalog it serves at /v1/portals (E23), as a spec sets it. */
+let portalCatalog: unknown = { portals: [], withdrawn: [], commit: null };
+
+function answerPortals(request: IncomingMessage, response: ServerResponse) {
+  const body = JSON.stringify(portalCatalog);
+  const headers = { "cache-control": "public, max-age=86400", etag: `"${createHash("sha256").update(body).digest("hex").slice(0, 16)}"` };
+  if (request.headers["if-none-match"] === headers.etag) return void response.writeHead(304, headers).end();
+  response.writeHead(200, { "content-type": "application/json", ...headers }).end(body);
+}
 
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${port}`);
   if (url.pathname === "/health") return send(response, 200, { ok: true });
+  if (url.pathname === "/v1/announcements") return answerAnnouncements(request, response);
+  if (url.pathname === "/v1/portals") return answerPortals(request, response);
+  if (url.pathname === "/portals-answer" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      portalCatalog = JSON.parse(body) as unknown;
+      response.writeHead(204).end();
+    });
+    return;
+  }
+  if (url.pathname === "/announcement-requests") return send(response, 200, { requests: announcementRequests });
+  if (url.pathname === "/announcement-answer" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      ({ announcements, answer: announcementsAnswer } = JSON.parse(body) as { announcements: unknown; answer: typeof announcementsAnswer });
+      response.writeHead(204).end();
+    });
+    return;
+  }
   if (url.pathname === "/searches") return send(response, 200, { searches });
   if (url.pathname === "/pings") return send(response, 200, { pings });
   if (url.pathname === "/startup-requests") return send(response, 200, { requests: siteRequests });
   if (url.pathname.startsWith("/startups/")) return startups(url.pathname, request, response);
+  // A notification channel's webhook (E26-2): it keeps what it got, for a spec to check the signature.
+  if (url.pathname === "/webhook-sink" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      webhookPosts.push({ signature: request.headers["x-dossier-signature"] as string | undefined, event: request.headers["x-dossier-event"] as string | undefined, body });
+      response.writeHead(204).end();
+    });
+    return;
+  }
+  if (url.pathname === "/webhook-posts") return send(response, 200, { posts: webhookPosts });
   if (url.pathname === "/ping" && request.method === "POST") {
     let body = "";
     request.on("data", (chunk: Buffer) => (body += chunk.toString()));
@@ -115,7 +180,8 @@ createServer((request, response) => {
     request.on("data", (chunk: Buffer) => (body += chunk.toString()));
     request.on("end", () => {
       const { questions } = JSON.parse(body) as { questions: Record<string, { type: string; criteria?: unknown[]; instructions: unknown }> };
-      const lineOf = (question: { instructions: unknown }) => String((question.instructions as { line?: string }).line ?? "");
+      // The engine's questions (E25): a line's are about the line in quotes.
+      const lineOf = (question: { instructions: unknown }) => /"(.*)"/.exec(String(question.instructions))?.[1] ?? "";
       const answers = Object.fromEntries(
         Object.entries(questions).map(([id, question]) => {
           if (question.type === "score") {
@@ -123,11 +189,11 @@ createServer((request, response) => {
             return [id, { type: "score", score: id === "work" ? top - 1 : top, confidence: 0.9, legend: {}, probabilities: {} }];
           }
           if (question.type === "choice") {
-            const required = /years|skills|experience/i.test(lineOf(question));
-            return [id, { type: "choice", choice: required ? "required" : "other", confidence: 0.9, probabilities: {} }];
+            const choice = id === "seniority" || id === "location" ? "fits" : /years|skills|experience/i.test(lineOf(question)) ? "must" : "other";
+            return [id, { type: "choice", choice, confidence: 0.9, probabilities: {} }];
           }
-          const shown = id.endsWith("Shown") && /product design|figma/i.test(lineOf(question));
-          return [id, { type: "noul", noul: shown ? 0.9 : 0.05 }];
+          const covered = id.endsWith("Covered") && /product design|figma/i.test(lineOf(question));
+          return [id, { type: "noul", noul: covered ? 0.9 : 0.05 }];
         }),
       );
       send(response, 200, { model: "jev-1.14.0", answers, usage: { input_tokens: 1000, output_tokens: 10 } });
@@ -141,6 +207,8 @@ createServer((request, response) => {
   if (url.pathname === "/jsearch/search-v2") {
     if (request.headers["x-api-key"] !== JSEARCH_KEY) return send(response, 401, { status: "ERROR", error: { message: "Invalid API key" } });
     searches += 1;
+    // Deterministic agent partial-failure coverage, never a real source call.
+    if (/agent-source-failure/.test(url.searchParams.get("query") ?? "")) return send(response, 503, { status: "ERROR", error: { message: "Fixture unavailable" } });
     // "nothing" finds nothing; otherwise two pages, joined by a cursor.
     if (/nothing/i.test(url.searchParams.get("query") ?? "")) return send(response, 200, { status: "OK", data: { jobs: [], cursor: null } });
     const second = url.searchParams.get("cursor") === "PAGE-2";
@@ -149,6 +217,23 @@ createServer((request, response) => {
 
   if (url.pathname.startsWith("/adzuna/")) {
     return send(response, 200, { count: 1, results: [{ id: "e2e-adzuna", title: "Product Designer", description: "The start…", company: { display_name: "Ledgerly" }, location: { display_name: "Rotterdam" } }] });
+  }
+
+  // A portal added from a file in e2e/portals.spec.ts (E23-3).
+  if (url.pathname === "/e2e_board/jobs") {
+    return send(response, 200, { jobs: [{ id: "canal-1", title: "Service Designer", company: "Canal Works", city: "Rotterdam", link: "https://jobs.example/canal-1" }] });
+  }
+
+  // Companies' boards, asked one by one, in e2e/portals.spec.ts (E23): one board answers, any other isn't there.
+  const board = /^\/e2e_boards\/([^/]+)\/jobs$/.exec(url.pathname);
+  if (board) {
+    if (board[1] !== "harbour-works") return send(response, 404, { error: "No such board" });
+    return send(response, 200, {
+      jobs: [
+        { id: "hw-1", title: "Interaction Designer", location: "Rotterdam, Netherlands", link: "https://jobs.example/hw-1", text: "Design the harbour's apps." },
+        { id: "hw-2", title: "Interaction Designer", location: "Remote - USA", remote: true, link: "https://jobs.example/hw-2", text: "Design from the US." },
+      ],
+    });
   }
 
   if (url.pathname === "/arbeitsagentur/pc/v6/jobs") {

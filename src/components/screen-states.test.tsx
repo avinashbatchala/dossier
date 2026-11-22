@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import ApplicationNotFound from "@/app/(app)/applications/[id]/not-found";
 import AppError from "@/app/(app)/error";
+import InboxLoading from "@/app/(app)/inbox/loading";
 import NewApplicationError from "@/app/(app)/new/error";
+import UsageLoading from "@/app/(app)/usage/loading";
 import NotFound from "@/app/not-found";
 
 import { ScreenSkeleton } from "./screen-skeleton";
@@ -50,5 +52,13 @@ describe("ScreenSkeleton", () => {
     const { container } = render(<ScreenSkeleton label="Loading your profile…" variant="form" />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading your profile…");
     expect(container.querySelector("[aria-hidden='true']")).not.toBeNull();
+  });
+
+  it("names the screen that's loading, not the dashboard", () => {
+    const { unmount } = render(<InboxLoading />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading your inbox…");
+    unmount();
+    render(<UsageLoading />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading usage…");
   });
 });

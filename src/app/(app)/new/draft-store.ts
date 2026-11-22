@@ -5,7 +5,7 @@
 
 const KEY = "dossier:new-application";
 /** Bump when the draft's shape changes, so an old one is dropped rather than misread. */
-const VERSION = 1;
+const VERSION = 2;
 
 type Listener = () => void;
 

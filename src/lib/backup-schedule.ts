@@ -11,10 +11,14 @@ import { loadSettings, saveSettings } from "@/lib/settings-data";
 // Nightly backups (E10-7, SET-10): while "Nightly backups" is on, an export
 // is written at 03:00 server time, and backups older than
 // DOSSIER_BACKUP_RETENTION_DAYS are removed. A plain timer in this process,
-// so it's only safe with a single instance of the app (E12-5).
+// so it's only safe with a single instance of the app (E12-5). A computer
+// that's off at 03:00, as the desktop app's often is, gets the backup soon
+// after Dossier starts, once the last one is over a day old (#325).
 
 const HOUR = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** How long after the start a missed backup waits, so it doesn't slow the first pages. */
+const CATCH_UP_AFTER_MS = 15_000;
 
 /** The next 03:00 in the server's time zone after `now`. */
 export function nextRun(now: Date): Date {
@@ -57,6 +61,14 @@ export async function lastNightlyBackup(): Promise<Date | null> {
   return (await stat(path.join(backupsDir(), latest.name)).catch(() => null))?.mtime ?? null;
 }
 
+/** At the start: the backup the last night missed, when the newest is over a day old or there's none. */
+export async function catchUpBackup(now = new Date()): Promise<"written" | "off" | "recent"> {
+  if (!(await loadSettings()).nightlyBackup) return "off";
+  const last = await lastNightlyBackup();
+  if (last && now.getTime() - last.getTime() < DAY_MS) return "recent";
+  return runNightlyBackup(now);
+}
+
 const globalForSchedule = globalThis as unknown as { backupTimer?: ReturnType<typeof setTimeout> };
 
 /** Starts the nightly timer, once per process (dev reloads keep the one they have). */
@@ -73,4 +85,5 @@ export function startBackupSchedule(): void {
     globalForSchedule.backupTimer.unref?.();
   };
   schedule();
+  setTimeout(() => void catchUpBackup().catch(() => {}), CATCH_UP_AFTER_MS).unref?.();
 }

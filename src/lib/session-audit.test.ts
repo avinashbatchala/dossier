@@ -22,6 +22,14 @@ const OPEN_ROUTES = new Set([
   "src/app/api/oauth/protected-resource/route.ts",
   "src/app/api/oauth/register/route.ts",
   "src/app/api/oauth/token/route.ts",
+  // How the desktop app signs in, on a server it started: it starts a session, so
+  // there's none to check yet. It checks its launch's token, and answers 404 without it.
+  "src/app/api/desktop/sign-in/route.ts",
+  // Signing the system browser in from the desktop app (#365, #327): the app asks
+  // with its launch token, and the browser opens the one-time link, before it
+  // has a session. Both answer 404 on a server the desktop app didn't start.
+  "src/app/api/desktop/browser-link/route.ts",
+  "src/app/api/desktop/browser-sign-in/route.ts",
 ]);
 
 const sources = globSync("src/**/*.{ts,tsx}").filter((file) => !/\.test\.tsx?$/.test(file) && !file.startsWith("src/generated/"));

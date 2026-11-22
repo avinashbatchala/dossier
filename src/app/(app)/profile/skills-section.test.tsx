@@ -6,14 +6,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import type { ProfileData } from "@/lib/profile";
 
-import { addLanguage, addSkill, removeLanguage, removeSkill, renameSkillGroup, setLanguageLevel, setSkillGroup } from "./actions";
-import { SkillsSection } from "./skills-section";
+import { addLanguage, addSkill, removeLanguage, removeSkill, renameSkillGroup, reorderSkills, setLanguageLevel, setSkillGroup, setSkillOrder } from "./actions";
+import { LanguagesSection, SkillsSection } from "./skills-section";
 
 vi.mock("./actions", () => ({
   addSkill: vi.fn(),
   removeSkill: vi.fn(),
   setSkillGroup: vi.fn(),
   renameSkillGroup: vi.fn(),
+  reorderSkills: vi.fn(),
+  setSkillOrder: vi.fn(),
   addLanguage: vi.fn(),
   setLanguageLevel: vi.fn(),
   removeLanguage: vi.fn(),
@@ -29,13 +31,15 @@ const profile = (): ProfileData => ({
   ],
   languages: [{ id: "l1", name: "Dutch", level: "NATIVE" }],
   experience: [
-    { id: "e1", role: "A", company: "", location: "", descriptor: "", bullets: "", skillIds: ["s1", "s2"], ...span },
-    { id: "e2", role: "B", company: "", location: "", descriptor: "", bullets: "", skillIds: ["s1"], ...span },
+    { id: "e1", role: "A", company: "", location: "", descriptor: "", volunteering: false, bullets: "", skillIds: ["s1", "s2"], ...span },
+    { id: "e2", role: "B", company: "", location: "", descriptor: "", volunteering: false, bullets: "", skillIds: ["s1"], ...span },
   ],
   projects: [],
   education: [],
+  certifications: [],
   publications: [],
   references: [],
+  customSections: [],
   facts: [],
   photo: null,
 });
@@ -46,7 +50,12 @@ function Harness() {
   useEffect(() => {
     latest = state;
   });
-  return <SkillsSection profile={state} update={(change) => setState(change)} />;
+  return (
+    <>
+      <SkillsSection profile={state} update={(change) => setState(change)} />
+      <LanguagesSection profile={state} update={(change) => setState(change)} />
+    </>
+  );
 }
 
 describe("Skills", () => {
@@ -68,7 +77,7 @@ describe("Skills", () => {
     vi.mocked(addSkill).mockResolvedValue({ ok: true, data: { added: true, skill: { id: "s3", name: "Accessibility", group: "" } } });
     render(<Harness />);
     await user.type(screen.getByLabelText("Add a skill"), "Accessibility{Enter}");
-    expect(addSkill).toHaveBeenCalledWith({ name: "Accessibility", group: "" });
+    expect(addSkill).toHaveBeenCalledWith({ profileId: "", name: "Accessibility", group: "" });
     expect(await screen.findByText("Accessibility")).toBeInTheDocument();
     expect(screen.getByLabelText("Add a skill")).toHaveValue("");
     // No roles use it yet, so no count.
@@ -103,6 +112,43 @@ describe("Skills", () => {
   });
 });
 
+describe("Skill order (public issue 62)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(reorderSkills).mockResolvedValue({ ok: true, data: null });
+    vi.mocked(setSkillOrder).mockResolvedValue({ ok: true, data: null });
+  });
+
+  it("moves a skill from its menu, saves every skill's order, and keeps it on tailored resumes from then on", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(screen.getByText(/Drag a skill, or move it from its menu/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Figma: move it" }));
+    expect(screen.getByRole("menuitem", { name: "Move left" })).toHaveAttribute("aria-disabled", "true");
+    await user.click(screen.getByRole("menuitem", { name: "Move right" }));
+    expect(reorderSkills).toHaveBeenCalledWith({ profileId: "", ids: ["s2", "s1"] });
+    expect(within(screen.getByRole("list", { name: "Your skills" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["User research1 role×", "Figma2 roles×"]);
+    expect(latest.skills.map((skill) => skill.id)).toEqual(["s2", "s1"]);
+    expect(screen.getByText("In your own order, which tailored resumes keep.")).toBeInTheDocument();
+    expect(screen.getByText("“Figma” moved to position 2 of 2.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Most relevant first" }));
+    expect(setSkillOrder).toHaveBeenCalledWith({ profileId: "", order: "relevance" });
+    expect(screen.getByText(/Drag a skill, or move it from its menu/)).toBeInTheDocument();
+  });
+
+  it("puts a move back when it isn't saved", async () => {
+    const user = userEvent.setup();
+    vi.mocked(reorderSkills).mockResolvedValue({ ok: false, error: "The list changed in the meantime. Reload the page and try again." });
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Figma: move it" }));
+    await user.click(screen.getByRole("menuitem", { name: "Move right" }));
+    await waitFor(() => expect(latest.skills.map((skill) => skill.id)).toEqual(["s1", "s2"]));
+    expect(toast).toHaveBeenCalledWith("The list changed in the meantime. Reload the page and try again.");
+    expect(screen.getByText(/Drag a skill, or move it from its menu/)).toBeInTheDocument();
+  });
+});
+
 describe("Skill groups (#280)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,7 +168,7 @@ describe("Skill groups (#280)", () => {
     await newGroup(user, "Tools");
     expect(screen.getByRole("heading", { name: "Tools" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Add to Tools"), "Ahrefs{Enter}");
-    expect(addSkill).toHaveBeenCalledWith({ name: "Ahrefs", group: "Tools" });
+    expect(addSkill).toHaveBeenCalledWith({ profileId: "", name: "Ahrefs", group: "Tools" });
     expect(within(await screen.findByRole("list", { name: "Skills in Tools" })).getByText("Ahrefs")).toBeInTheDocument();
     expect(latest.skills.at(-1)).toEqual({ id: "new-Ahrefs", name: "Ahrefs", group: "Tools" });
   });
@@ -143,7 +189,7 @@ describe("Skill groups (#280)", () => {
     render(<Harness />);
     await newGroup(user, "Design");
     await user.type(screen.getByLabelText("Add to Design"), "Prototyping{Enter}");
-    await user.click(screen.getByRole("button", { name: "Figma (change its group)" }));
+    await user.click(screen.getByRole("button", { name: "Figma: move it, or change its group" }));
     await user.click(screen.getByRole("menuitemradio", { name: "Design" }));
     expect(setSkillGroup).toHaveBeenCalledWith({ id: "s1", group: "Design" });
     expect(within(screen.getByRole("list", { name: "Skills in Design" })).getByText("Figma")).toBeInTheDocument();
@@ -162,7 +208,7 @@ describe("Skill groups (#280)", () => {
     await user.click(screen.getByRole("button", { name: "Rename Desing" }));
     await user.clear(screen.getByLabelText("New name for Desing"));
     await user.type(screen.getByLabelText("New name for Desing"), "Design{Enter}");
-    expect(renameSkillGroup).toHaveBeenCalledWith({ from: "Desing", to: "Design" });
+    expect(renameSkillGroup).toHaveBeenCalledWith({ profileId: "", from: "Desing", to: "Design" });
     expect(screen.getByRole("heading", { name: "Design" })).toBeInTheDocument();
     expect(latest.skills.find((skill) => skill.name === "Prototyping")?.group).toBe("Design");
   });

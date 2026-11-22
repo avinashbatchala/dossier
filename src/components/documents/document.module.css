@@ -34,6 +34,9 @@
   text-align: start;
   overflow-wrap: break-word;
   print-color-adjust: exact;
+  /* A printed "fi" or "fl" ligature is one glyph, which job portals' parsers
+     read as "ﬁ" (U+FB01), so "workflow" stops matching a search for it. */
+  font-variant-ligatures: no-common-ligatures;
 }
 
 .page:lang(ja) {
@@ -182,7 +185,7 @@
 
 .summary {
   text-wrap: pretty;
-  /* Its paragraphs, as typed in Profile → Basics (#277). */
+  /* Its paragraphs, as typed in Profile → Summary (#277). */
   white-space: pre-line;
 }
 
@@ -259,6 +262,13 @@
 
 .publication + .publication {
   margin-top: calc(var(--u) * 5);
+}
+
+/* A linked email or web address in the contact details reads like the others (#369). */
+.contactLink,
+.contactLink:hover {
+  color: inherit;
+  text-decoration: none;
 }
 
 .link,

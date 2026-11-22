@@ -22,11 +22,21 @@ function nextControl(element: HTMLElement | null): HTMLElement | null {
 
 /**
  * The sidebar's notice while a newer release is out: what's new in it, how
- * to update, or "Not now", which hides it until a newer one still. While the
- * sidebar is collapsed it's an icon with a dot, which opens the sidebar to
- * show the notice.
+ * to update, or "Not now", which hides it until a newer one still. In the
+ * desktop app on this computer, the release page is where the download is
+ * (#326). While the sidebar is collapsed it's an icon with a dot, which opens
+ * the sidebar to show the notice.
  */
-export function UpdateNotice({ release, currentVersion }: { release: Release; currentVersion: string }) {
+export function UpdateNotice({
+  release,
+  currentVersion,
+  desktop = false,
+}: {
+  release: Release;
+  currentVersion: string;
+  /** Running in the desktop app, on this computer: updating is a new download. */
+  desktop?: boolean;
+}) {
   const [hidden, setHidden] = useState(false);
   const notice = useRef<HTMLElement>(null);
   const titleId = useId();
@@ -78,16 +88,29 @@ export function UpdateNotice({ release, currentVersion }: { release: Release; cu
       <h2 id={titleId} className="text-meta font-medium">
         Dossier {release.version} is out
       </h2>
-      <p className="text-xs text-muted">You have {currentVersion}. Update to get its fixes and features.</p>
+      <p className="text-xs text-muted">
+        {desktop
+          ? `You have ${currentVersion}. Download the new one and install it over this one: your data stays as it is.`
+          : `You have ${currentVersion}. Update to get its fixes and features.`}
+      </p>
       <div className="flex flex-wrap gap-x-3 text-xs">
-        <a href={release.url} target="_blank" rel="noopener noreferrer" className={LINK}>
-          What&apos;s new{" "}
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
-        <a href={UPGRADE_GUIDE_URL} target="_blank" rel="noopener noreferrer" className={LINK}>
-          How to update{" "}
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
+        {desktop ? (
+          <a href={release.url} target="_blank" rel="noopener noreferrer" className={LINK}>
+            Download {release.version}{" "}
+            <span className="sr-only">(opens in your browser)</span>
+          </a>
+        ) : (
+          <>
+            <a href={release.url} target="_blank" rel="noopener noreferrer" className={LINK}>
+              What&apos;s new{" "}
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+            <a href={UPGRADE_GUIDE_URL} target="_blank" rel="noopener noreferrer" className={LINK}>
+              How to update{" "}
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+          </>
+        )}
         <button type="button" onClick={() => void notNow()} className={`${TARGET} text-muted hover:text-ink`}>
           Not now
         </button>

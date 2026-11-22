@@ -17,10 +17,10 @@ const handler = createMcpHandler(({ authInfo }) => createDossierServer(typeof au
   onerror: (error) => logServerError("MCP connector", error),
 });
 
-/** "Sign in first", with where Claude finds out how (RFC 9728). */
+/** "Sign in first", with where the app finds out how (RFC 9728). Any MCP app gets it, not only Claude (#281). */
 function unauthorized(origin: string): Response {
   return Response.json(
-    { error: "invalid_token", error_description: "Connect Claude to Dossier first." },
+    { error: "invalid_token", error_description: "Connect this app to Dossier first." },
     { status: 401, headers: { "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp", scope="${SCOPE}"` } },
   );
 }

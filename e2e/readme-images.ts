@@ -54,7 +54,8 @@ test("an application with its tailored resume and the chat", async ({ page }) =>
   const [ledgerly] = await sql<{ id: string }>(`SELECT id FROM "Application" WHERE company = 'Ledgerly' LIMIT 1`);
   await page.goto(`/applications/${ledgerly.id}`);
   await expect(page.getByRole("article", { name: "Resume" })).toContainText("Jane Doe");
-  await expect(page.getByRole("log", { name: "Conversation" })).toContainText("Nothing invented");
+  // The opening message, above the composer (E30-10).
+  await expect(page.getByRole("log", { name: "Conversation" })).toContainText("Here's what I tailored");
   await shot(page, "application");
 });
 
@@ -161,11 +162,11 @@ test.describe("the dashboard's calendar", () => {
 test("a new application: how you match", async ({ page }) => {
   await page.goto("/new?fresh=1");
   await page.getByLabel("Job posting").fill(POSTING);
-  await page.getByRole("button", { name: "Read the posting →" }).click();
-  const match = page.getByRole("heading", { name: "How you match" });
+  await page.getByRole("button", { name: "Read the posting" }).click();
+  const match = page.getByRole("heading", { name: "What I read from the posting" });
   await expect(match).toBeVisible();
   await expect(page.getByText("Experience with Kubernetes")).toBeVisible();
-  // The match card at the top, with the end of the details card above it.
+  // The read-out at the top.
   await match.evaluate((heading) => {
     heading.scrollIntoView({ block: "start" });
     window.scrollBy(0, -56);

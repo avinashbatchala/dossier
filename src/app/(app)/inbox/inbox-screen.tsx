@@ -8,6 +8,7 @@ import { formatWhen, KIND_LABELS } from "@/components/email/conversation";
 import { PageHeader } from "@/components/page-header";
 import { toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
+import { SelectControl } from "@/components/ui/select";
 import { StatusDot } from "@/components/ui/status-dot";
 import { checkInbox, dismissEmail, linkEmail } from "@/lib/google/actions";
 import type { EmailView, Inbox } from "@/lib/google/inbox-data";
@@ -21,6 +22,7 @@ export function InboxScreen({
   configured,
   lastSync,
   problem,
+  aiReady,
   timeZone,
   applications,
 }: {
@@ -72,6 +74,15 @@ export function InboxScreen({
         }
       />
       <div className="flex max-w-[860px] flex-col gap-5 px-10 pb-[72px]">
+        {connected && !aiReady && (
+          // #358: said once for the page, not only when a mail is opened.
+          <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-pretty text-warning">
+            Mail isn&apos;t read yet: without an AI provider, replies are linked to their applications, but nothing says what they ask or drafts an answer.{" "}
+            <Link href="/settings?section=ai" className="font-medium text-warning underline underline-offset-2">
+              Choose one in Settings → AI provider
+            </Link>
+          </p>
+        )}
         {empty ? (
           <p className={`${card} py-6! text-sm text-muted`}>{connected ? "Nothing yet. Replies to your applications will show up here." : "Nothing here yet."}</p>
         ) : (
@@ -157,11 +168,13 @@ function Unmatched({ email, timeZone, applications }: { email: EmailView; timeZo
         <span className="flex-none text-meta text-muted">{formatWhen(email.sentAt, timeZone)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <SelectControl
+          compact
           aria-label="Link to application"
           value={choice}
           onChange={(event) => setChoice(event.target.value)}
-          className="h-[30px] max-w-[320px] min-w-0 flex-1 cursor-pointer rounded-control border border-line-input bg-input px-2 text-control"
+          wrapperClassName="max-w-[320px] flex-1"
+          className="h-[30px] w-full min-w-0 rounded-control border border-line-input bg-input text-control"
         >
           <option value="">Choose application…</option>
           {applications.map((application) => (
@@ -169,7 +182,7 @@ function Unmatched({ email, timeZone, applications }: { email: EmailView; timeZo
               {application.label}
             </option>
           ))}
-        </select>
+        </SelectControl>
         <Button size="sm" variant="secondary" disabled={!choice || pending} onClick={() => run(async () => toastResult(await linkEmail({ emailId: email.id, applicationId: choice })))}>
           Link
         </Button>

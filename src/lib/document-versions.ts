@@ -10,7 +10,7 @@ import type { Unit } from "@/lib/application-data";
 // current version.
 
 /** Versions kept per document; older ones are dropped. */
-export const MAX_VERSIONS = 50;
+const MAX_VERSIONS = 50;
 
 export type VersionNote = { cause: VersionCause; detail?: string };
 

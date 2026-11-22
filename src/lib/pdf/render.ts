@@ -2,6 +2,9 @@ import "server-only";
 
 import { chromium, type Browser } from "playwright-core";
 
+import { env } from "@/lib/env";
+
+import { printWithDesktopApp } from "./desktop-print";
 import { PRINT_TOKEN_HEADER, signPrintToken } from "./print-token";
 
 // PDFs are printed by headless Chromium from the app's own print pages, so
@@ -89,6 +92,7 @@ function release(): void {
  * blocked, so fonts come from the bundle and nothing leaves the server.
  */
 export async function renderPdf(path: string): Promise<Uint8Array> {
+  if (env.DOSSIER_DESKTOP_PRINT_URL) return printWithDesktopApp(env.DOSSIER_DESKTOP_PRINT_URL, path);
   await acquire();
   try {
     const origin = appOrigin();
@@ -102,6 +106,9 @@ export async function renderPdf(path: string): Promise<Uint8Array> {
       const page = await context.newPage();
       const response = await page.goto(`${origin}${path}`, { waitUntil: "load", timeout: NAVIGATION_TIMEOUT_MS });
       if (!response?.ok()) throw new Error(`The print page ${path} answered ${response?.status() ?? "nothing"}.`);
+      // A print page only redirects when it refuses the token, to the sign-in
+      // page, which answers 200. Printing that would hand it over as the document.
+      if (response.request().redirectedFrom()) throw new Error(`The print page ${path} redirected to ${new URL(page.url()).pathname}.`);
       await page.evaluate(() => document.fonts.ready.then(() => undefined));
       return await page.pdf({ preferCSSPageSize: true, printBackground: true });
     } finally {

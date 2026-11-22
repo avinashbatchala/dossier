@@ -1,8 +1,10 @@
 name: Pages
 
 # Publishes the website in site/ to GitHub Pages when it, or the
-# screenshots, icons and fonts it takes from the app, change on main.
-# Settings → Pages → Source must be "GitHub Actions".
+# screenshots, icons and fonts it takes from the app, change on main, and
+# once a day so the Docker image's download count on it keeps up (build.sh
+# reads it from the package page). Settings → Pages → Source must be
+# "GitHub Actions".
 
 on:
   push:
@@ -17,6 +19,8 @@ on:
       - "src/fonts/geist/**"
       - "src/fonts/jetbrains-mono/**"
       - ".github/workflows/pages.yml"
+  schedule:
+    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:

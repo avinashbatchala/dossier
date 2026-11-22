@@ -4,6 +4,12 @@ import { z } from "zod";
 
 import { StartupStatus } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
+import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
+import { scoreProfilesSchema } from "@/lib/jobs/score-posting";
+import { scoreStartupJob, startupScoreJobKey } from "@/lib/jobs/score-startup";
+import { scoreLevelsProblem, type LevelsProblem } from "@/lib/profiles";
+import { scoringProblem } from "@/lib/scoring";
+import { loadScoringConfig } from "@/lib/scoring/config";
 import { startStartupsRefresh } from "@/lib/startups/refresh";
 import { lookUpStartup, removeStartup, updateStartup } from "@/lib/startups/store";
 
@@ -15,6 +21,25 @@ const GONE = "That startup is no longer in the list. Refresh the page.";
 
 /** "Refresh": asks both sources again, in the background; returns the job to follow. */
 export const refreshStartupsNow = action(z.object({}), async () => ({ jobId: await startStartupsRefresh() }));
+
+/**
+ * "Score" (#524): how well a startup's post fits one profile, or all of
+ * them, with the model Settings → Scoring chose, in the background, as
+ * Positions scores a posting; a scoring under way is followed, not started
+ * again. Its levels first (E24-3): the browser says where to choose them.
+ */
+export const startScoringStartup = action(
+  z.object({ id: startupId, profiles: scoreProfilesSchema }),
+  async ({ id, profiles }): Promise<{ jobId: string } | { setLevels: LevelsProblem }> => {
+    const waiting = await scoreLevelsProblem(profiles);
+    if (waiting) return { setLevels: waiting };
+    const problem = await scoringProblem(await loadScoringConfig());
+    if (problem) throw new ActionError(problem);
+    const key = startupScoreJobKey(id);
+    const [unfinished] = await findUnfinishedJobs(key);
+    return { jobId: unfinished?.id ?? (await startJob(scoreStartupJob, { id, profiles }, { key })) };
+  },
+);
 
 /** Save, Mark as contacted, Dismiss, and their Undo. */
 export const setStartupStatus = action(z.object({ id: startupId, status: z.enum(StartupStatus) }), async ({ id, status }) => {

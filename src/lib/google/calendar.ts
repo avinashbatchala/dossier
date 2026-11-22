@@ -63,6 +63,11 @@ const eventSchema = z.object({
   start: time.default({}),
   end: time.default({}),
   extendedProperties: z.object({ private: z.record(z.string(), z.string()).optional() }).optional(),
+  /** Where and with whom (E30-6). */
+  location: z.string().default(""),
+  attendees: z.array(z.object({ email: z.string().default(""), displayName: z.string().optional(), self: z.boolean().optional() })).default([]),
+  hangoutLink: z.string().optional(),
+  conferenceData: z.object({ conferenceSolution: z.object({ name: z.string().optional() }).optional() }).optional(),
 });
 
 /** An event as Dossier reads it. All-day events have dates ("2026-10-20", the end one day after the last) instead of times. */
@@ -78,6 +83,10 @@ export type CalendarEvent = {
   link: string;
   /** The application of an interview Dossier added. */
   applicationId: string | null;
+  /** Where: its location, or its video call ("Google Meet"); "" when neither (E30-6). */
+  place: string;
+  /** Who else is invited, by name or address. */
+  people: string[];
 };
 
 function readEvent(json: unknown): CalendarEvent {
@@ -92,6 +101,8 @@ function readEvent(json: unknown): CalendarEvent {
     endDate: event.end.date ?? null,
     link: event.htmlLink,
     applicationId: event.extendedProperties?.private?.[APPLICATION_PROPERTY] ?? null,
+    place: event.location.trim() || event.conferenceData?.conferenceSolution?.name?.trim() || (event.hangoutLink ? "Google Meet" : ""),
+    people: event.attendees.filter((attendee) => !attendee.self).map((attendee) => attendee.displayName?.trim() || attendee.email).filter(Boolean),
   };
 }
 

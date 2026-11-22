@@ -10,9 +10,9 @@ const SECRET_MIN_LENGTH = 32;
 const GENERATE_SECRET = "for example the output of `openssl rand -base64 32`";
 const HASH_PASSWORD = "Make one with `docker run --rm -it ghcr.io/aientech/dossier hash-password`";
 
-export const AI_PROVIDERS = ["local", "openai", "anthropic", "mistral", "lmstudio"] as const;
-export const JOB_SOURCE_NAMES = ["jsearch", "adzuna", "arbeitsagentur", "freehire", "off"] as const;
-export const SCORER_NAMES = ["ai", "jev"] as const;
+const AI_PROVIDERS = ["local", "openai", "anthropic", "mistral", "lmstudio"] as const;
+const JOB_SOURCE_NAMES = ["jsearch", "adzuna", "arbeitsagentur", "freehire", "off"] as const;
+const SCORER_NAMES = ["ai", "jev", "openai-decisions", "openrouter"] as const;
 
 // An empty value (`DOSSIER_AI_KEY=` in .env) counts as unset.
 const unsetIfEmpty = (value: unknown) =>
@@ -48,13 +48,19 @@ const schema = z.object({
   ),
   DATABASE_URL: required(
     "DATABASE_URL",
-    "Set it to your PostgreSQL connection string, e.g. postgresql://user:password@host:5432/dossier.",
+    "Set it to your PostgreSQL connection string, e.g. postgresql://user:password@host:5432/dossier, or to an SQLite file, e.g. file:/data/dossier.db.",
   ).pipe(
     // Never echo the value: it contains the database password.
-    z.string().regex(/^postgres(ql)?:\/\//, {
-      error:
-        "DATABASE_URL must be a PostgreSQL connection string starting with postgresql://.",
-    }),
+    z
+      .string()
+      .regex(/^(postgres(ql)?:\/\/|file:)/, {
+        error:
+          "DATABASE_URL must be a PostgreSQL connection string starting with postgresql://, or an SQLite file starting with file:.",
+      })
+      // A relative path would mean another file to the migrations, which run in another folder.
+      .refine((url) => !url.startsWith("file:") || path.isAbsolute(url.slice("file:".length)), {
+        error: "DATABASE_URL must give the SQLite file's full path, e.g. file:/data/dossier.db.",
+      }),
   ),
   DOSSIER_DATA_DIR: z
     .preprocess(unsetIfEmpty, z.string().default("/data"))
@@ -137,8 +143,9 @@ const schema = z.object({
       .toLowerCase()
       .pipe(z.enum(["on", "off"], { error: (issue) => `DOSSIER_JOBS_ARBEITSAGENTUR must be on or off (got "${String(issue.input)}").` })),
   ),
-  // Defaults for Settings → Scoring (#274), until a choice is saved there:
-  // ai scores postings with the AI provider, jev with TypeSafe's Jev.
+  // Defaults for Settings → Scoring (#274, E25-2), until a choice is saved there:
+  // ai scores postings with the AI provider, jev with TypeSafe's Jev,
+  // openai-decisions and openrouter with those (their keys are saved in Settings).
   DOSSIER_SCORER: optional(
     z
       .string()
@@ -174,6 +181,16 @@ const schema = z.object({
   DOSSIER_USAGE_PING_TEST_URL: optional(
     z.url({ protocol: /^https?$/, error: "DOSSIER_USAGE_PING_TEST_URL must be an http:// or https:// URL." }),
   ),
+  // Where the project's backend is (announcements/check.ts), when it isn't
+  // the real one: for development against a local copy, and the end-to-end tests.
+  DOSSIER_API_URL: optional(
+    z.url({ protocol: /^https?$/, error: "DOSSIER_API_URL must be an http:// or https:// URL." }).transform((url) => url.replace(/\/+$/, "")),
+  ),
+  // Set by the desktop app on a server it starts: the token it signs in with
+  // for this launch (desktop.ts). Never set on a server otherwise.
+  DOSSIER_DESKTOP_TOKEN: optional(z.string()),
+  // And where it prints PDFs (pdf/desktop-print.ts), with its own Chromium.
+  DOSSIER_DESKTOP_PRINT_URL: optional(z.url({ protocol: /^https?$/, error: "DOSSIER_DESKTOP_PRINT_URL must be an http:// or https:// URL." })),
   // For the end-to-end tests only: asks <url> for the latest release instead
   // of GitHub's API (e2e/fake-jobs.mts answers).
   DOSSIER_UPDATES_TEST_BASE_URL: optional(

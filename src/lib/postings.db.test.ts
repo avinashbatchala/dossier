@@ -1,10 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PostingSource } from "@/generated/prisma/enums";
-import { JOB_SOURCES, type FoundPosting } from "@/lib/job-search/search";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { DEFAULT_FILTERS, type FoundPosting } from "@/lib/job-search/search";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
-import { countPostings, dismissPosting, foundFromPosting, listPostings, postingStates, savePosting, storePosting, unmarkPosting } from "./postings";
+import { countLibrary, listLibrary } from "./library";
+import { dismissPosting, foundFromPosting, postingStates, savePosting, storePosting, unmarkPosting } from "./postings";
+
+const listPostings = async (show: "saved" | "dismissed") => (await listLibrary({ ...DEFAULT_FILTERS, show })).postings;
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
@@ -34,8 +36,10 @@ beforeEach(() => resetDatabase(prisma()));
 afterAll(() => prisma().$disconnect());
 
 describe("postings", () => {
-  it("lists the same sources as the schema's enum", () => {
-    expect([...JOB_SOURCES].sort()).toEqual(Object.values(PostingSource).sort());
+  it("keeps a posting from a source that's no longer listed, under its own id (#269)", async () => {
+    await savePosting({ ...found, source: "GONE_BOARD", externalId: "old-1" });
+    const [shown] = await listPostings("saved");
+    expect(shown).toMatchObject({ source: "GONE_BOARD", externalId: "old-1", title: "UX Researcher", state: { saved: true } });
   });
 
   it("saves a posting with everything the screen needs, and reads it back in the same shape", async () => {
@@ -62,14 +66,16 @@ describe("postings", () => {
     expect(await prisma().posting.findFirstOrThrow()).toMatchObject({ savedAt: expect.any(Date), dismissedAt: null });
   });
 
-  it("removes a posting left with no reason to be kept, but not one with an application", async () => {
+  it("keeps a posting in the library when it's no longer saved or dismissed (E22-5), and trims a dismissed one", async () => {
     await savePosting(found);
     await unmarkPosting(ref, "saved");
-    expect(await prisma().posting.count()).toBe(0);
+    expect(await prisma().posting.findFirstOrThrow()).toMatchObject({ savedAt: null, dismissedAt: null, seenAt: expect.any(Date) });
 
     expect(await dismissPosting(found)).toEqual({ wasSaved: false });
+    // Only what's needed to know it again: its text can be fetched again on Undo.
+    expect(await prisma().posting.findFirstOrThrow()).toMatchObject({ description: "", complete: false, title: "UX Researcher" });
     await unmarkPosting(ref, "dismissed");
-    expect(await prisma().posting.count()).toBe(0);
+    expect(await prisma().posting.findFirstOrThrow()).toMatchObject({ dismissedAt: null });
 
     const application = await prisma().application.create({ data: { title: "UX Researcher · Northwind" } });
     await prisma().posting.update({ where: { id: (await savePosting(found)).id }, data: { applicationId: application.id } });
@@ -104,7 +110,7 @@ describe("the Saved and Dismissed views (E14-7)", () => {
     ]);
     expect(saved[0].state).toMatchObject({ postingId: expect.any(String), saved: true, dismissed: false });
     expect((await listPostings("dismissed")).map((posting) => posting.title)).toEqual(["Not for me"]);
-    expect(await countPostings()).toEqual({ saved: 2, dismissed: 1 });
+    expect(await countLibrary()).toMatchObject({ saved: 2, dismissed: 1 });
   });
 });
 
@@ -118,9 +124,9 @@ describe("postingStates", () => {
     await prisma().posting.update({ where: { source_externalId: ref }, data: { applicationId: application.id } });
 
     const states = await postingStates([found, other, third]);
-    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), saved: true, dismissed: false, applicationId: application.id, score: null });
-    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), saved: false, dismissed: true, applicationId: null, score: null });
-    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, saved: false, dismissed: false, applicationId: null, score: null });
+    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), new: false, saved: true, dismissed: false, applicationId: application.id, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), new: false, saved: false, dismissed: true, applicationId: null, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, new: false, saved: false, dismissed: false, applicationId: null, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
   });
 
   it("counts applications made from the same link before Find jobs, ignoring tracking", async () => {
@@ -133,9 +139,9 @@ describe("postingStates", () => {
   });
 
   it("has each result's score, scored or not (#208)", async () => {
-    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", score: 82, reasons: ["Research"], redFlags: [], scoredWith: "score-posting@1" } });
+    await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "job-1", profileId: TEST_PROFILE_ID, score: 82, reasons: ["Research"], redFlags: [], scoredWith: "score-posting@1" } });
     const states = await postingStates([found, { ...found, externalId: "job-2" }]);
-    expect(states.get("JSEARCH:job-1")?.score).toEqual({ score: 82, reasons: ["Research"], redFlags: [] });
+    expect(states.get("JSEARCH:job-1")?.score).toEqual({ profileId: TEST_PROFILE_ID, profileName: "", score: 82, reasons: ["Research"], redFlags: [], breakdown: null, older: true });
     expect(states.get("JSEARCH:job-2")?.score).toBeNull();
   });
 

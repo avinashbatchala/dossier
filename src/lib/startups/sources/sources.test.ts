@@ -96,6 +96,23 @@ describe("Hacker News' Who is hiring? (#222)", () => {
     expect(startupFromHnPost(post("| x"), berlin)).toBeNull();
   });
 
+  it("leaves out people looking for work who posted in the hiring thread (public #144)", () => {
+    const anywhere = placeOf({ city: "", country: "" });
+    expect(startupFromHnPost(post("I’m a software engineer focused on backend development | Software Engineer / Backend Engineer | Remote"), anywhere)).toBeNull();
+    expect(startupFromHnPost(post("I am a designer looking for my next role<p>Portfolio: https://jane.example</p>"), anywhere)).toBeNull();
+    expect(startupFromHnPost(post("SEEKING WORK | Backend Engineer | Remote"), anywhere)).toBeNull();
+    expect(startupFromHnPost(post("Backend engineer, open to work | Remote"), anywhere)).toBeNull();
+    expect(startupFromHnPost(post("Jane Doe | Engineer<p>Location: Berlin\nRemote: Yes\nWilling to relocate: No\nRésumé/CV: https://jane.example/cv</p>"), anywhere)).toBeNull();
+    // Employers stay, however they word it.
+    expect(startupFromHnPost(post("Acme | Senior Engineer | Remote | We're looking for a senior engineer to join us"), anywhere)).toMatchObject({ company: "Acme" });
+    expect(startupFromHnPost(post("Imgix | Engineer | Remote"), anywhere)).toMatchObject({ company: "Imgix" });
+    expect(startupFromHnPost(post("Meta | Engineer | Remote<p>Send your resume: jobs@meta.example</p>"), anywhere)).toMatchObject({ company: "Meta" });
+  });
+
+  it("keeps a role written twice in the header once (public #137)", () => {
+    expect(startupFromHnPost(post("Acme | Founding Engineer | Remote | Founding Engineer | Designer"), berlin)?.roles).toEqual(["Founding Engineer", "Designer"]);
+  });
+
   it("reads this month's thread through Algolia", async () => {
     stubFetch(({ url }) => {
       if (url.pathname.endsWith("/search_by_date"))

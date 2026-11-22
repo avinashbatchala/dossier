@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "AgentCandidate" ADD COLUMN     "covered" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "mustMissing" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "requirements" INTEGER NOT NULL DEFAULT 0;

@@ -1,8 +1,7 @@
 import "server-only";
 
-import { PrismaPg } from "@prisma/adapter-pg";
-
-import { PrismaClient } from "@/generated/prisma/client";
+import type { PrismaClient } from "@/generated/prisma/client";
+import { createPrismaClient } from "@/lib/database";
 import { env } from "@/lib/env";
 
 // Reuse one client across hot reloads in development instead of opening a new
@@ -10,9 +9,7 @@ import { env } from "@/lib/env";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function client(): PrismaClient {
-  globalForPrisma.prisma ??= new PrismaClient({
-    adapter: new PrismaPg({ connectionString: env.DATABASE_URL }),
-  });
+  globalForPrisma.prisma ??= createPrismaClient(env.DATABASE_URL);
   return globalForPrisma.prisma;
 }
 

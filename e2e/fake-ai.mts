@@ -64,6 +64,7 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
         requirement: requirement.number,
         skill: candidateSkills.find((name) => name.toLowerCase() === requirement.skill?.toLowerCase()) ?? null,
         language: candidateLanguages.find((name) => requirement.text.includes(name)) ?? null,
+        certification: null,
       })),
     };
   },
@@ -79,15 +80,39 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     };
   },
 
-  // The job agent's score (E16): by the posting's title, so a spec knows
-  // which postings make the queue (70 is the default minimum) and which don't.
-  posting_score: (messages) => {
-    const { title } = section(messages[1].content, "The posting's facts:\n") as { title: string };
-    const score = /senior product designer/i.test(title) ? 91 : /product designer/i.test(title) ? 78 : 45;
+  // Guess with AI on a profile's levels (E24-3).
+  profile_levels: () => ({ from: "mid", to: "senior" }),
+
+  // The scoring engine's questions (E25): by the posting's title, so a spec
+  // knows which postings make the agent's queue (70 is the default minimum):
+  // a senior product designer adds up to 100, a product designer to 71, the
+  // rest to 8.
+  posting_factors: (messages) => {
+    const content = messages[1].content;
+    const { title } = JSON.parse(content.split("The posting's facts:\n")[1].split("\n\nThe posting's lines:")[0]) as { title: string };
+    const lines = (content.split("The posting's lines:\n")[1]?.split("\n\nThe posting:")[0] ?? "").split("\n").filter((line) => /^\d+: /.test(line));
+    const fit = /senior product designer/i.test(title) ? "high" : /product designer/i.test(title) ? "mid" : "low";
     return {
-      score,
-      reasons: [score >= 70 ? `The profile's product design roles match "${title}".` : `"${title}" is further from the profile's roles.`],
-      redFlags: score >= 70 ? [] : ["The profile shows no UX research lead role."],
+      // Each line by what it says: Kubernetes is a must-have the profile doesn't show, a "plus" is a nice-to-have.
+      requirements:
+        fit === "high"
+          ? lines.flatMap((line, index) => {
+              const text = line.replace(/^\d+: /, "");
+              const kind = /\b(plus|nice|bonus)\b/i.test(text) ? "nice" : /years|figma|design system|prototyp|kubernetes/i.test(text) ? "must" : "other";
+              const missing = /kubernetes/i.test(text);
+              const skill = /kubernetes/i.test(text) ? "Kubernetes" : /figma/i.test(text) ? "Figma" : "";
+              return [{ line: index, kind, covered: !missing, evidence: missing ? "" : "Product designer at Northwind Logistics", skill }];
+            })
+          : fit === "mid"
+            ? // Two of every three lines covered (E32-2), so it passes "at least two thirds".
+              lines.map((_, index) => ({ line: index, kind: "must", covered: index % 3 !== 2, evidence: index % 3 !== 2 ? "Product designer at Northwind Logistics" : "", skill: "" }))
+            : [],
+      work: { level: fit === "high" ? 3 : fit === "mid" ? 2 : 0, reason: fit === "low" ? `"${title}" is further from your roles.` : `Your product design roles match "${title}".` },
+      extra: { level: fit === "high" ? 3 : fit === "mid" ? 1 : 0, reason: "" },
+      education: { level: fit === "low" ? 0 : 2, reason: "" },
+      seniority: { fit: fit === "high" ? "fits" : fit === "mid" ? "above" : "far-above", reason: "" },
+      location: { fit: fit === "low" ? "stretch" : "fits", reason: "" },
+      thin: false,
     };
   },
 
@@ -157,6 +182,7 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
         company: "Acme Payments",
         location: "Utrecht",
         descriptor: "Payouts for online marketplaces, 60 people",
+        volunteering: false,
         startYear: 2021,
         startMonth: 3,
         endYear: null,
@@ -168,8 +194,10 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     ],
     projects: [],
     education: [],
+    certifications: [],
     publications: [],
     references: [],
+    levels: { from: "senior", to: "lead" },
   }),
 
   // Gmail (E15): an employer's reply is an invitation that asks two things,
@@ -179,6 +207,7 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
     summary: "Invites you to a 45-minute call next week and asks about your notice period.",
     questions: ["Which times would work for you?", "What is your notice period?"],
     confirmedTime: null,
+    unrelated: false,
   }),
 
   reply_draft: (messages) => {
@@ -192,6 +221,22 @@ const answers: Record<string, (messages: Message[]) => unknown> = {
       signOff: "Best regards,",
       gaps: ["What is your notice period?"],
     };
+  },
+
+  // Getting ready (E30-6), and a message drafted on a click (E30-7, E30-8).
+  interview_checklist: () => ({
+    items: [
+      { text: "Reread the posting and your letter", why: "From the posting" },
+      { text: "Prepare a payments story for the fintech gap", why: "For the payments gap" },
+      { text: "Questions to ask about the design system", why: "From a must-have" },
+    ],
+  }),
+
+  message: (messages) => {
+    const system = messages[0]?.content ?? "";
+    return /follow-up/.test(system)
+      ? { subject: "Following up on my application", body: "Hi,\n\nI wanted to follow up on my application.\n\nBest,\nJane Doe" }
+      : { subject: "Re: Your offer", body: "Hi,\n\nThank you for the offer. I'm happy to accept.\n\nBest,\nJane Doe" };
   },
 
   new_text: (messages) => {
@@ -217,7 +262,29 @@ createServer((request, response) => {
   request.on("data", (chunk) => (raw += chunk));
   request.on("end", () => {
     const body = JSON.parse(raw) as Request;
+    // The dashboard's daily note (E28-6): a line of text, and not kept as the last thing asked, so a spec reading /last sees its own prompt.
+    if (body.messages.some((message) => message.content.includes("You write one short, warm note"))) {
+      return send(200, {
+        id: "fake",
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "fake-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "Keep going, one kind step at a time." }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 120, completion_tokens: 20, total_tokens: 140 },
+      });
+    }
     last = body.messages;
+    // Ask (E30-10): an answer in plain text.
+    if (body.messages.some((message) => message.content.includes("You answer a candidate's question"))) {
+      return send(200, {
+        id: "fake",
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "fake-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "They care most about design systems and payments." }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
+      });
+    }
     const name = body.response_format?.json_schema?.name;
     const answer = name && answers[name];
     if (!answer) return send(400, { error: { message: `No fake answer for "${name}".` } });
@@ -230,7 +297,8 @@ createServer((request, response) => {
           created: Math.floor(Date.now() / 1000),
           model: "fake-model",
           choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(answer(body.messages)) }, finish_reason: "stop" }],
-          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          // The same for every answer, for the Usage screen to add up (#290).
+          usage: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 },
         });
       } catch (error) {
         send(500, { error: { message: String(error) } });

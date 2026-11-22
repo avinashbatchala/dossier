@@ -11,7 +11,7 @@ import type { Creativity } from "@/generated/prisma/enums";
 
 import { updateSettings } from "./actions";
 
-type Behaviour = { creativity: Creativity; strict: boolean; showDiff: boolean };
+type Behaviour = { creativity: Creativity; strict: boolean; showDiff: boolean; dailyNoteAi: boolean };
 
 const CREATIVITY_OPTIONS: { value: Creativity; label: string }[] = [
   { value: "FAITHFUL", label: "Faithful" },
@@ -74,6 +74,13 @@ export function AiBehaviour({ initial }: { initial: Behaviour }) {
         description="After each draft, list what was tailored compared with your base resume."
         checked={behaviour.showDiff}
         onCheckedChange={(showDiff) => change({ showDiff })}
+      />
+      <Toggle
+        className="border-t border-line py-4"
+        label="Write the daily note with AI"
+        description="A short, kind note at the top of the dashboard, once a day. Nothing about you goes into it. Off, Dossier picks one of its own."
+        checked={behaviour.dailyNoteAi}
+        onCheckedChange={(dailyNoteAi) => change({ dailyNoteAi })}
       />
     </Card>
   );

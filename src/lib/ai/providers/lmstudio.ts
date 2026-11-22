@@ -2,13 +2,16 @@ import "server-only";
 
 import type { ReasoningEffort } from "openai/resources/shared";
 
+import type { UsageSink } from "@/lib/usage";
+
 import { AiError, toAiError } from "../errors";
 import type { ChatAnswer, ChatCall } from "../provider";
 import { keyGuardedFetch } from "./guarded-fetch";
+import { timedFetch } from "./timed-fetch";
 import { OpenAICompatibleProvider } from "./openai-compatible";
 
 /** The context Dossier's prompts need, as for Ollama. */
-export const LMSTUDIO_CONTEXT_TOKENS = 16_384;
+const LMSTUDIO_CONTEXT_TOKENS = 16_384;
 
 /** Room for a model to think before it writes; the thinking counts towards `max_tokens`. */
 const THINKING_TOKENS = 4_096;
@@ -43,11 +46,12 @@ export class LmStudioProvider extends OpenAICompatibleProvider {
     private readonly apiKey: string | null,
     model: string | null,
     timeoutMs: number,
+    onUsage?: UsageSink,
   ) {
     const root = address.replace(/\/+$/, "").replace(/(\/api)?\/v1$/, "");
-    super("LMSTUDIO", `${root}/v1`, apiKey, model, timeoutMs);
+    super("LMSTUDIO", `${root}/v1`, apiKey, model, timeoutMs, onUsage);
     this.root = root;
-    this.api = apiKey ? keyGuardedFetch() : fetch;
+    this.api = apiKey ? keyGuardedFetch(timedFetch(timeoutMs)) : timedFetch(timeoutMs);
   }
 
   protected override async chat(call: ChatCall): Promise<ChatAnswer> {

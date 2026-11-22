@@ -1,7 +1,7 @@
 import type { LanguageLevel } from "@/generated/prisma/enums";
 import type { Unit } from "@/lib/application-data";
 import { publicationLabel } from "@/lib/citation";
-import { LANGUAGE_LEVELS, type DateSpan, type ProfileData } from "@/lib/profile";
+import { certificationLabel, LANGUAGE_LEVELS, type DateSpan, type ProfileData } from "@/lib/profile";
 
 import sample from "../../prisma/seed/prototype-sample.json";
 
@@ -36,7 +36,7 @@ export const LEVELS_BY_LABEL = new Map<string, LanguageLevel>(
 
 /** The sample profile as `loadProfile()` returns it, with the prototype's ids. */
 export function demoProfile(): ProfileData {
-  const { experience, projects, education, publications, skills, languages, references, facts, showAge, ...basics } = sample.profile;
+  const { experience, projects, education, certifications, publications, skills, languages, references, facts, showAge, ...basics } = sample.profile;
   const skillId = (name: string) => `skill-${skills.indexOf(name) + 1}`;
   return {
     basics: {
@@ -65,6 +65,7 @@ export function demoProfile(): ProfileData {
       company: entry.company,
       location: entry.location,
       descriptor: entry.descriptor,
+      volunteering: false,
       bullets: entry.bullets,
       ...dateSpan(entry.start, entry.end),
       skillIds: entry.skills.map(skillId),
@@ -84,6 +85,22 @@ export function demoProfile(): ProfileData {
       notes: entry.notes,
       ...dateSpan(entry.start, entry.end),
     })),
+    certifications: certifications.map(({ id, name, issuer, obtained, expires, credentialId, link }) => {
+      const from = parseMonthYear(obtained);
+      const until = parseMonthYear(expires);
+      return {
+        id,
+        name,
+        issuer,
+        year: from?.year ?? null,
+        month: from?.month ?? null,
+        expiryYear: until?.year ?? null,
+        expiryMonth: until?.month ?? null,
+        credentialId,
+        link,
+        onResumes: true,
+      };
+    }),
     publications: publications.map(({ id, citation, link }) => ({ id, citation, link, onResumes: true })),
     references: references.map(({ id, name, relation, company, email, phone }) => ({
       id,
@@ -93,6 +110,8 @@ export function demoProfile(): ProfileData {
       email,
       phone,
     })),
+    // None in the demo: they're the user's own.
+    customSections: [],
     facts: facts.map((text, index) => ({ id: `fact-${index + 1}`, text })),
     photo: null,
   };
@@ -100,15 +119,16 @@ export function demoProfile(): ProfileData {
 
 /**
  * The prototype's tailored resume for Ledgerly, as units in reading order.
- * Pass how to turn the sample's entry ids ("e1", "d1", "p1", "u1") into real ones.
+ * Pass how to turn the sample's entry ids ("e1", "d1", "p1", "u1", "c1") into real ones.
  */
 export function demoResumeUnits(
   experienceId: (sampleId: string) => string = (id) => id,
   educationId: (sampleId: string) => string = (id) => id,
   projectId: (sampleId: string) => string = (id) => id,
   publicationId: (sampleId: string) => string = (id) => id,
+  certificationId: (sampleId: string) => string = (id) => id,
 ): Unit[] {
-  const { experience, projects, education, publications, skills, languages } = sample.profile;
+  const { experience, projects, education, certifications, publications, skills, languages } = sample.profile;
   const { resume, requirements } = sample.ledgerly;
   // Skills the posting asks for come first.
   const asked = requirements.flatMap((requirement) =>
@@ -127,6 +147,11 @@ export function demoResumeUnits(
       id: `education:${educationId(entry.id)}`,
       label: entry.degree,
       text: entry.notes,
+    })),
+    ...certifications.map((entry) => ({
+      id: `certification:${certificationId(entry.id)}`,
+      label: certificationLabel(entry.name),
+      text: entry.name,
     })),
     ...publications.map((entry) => ({
       id: `publication:${publicationId(entry.id)}`,

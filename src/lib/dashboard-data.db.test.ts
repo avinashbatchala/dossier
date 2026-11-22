@@ -39,21 +39,21 @@ describe("loadDashboard against the demo seed (E9-6)", () => {
     expect(figures.byStatus).toEqual({ DRAFT: 2, SENT: 2, SCREENING: 1, INTERVIEW: 1, OFFER: 1, ACCEPTED: 0, REJECTED: 1, DECLINED: 1 });
   });
 
-  it("lists tomorrow's interview, the offer, the drafts and the quiet one", async () => {
+  it("lists what needs you this week first, then the offer (E28-4)", async () => {
     const figures = await loadDashboard({ timeZone: "Europe/Amsterdam" }, now);
-    expect(figures.attention.map((item) => `${item.company}: ${item.reason}`)).toEqual([
-      "Northstar Health: Interview tomorrow at 14:00. Worth re-reading your tailored letter first.",
+    expect(figures.needsYou.map((item) => `${item.company}: ${item.reason}${item.due ? ` · ${item.due}` : ""}`)).toEqual([
+      "Kestrel Maps: Sent Sun 20 Sep, no reply. · quiet for 7 days",
+      "Northstar Health: Interview. · tomorrow, 14:00",
+      "Brightline Transit: Still a draft. · apply by Sat 3 Oct · 6 days",
+      // Ledgerly's deadline is three weeks out: not this week, and not undated.
       "Oaken Studio: An offer is waiting on your decision.",
-      "Brightline Transit: Still a draft, and applications close 3 Oct.",
-      "Ledgerly: Still a draft, and applications close 15 Oct.",
-      "Kestrel Maps: No news for 7 days. A short, friendly follow-up could help.",
     ]);
-    expect(figures.attention[0].soon).toBe(true);
+    expect(figures.needsYou.map((item) => item.soon)).toEqual([true, true, true, false]);
   });
 
   it("nudges sooner or later as set (E9-9)", async () => {
     const quiet = async (quietDays: number) =>
-      (await loadDashboard({ quietDays }, now)).attention.filter((item) => item.reason.startsWith("No news")).map((item) => item.company);
+      (await loadDashboard({ quietDays }, now)).needsYou.filter((item) => item.action === "Follow up").map((item) => item.company);
     expect(await quiet(3)).toEqual(["Kestrel Maps", "Tidewater Energy", "Meridian Bank"]);
     expect(await quiet(14)).toEqual([]);
   });

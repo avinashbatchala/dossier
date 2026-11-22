@@ -63,6 +63,15 @@ describe("InboxScreen (E15-3)", () => {
     expect(checkInbox).toHaveBeenCalled();
   });
 
+  it("says once that mail isn't read without an AI provider (#358)", () => {
+    const { rerender } = render(<InboxScreen inbox={inbox} connected configured lastSync={null} problem={null} aiReady={false} applications={[]} />);
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent(/^Mail isn't read yet: without an AI provider/);
+    expect(within(note).getByRole("link", { name: "Choose one in Settings → AI provider" })).toHaveAttribute("href", "/settings?section=ai");
+    rerender(<InboxScreen inbox={inbox} connected configured lastSync={null} problem={null} aiReady applications={[]} />);
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
   it("points to Settings until Gmail is connected", () => {
     render(<InboxScreen inbox={{ waiting: [], unmatched: [], updates: [] }} connected={false} configured={false} lastSync={null} problem={null} aiReady applications={[]} />);
     expect(screen.getByRole("link", { name: "Set up Google" })).toHaveAttribute("href", "/settings?section=google");

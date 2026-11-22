@@ -48,6 +48,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+/src/generated/prisma-sqlite
 
 # DOSSIER_DATA_DIR in development
 /data
@@ -56,3 +57,12 @@ next-env.d.ts
 /e2e/.auth/
 /playwright-report/
 /test-results/
+
+# The desktop app's dependencies and what it builds
+/desktop/dist
+/desktop/build-server
+/desktop/build-input
+/desktop/release
+desktop/**/.yarn
+desktop/**/node_modules
+desktop/**/test-results

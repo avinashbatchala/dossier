@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { json, stubFetch } from "@/lib/ai/test-http";
 import { arbeitsagenturDetails, arbeitsagenturPage } from "@/test/job-search-fixtures";
 
-import { arbeitsagentur } from "./arbeitsagentur";
+import { builtInAdapter } from "@/lib/portals/adapters";
+
 import { EMPTY_QUERY } from "./search";
+
+const arbeitsagentur = builtInAdapter("ARBEITSAGENTUR");
 
 const fetchPosting = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/posting-fetch", () => ({ fetchPosting }));
@@ -17,6 +20,12 @@ afterEach(() => {
 });
 
 describe("Arbeitsagentur search", () => {
+  it("asks for internships and traineeships for an internship search (public issue 59)", async () => {
+    const requests = stubFetch(() => json(arbeitsagenturPage));
+    await arbeitsagentur.search({ ...query, experience: "intern" }, {}, null);
+    expect(requests[0].url.searchParams.get("angebotsart")).toBe("34");
+  });
+
   it("asks the v6 search with the public client ID", async () => {
     const requests = stubFetch(() => json(arbeitsagenturPage));
     await arbeitsagentur.search(query, {}, null);

@@ -159,6 +159,15 @@ code { font-family: var(--mono); font-size: 0.86em; }
   stroke-linejoin: round;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .skip {
   position: absolute;
   left: 16px;
@@ -187,7 +196,7 @@ code { font-family: var(--mono); font-size: 0.86em; }
   color: var(--accent);
 }
 h1.display {
-  font-size: clamp(2.9rem, 1.6rem + 5.6vw, 6.2rem);
+  font-size: clamp(2.9rem, 1.6rem + 4.4vw, 5.2rem);
   line-height: 0.98;
 }
 h2.display {
@@ -293,6 +302,15 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 .icon--heart { color: #b0524a; }
+.icon--play { width: 13px; height: 13px; fill: currentColor; stroke: none; }
+.button__meta {
+  margin-left: 2px;
+  padding-left: 9px;
+  border-left: 1px solid var(--line-control);
+  color: var(--muted);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
 
 .icon-button {
   display: grid;
@@ -363,6 +381,7 @@ h3 {
   border-radius: 8px;
   color: var(--muted);
   font-size: 14.5px;
+  white-space: nowrap;
   text-decoration: none;
   transition: color 0.2s, background-color 0.2s;
 }
@@ -373,16 +392,45 @@ h3 {
   gap: 6px;
   margin-left: auto;
 }
-@media (min-width: 860px) {
+@media (min-width: 900px) {
   .nav__links { display: flex; }
   .nav__end { margin-left: 0; }
+}
+@media (min-width: 900px) and (max-width: 1023px) {
+  .nav__links a { padding-inline: 9px; }
+}
+.nav__discord:hover .icon { transform: none; }
+/* On a phone, and while the menu is tight, the GitHub button keeps only its logo. */
+@media (max-width: 519px), (min-width: 900px) and (max-width: 1023px) {
+  .nav__github { width: 36px; padding: 0; }
+  .nav__github-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .nav__github .count { display: none; }
+}
+/* On the narrowest phones, Discord alone. */
+@media (max-width: 379px) {
+  .nav__github { display: none; }
+  .nav__discord-join {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 /* Hero */
 
 .hero {
   position: relative;
-  padding-top: clamp(40px, 7vw, 96px);
+  padding-top: clamp(24px, 2.8vw, 40px);
   isolation: isolate;
 }
 .hero::before {
@@ -402,11 +450,65 @@ h3 {
   text-align: center;
 }
 .hero__text h1 { max-width: 13ch; }
-.hero__text .lede { margin-top: 26px; }
-.hero__text .actions { justify-content: center; margin-top: 34px; }
+@media (min-width: 1024px) {
+  /* Two lines: the name of the thing, then where it lives, kept whole. */
+  .hero__text h1 { max-width: 17ch; }
+  .hero__text h1 em { display: inline-block; }
+}
+.hero__text .lede { margin-top: 20px; max-width: 47rem; }
+.hero__text .actions { justify-content: center; margin-top: 24px; }
+
+/* Getting it, in the hero: the desktop app first, self-hosting beside it */
+.get {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 32px;
+}
+.get__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+/* How many times the server image has been downloaded, above the buttons. */
+.pulls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14.5px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.pulls:hover { color: var(--ink); }
+.pulls .icon { width: 16px; height: 16px; }
+.pulls b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.button--large {
+  height: 54px;
+  padding: 0 26px;
+  font-size: 16.5px;
+  border-radius: 12px;
+}
+.button--large .icon { width: 19px; height: 19px; }
+.get__note {
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 15px;
+  text-wrap: balance;
+}
+.get__note a { color: var(--ink); text-underline-offset: 3px; }
+@media (max-width: 519px) {
+  .get, .get__actions { align-self: stretch; }
+  .get__actions { flex-direction: column; }
+}
 .fineprint {
-  margin-top: 18px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 13.5px;
 }
 
@@ -414,7 +516,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   padding: 6px 12px 6px 10px;
   border: 1px solid var(--line-control);
   border-radius: 999px;
@@ -436,10 +538,186 @@ h3 {
 }
 
 .hero__stage {
-  position: relative;
-  margin-top: clamp(48px, 7vw, 80px);
+  margin-top: clamp(32px, 3.6vw, 48px);
   max-width: 1160px;
 }
+
+/* The tour video: a poster made of the page's own type and screenshot, so nothing
+   comes from YouTube before someone presses play. */
+
+.theatre {
+  position: relative;
+  isolation: isolate;
+}
+.theatre::before {
+  content: "";
+  position: absolute;
+  inset: 4% max(-5%, calc(var(--gutter) * -1)) -10%;
+  z-index: -1;
+  border-radius: 40%;
+  background: radial-gradient(60% 70% at 24% 40%, light-dark(rgb(122 59 46 / 0.34), rgb(223 165 146 / 0.2)), transparent 72%),
+    radial-gradient(60% 70% at 78% 60%, light-dark(rgb(176 134 72 / 0.36), rgb(214 178 110 / 0.16)), transparent 72%);
+  filter: blur(48px);
+  pointer-events: none;
+}
+.player {
+  position: relative;
+  container-type: inline-size;
+  aspect-ratio: 16 / 9;
+  overflow: clip;
+  border: 1px solid light-dark(rgb(29 28 26 / 0.16), rgb(240 237 231 / 0.1));
+  border-radius: clamp(12px, 1.6vw, 20px);
+  background: #141311;
+  box-shadow: var(--shadow-window);
+}
+.player iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.player__poster {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: clip;
+  border-radius: inherit;
+  background:
+    radial-gradient(70% 90% at 8% 0%, rgb(223 165 146 / 0.17), transparent 65%),
+    radial-gradient(50% 70% at 100% 100%, rgb(214 178 110 / 0.1), transparent 70%),
+    #171614;
+  color: #f0ede7;
+  text-decoration: none;
+  transition: opacity 0.5s var(--ease), visibility 0s;
+}
+.is-playing .player__poster {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s var(--ease), visibility 0s 0.5s;
+}
+.player__poster:focus-visible {
+  outline-color: #f0ede7;
+  outline-offset: -5px;
+  border-radius: inherit;
+}
+.player__shot {
+  position: absolute;
+  top: 7.4cqw;
+  left: 46.5cqw;
+  width: 80cqw;
+  max-width: none;
+  border-radius: 1.3cqw 0 0;
+  box-shadow: 0 2cqw 6cqw rgb(0 0 0 / 0.5), 0 0 0 1px rgb(240 237 231 / 0.1);
+  transition: transform 1s var(--ease);
+}
+.player__poster:hover .player__shot { transform: translate(-0.7cqw, -0.5cqw); }
+.player__copy {
+  position: absolute;
+  top: 7.4cqw;
+  left: 5.6cqw;
+  display: grid;
+  gap: 1.7cqw;
+  width: 36.5cqw;
+}
+.player__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8em;
+  color: #dfa592;
+  font-size: clamp(10px, 1.2cqw, 13px);
+  font-weight: 550;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.player__eyebrow i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.player__title {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-size: 5.1cqw;
+  font-weight: 420;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+.player__title em {
+  font-weight: 380;
+  color: #dfa592;
+}
+/* While the fold cuts the poster, the button stays on screen. */
+.player__play {
+  position: sticky;
+  bottom: 22px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: clamp(56px, 8.4cqw, 96px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #f0ede7;
+  color: #1d1c1a;
+  box-shadow: 0 0 0 clamp(5px, 0.8cqw, 9px) rgb(240 237 231 / 0.18), 0 1.4cqw 4cqw rgb(0 0 0 / 0.45);
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease);
+}
+.player__poster:hover .player__play {
+  transform: scale(1.07);
+  box-shadow: 0 0 0 clamp(7px, 1.1cqw, 13px) rgb(240 237 231 / 0.24), 0 1.8cqw 5cqw rgb(0 0 0 / 0.5);
+}
+.player__play .icon {
+  width: 36%;
+  height: 36%;
+  fill: currentColor;
+  stroke: none;
+  transform: translateX(5%);
+}
+.player__note {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  text-wrap: pretty;
+}
+.player__note a { text-underline-offset: 3px; white-space: nowrap; }
+
+.chapters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+  margin-top: 26px;
+}
+@media (min-width: 640px) {
+  .chapters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1040px) {
+  .chapters { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+.chapters a {
+  display: grid;
+  gap: 1px;
+  padding: 9px 0 12px;
+  border-top: 1px solid var(--line-control);
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.35;
+  text-decoration: none;
+  transition: border-color 0.2s, color 0.2s;
+}
+.chapters span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.chapters a:hover { border-top-color: var(--ink); }
+.chapters a[aria-current] { border-top-color: var(--accent); color: var(--accent); box-shadow: inset 0 1px 0 var(--accent); }
+.chapters a[aria-current] span { color: inherit; }
 
 /* An app window */
 
@@ -477,7 +755,6 @@ h3 {
   letter-spacing: 0.01em;
 }
 .window img { width: 100%; }
-.window--hero { transform-origin: 50% 0; }
 
 @media (max-width: 559px) {
   .window__url { display: none; }
@@ -496,9 +773,15 @@ h3 {
   background: var(--card);
   box-shadow: var(--shadow-float);
   will-change: transform;
+  transition: opacity 0.4s var(--ease), visibility 0s;
 }
 @media (min-width: 960px) {
   .float { display: block; }
+}
+.is-playing .float {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s var(--ease), visibility 0s 0.4s;
 }
 .float__label {
   color: var(--muted);
@@ -803,6 +1086,68 @@ h3 {
   .chip { display: none; }
 }
 
+/* Community: the second dark band, with some of the Discord server's channels */
+
+.community__actions { margin-top: 34px; }
+.community__note {
+  margin-top: 16px;
+  color: var(--band-muted);
+  font-size: 14.5px;
+  text-wrap: pretty;
+}
+.channels {
+  color-scheme: light;
+  padding: 26px 30px 24px;
+  border-radius: 16px;
+  background: #fbfaf7;
+  color: #1d1c1a;
+  box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6);
+}
+.channels__group + .channels__group { margin-top: 24px; }
+.channels h3 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(29 28 26 / 0.08);
+  color: #69655d;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.channels li {
+  display: grid;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgb(29 28 26 / 0.08);
+  color: #69655d;
+  font-size: 14px;
+}
+.channels li:last-child { border-bottom: 0; padding-bottom: 0; }
+.channels__name {
+  color: #1d1c1a;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+.channels__name::before {
+  content: "#";
+  margin-right: 6px;
+  color: #7a3b2e;
+}
+.channels figcaption {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(29 28 26 / 0.08);
+  color: #69655d;
+  font-size: 13.5px;
+}
+@media (min-width: 560px) {
+  .channels li { grid-template-columns: 10.5rem minmax(0, 1fr); gap: 16px; align-items: baseline; }
+}
+@media (max-width: 559px) {
+  .channels { padding: 22px 18px 18px; }
+}
+
 /* Features */
 
 .bento {
@@ -1104,6 +1449,9 @@ h3 {
 .copy.is-done { color: #9fd3b0; }
 
 .install__intro { max-width: 44rem; color: var(--muted); }
+.install__steps > .install__intro { margin-bottom: 28px; }
+.install__intro a { color: var(--ink); text-underline-offset: 3px; }
+.downloads { display: flex; flex-wrap: wrap; gap: 10px; }
 .install__server { display: grid; gap: 24px; }
 .install__more { color: var(--muted); font-size: 14.5px; }
 .install__more a { color: var(--ink); text-underline-offset: 3px; }
@@ -1244,7 +1592,6 @@ h3 {
   .hero__text > :nth-child(2) { animation-delay: 0.06s; }
   .hero__text > :nth-child(3) { animation-delay: 0.14s; }
   .hero__text > :nth-child(4) { animation-delay: 0.22s; }
-  .hero__text > :nth-child(5) { animation-delay: 0.3s; }
   .hero__stage { animation: rise-stage 1.2s 0.25s var(--ease) backwards; }
 
   .js .reveal {

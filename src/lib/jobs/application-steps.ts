@@ -8,3 +8,12 @@ export const READ_POSTING_STEPS = [
 ] as const;
 
 export const WRITE_DOCUMENTS_STEPS = ["Tailoring your resume", "Writing your cover letter", "Saving the application"] as const;
+
+/** Writing a new application's documents on the server (E31-4), after the Draft is made. */
+export const WRITE_APPLICATION_STEPS = [
+  "Reading your profile",
+  "Choosing what fits",
+  "Writing the resume",
+  "Writing the letter",
+  "Checking every line against your profile",
+] as const;

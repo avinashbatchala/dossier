@@ -1,7 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoResumeUnits } from "@/lib/demo-profile";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { readPostingJob } from "@/lib/jobs/read-posting";
+import { writeDocumentsJob } from "@/lib/jobs/write-documents";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../../prisma/seed/built-ins";
 
@@ -46,10 +48,6 @@ vi.mock("@/lib/jobs/write-documents", async () => {
     },
   };
 });
-vi.mock("@/lib/page-limit", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/page-limit")>()),
-  fitResumeToPages: vi.fn(async () => ({ trimmed: [], fits: true })),
-}));
 
 const prisma = () => db.client!;
 
@@ -64,7 +62,7 @@ describe("a draft asked for from Claude chat (#221)", () => {
     const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "p1", title: "Product Designer", company: "Acme" } });
     const job = await prisma().job.create({ data: { type: "connector-draft", status: "RUNNING", input: {} } });
     const context = { id: job.id, step: async () => {}, signal: new AbortController().signal };
-    const input = { posting: "Product Designer at Acme, Berlin.", postingUrl: "https://jobs.example/p1", note: "Stress Figma", postingId: posting.id };
+    const input = { posting: "Product Designer at Acme, Berlin.", postingUrl: "https://jobs.example/p1", note: "Stress Figma", postingId: posting.id, profileId: null };
 
     const { applicationId } = await connectorDraftJob.run(input, context);
     const application = await prisma().application.findUniqueOrThrow({ where: { id: applicationId }, include: { documents: true, facts: true } });
@@ -78,5 +76,21 @@ describe("a draft asked for from Claude chat (#221)", () => {
     // A retry finds the application it made rather than making a second.
     expect(await connectorDraftJob.run(input, context)).toEqual({ applicationId });
     expect(await prisma().application.count()).toBe(1);
+  });
+
+  it("writes it from the profile asked for, or the first (E24-6)", async () => {
+    const backend = await prisma().profile.create({ data: { name: "Backend", sort: 1 } });
+    const run = async (id: string, profileId: string | null) => {
+      const job = await prisma().job.create({ data: { type: "connector-draft", status: "RUNNING", input: {} } });
+      const context = { id: job.id, step: async () => {}, signal: new AbortController().signal };
+      const { applicationId } = await connectorDraftJob.run({ posting: `Posting ${id}`, postingUrl: "", note: "", postingId: null, profileId }, context);
+      return prisma().application.findUniqueOrThrow({ where: { id: applicationId }, select: { profileId: true } });
+    };
+
+    expect(await run("a", backend.id)).toEqual({ profileId: backend.id });
+    expect(vi.mocked(readPostingJob.run)).toHaveBeenLastCalledWith(expect.objectContaining({ profileId: backend.id }), expect.anything());
+    expect(vi.mocked(writeDocumentsJob.run)).toHaveBeenLastCalledWith(expect.objectContaining({ profileId: backend.id }), expect.anything());
+    expect(await run("b", null)).toEqual({ profileId: TEST_PROFILE_ID });
+    expect(await run("c", "deleted")).toEqual({ profileId: TEST_PROFILE_ID });
   });
 });

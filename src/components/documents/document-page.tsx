@@ -4,6 +4,7 @@ import type { PaperSize } from "@/generated/prisma/enums";
 import { cn } from "@/lib/cn";
 import { hasRightToLeft, type TextDirection } from "@/lib/document-language";
 import { CONTACT_SEPARATOR } from "@/lib/resume-content";
+import { contactHref } from "@/lib/web-link";
 import { PAPER_SIZES, SIDEBAR, type ResolvedTheme } from "@/lib/themes";
 
 import styles from "./document.module.css";
@@ -125,6 +126,18 @@ export function Contact({ children }: { children: string }) {
   return <bdi dir={hasRightToLeft(children) ? undefined : "ltr"}>{children}</bdi>;
 }
 
+/** A contact detail, as a link when it's an email or web address (#369): the address stays the text, for parsers. */
+export function ContactDetail({ children }: { children: string }) {
+  const href = contactHref(children);
+  return href ? (
+    <a href={href} target="_blank" rel="noreferrer" className={styles.contactLink}>
+      <Contact>{children}</Contact>
+    </a>
+  ) : (
+    <Contact>{children}</Contact>
+  );
+}
+
 /** Contact details on one line, separated by "  ·  ". */
 export function ContactLine({ items }: { items: string[] }) {
   return (
@@ -132,7 +145,7 @@ export function ContactLine({ items }: { items: string[] }) {
       {items.map((item, index) => (
         <Fragment key={index}>
           {index > 0 && CONTACT_SEPARATOR}
-          <Contact>{item}</Contact>
+          <ContactDetail>{item}</ContactDetail>
         </Fragment>
       ))}
     </p>

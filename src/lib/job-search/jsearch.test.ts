@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, refused, stubFetch } from "@/lib/ai/test-http";
 import { jsearchKeyError, jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
 
+import { builtInAdapter } from "@/lib/portals/adapters";
+
 import { JobSearchError } from "./errors";
-import { jsearch } from "./jsearch";
 import { EMPTY_QUERY, type SearchQuery } from "./search";
+
+const jsearch = builtInAdapter("JSEARCH");
 
 const query: SearchQuery = { ...EMPTY_QUERY, keywords: "product designer", place: "Hamburg", country: "de", radiusKm: 50, postedWithin: "week" };
 const ninja = { key: "ak_test", host: "openwebninja" as const };
@@ -30,6 +33,20 @@ describe("JSearch search", () => {
       date_posted: "week",
       radius: "50",
     });
+  });
+
+  it("asks for the level as far as JSearch can filter it (public issue 59)", async () => {
+    const requests = stubFetch(() => json(jsearchV2Page));
+    await jsearch.search({ ...query, experience: "intern" }, ninja, null);
+    await jsearch.search({ ...query, experience: "junior" }, ninja, null);
+    await jsearch.search({ ...query, experience: "mid" }, ninja, null);
+    await jsearch.search({ ...query, experience: "lead" }, ninja, null);
+    expect(requests.map(({ url }) => [url.searchParams.get("employment_types"), url.searchParams.get("job_requirements")])).toEqual([
+      ["INTERN", null],
+      [null, "under_3_years_experience"],
+      [null, null],
+      [null, "more_than_3_years_experience"],
+    ]);
   });
 
   it("asks RapidAPI's search-v2 with its own headers, and pages by cursor", async () => {
@@ -174,7 +191,7 @@ describe("JSearch search", () => {
     await expect(jsearch.search(query, ninja, null)).rejects.toMatchObject({ detail: "JSEARCH: /jsearch/search-v2: unexpected answer" });
   });
 
-  it("gives a search 45 seconds, then says it isn't answering, as before (#231)", async () => {
+  it("gives a search 2 minutes, then says it isn't answering (#231, S3)", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(AbortSignal.abort());
     stubFetch((_, signal) => Promise.reject(signal?.reason ?? new Error("aborted")));
     await expect(jsearch.search(query, ninja, null)).rejects.toMatchObject({
@@ -182,7 +199,7 @@ describe("JSearch search", () => {
       message: "JSearch isn't answering right now. Try again in a minute.",
       detail: "JSEARCH: /jsearch/search-v2: timed out",
     });
-    expect(timeout).toHaveBeenCalledWith(45_000);
+    expect(timeout).toHaveBeenCalledWith(120_000);
   });
 
   it("says the source isn't answering when it can't be reached", async () => {
@@ -210,6 +227,6 @@ describe("JSearch details and test", () => {
     await jsearch.test(ninja);
     expect(requests).toHaveLength(1);
     expect(requests[0].url.searchParams.get("query")).toBe("developer");
-    expect(timeout).toHaveBeenCalledWith(45_000);
+    expect(timeout).toHaveBeenCalledWith(120_000);
   });
 });

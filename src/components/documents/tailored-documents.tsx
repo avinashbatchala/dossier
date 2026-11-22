@@ -1,6 +1,7 @@
 import type { DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
 import type { DocumentData } from "@/lib/application-documents";
 import type { ProfileData } from "@/lib/profile";
+import type { SectionLayout } from "@/lib/resume-sections";
 import { withoutSidebar } from "@/lib/themes";
 
 import { CoverLetterDocument } from "./cover-letter-document";
@@ -18,6 +19,7 @@ export function TailoredResume({
   showPhoto,
   language,
   includeReferences,
+  sections,
   renderUnit,
 }: {
   resume: DocumentData;
@@ -29,6 +31,8 @@ export function TailoredResume({
   showPhoto: boolean | null;
   language: string;
   includeReferences: boolean;
+  /** Its sections' order and which are off (#297). */
+  sections: SectionLayout;
   renderUnit?: UnitRenderer;
 }) {
   return (
@@ -41,6 +45,7 @@ export function TailoredResume({
       showPhoto={showPhoto}
       language={language}
       includeReferences={includeReferences}
+      sections={sections}
       renderUnit={renderUnit}
     />
   );

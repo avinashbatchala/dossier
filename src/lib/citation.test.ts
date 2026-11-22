@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { citationExcerpt, citationSpans, citationText, escapeMarks, publicationHref, publicationLink, toggleMark } from "./citation";
+import { citationExcerpt, citationSpans, citationText, escapeMarks, keepBold, publicationHref, publicationLink, toggleMark } from "./citation";
 
 const ROSSI =
   "Rossi, S. H., **Dombrowe, V.**, Godfrey, L. (2025). Evidence of DNA methylation heterogeneity. *Oncogene*, 44(15), 1024-1036.";
@@ -96,5 +96,24 @@ describe("publication links (#218)", () => {
     expect(publicationHref("10.1038/x")).toBe("https://doi.org/10.1038/x");
     expect(publicationHref("javascript:alert(1)")).toBeNull();
     expect(publicationHref("")).toBeNull();
+  });
+});
+
+describe("bold in bullets (#368)", () => {
+  const profile = "Scaled the system by **40%** in a year\nLed **three** teams";
+
+  it("puts the profile's bold back where a tailored text keeps the words", () => {
+    expect(keepBold("Scaled the platform by 40% while leading three teams", profile)).toBe("Scaled the platform by **40%** while leading **three** teams");
+    // Not inside another word, and not on words the text dropped.
+    expect(keepBold("Led threesome reviews", profile)).toBe("Led threesome reviews");
+  });
+
+  it("leaves a text that has marks of its own, or a profile without bold, as it is", () => {
+    expect(keepBold("Scaled by **40%**, led three teams", profile)).toBe("Scaled by **40%**, led three teams");
+    expect(keepBold("Scaled by 40%", "Scaled by 40%")).toBe("Scaled by 40%");
+  });
+
+  it("prefers the longest phrase, so marks never nest", () => {
+    expect(keepBold("Grew revenue by 40% in Q3", "Grew **revenue by 40%** and **40%** more")).toBe("Grew **revenue by 40%** in Q3");
   });
 });

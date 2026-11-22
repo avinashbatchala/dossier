@@ -1,13 +1,17 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { resetData, sql } from "./support";
+import { contrastRatio } from "../src/lib/themes";
+
+import { drawnColor, fillPosting, openJumpTo, resetData, sql } from "./support";
 
 // Accessibility (E11-3, PRD §11: WCAG 2.2 AA). axe finds no serious or
 // critical violations on any main screen or in its open states, and focus
 // goes somewhere sensible wherever the browser alone wouldn't manage.
 
 async function expectAccessible(page: Page) {
+  // Not halfway through a fade, such as today's note writing itself (#523): axe would read the colour mid-way. Endless ones, such as a spinner, don't count.
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().endTime === Infinity));
   const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
   const serious = violations
     .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
@@ -26,26 +30,32 @@ const SCREENS = [
   "/",
   "/applications",
   "/applications?view=table",
+  // One status from the sidebar (E27-4).
+  "/applications?status=sent&view=list",
+  "/applications?status=closed",
   "/new",
   "/profile",
   "/profile?section=skills",
   "/profile?section=experience",
   "/profile?section=projects",
   "/profile?section=education",
+  "/profile?section=certifications",
   "/profile?section=publications",
   "/profile?section=references",
   "/profile?section=facts",
   "/profile/import",
   "/resume",
   "/jobs",
-  "/jobs?view=history",
-  "/jobs?view=saved",
-  "/jobs?view=dismissed",
+  "/jobs?show=new",
+  "/jobs?show=saved",
+  "/jobs?show=dismissed",
   "/startups",
   "/agent",
   "/inbox",
+  "/usage",
   // The dashboard's calendar on another month.
   "/?date=2026-11-01",
+  "/settings",
   "/settings?section=ai",
   "/settings?section=jobs",
   "/settings?section=scoring",
@@ -88,10 +98,14 @@ test.describe("dark, with the sidebar collapsed", () => {
   test("axe: an application, on every tab", async ({ page }) => {
     await page.goto(application);
     await expectAccessible(page);
-    for (const tab of ["Cover letter", "Email", /^Job posting/, /^Notes/]) {
+    for (const tab of ["Cover letter", "Email", /^Job posting/]) {
       await page.getByRole("tab", { name: tab }).click();
       await expectAccessible(page);
     }
+    // Under 1500 px, Notes is in the ⋯ menu (E30-3).
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Notes" }).click();
+    await expectAccessible(page);
   });
 
   test("axe: open menus and the sign-in page", async ({ page, context, baseURL }) => {
@@ -103,6 +117,16 @@ test.describe("dark, with the sidebar collapsed", () => {
     await page.goto("/login");
     await expectAccessible(page);
   });
+});
+
+test("axe: Jump to, open with results (E27-6)", async ({ page, context, baseURL }) => {
+  for (const scheme of ["light", "dark"]) {
+    await context.addCookies([{ name: "dossier_theme", value: scheme, url: baseURL! }]);
+    await page.goto("/");
+    await (await openJumpTo(page)).fill("led");
+    await expect(page.getByRole("option").first()).toBeVisible();
+    await expectAccessible(page);
+  }
 });
 
 test.describe("signed out", () => {
@@ -117,11 +141,18 @@ test.describe("signed out", () => {
 test("axe: an application, on every tab and with a part being edited", async ({ page }) => {
   await page.goto(application);
   await expectAccessible(page);
-  for (const tab of ["Cover letter", "Email", /^Job posting/, /^Notes/]) {
+  for (const tab of ["Cover letter", "Email", /^Job posting/]) {
     await page.getByRole("tab", { name: tab }).click();
     await expectAccessible(page);
   }
+  // Under 1500 px, Notes is in the ⋯ menu, and the Fit column opens from its rail (E30-3).
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Notes" }).click();
+  await expectAccessible(page);
   await page.getByRole("tab", { name: "Resume" }).click();
+  await page.getByRole("button", { name: /^Show how you fit/ }).click();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
   const summary = page.locator('[data-unit="summary"]');
   await summary.hover();
   await summary.getByRole("button", { name: "Edit" }).click();
@@ -177,16 +208,45 @@ test("axe: open menus and dialogs", async ({ page }) => {
   await expectAccessible(page);
 });
 
-test("axe: Find jobs with results, and its past searches (E14)", async ({ page }) => {
+test("axe: a resume's sections (#297, #298)", async ({ page }) => {
+  await page.goto("/resume?panel=sections");
+  await expect(page.getByRole("button", { name: "Remove Experience" })).toBeVisible();
+  await expectAccessible(page);
+
+  await page.goto("/profile?section=new");
+  await expect(page.getByRole("textbox", { name: "Section name" })).toBeFocused();
+  await expectAccessible(page);
+
+  await page.goto(application);
+  await page.getByRole("button", { name: /^Sections/ }).click();
+  await expect(page.getByRole("button", { name: "Remove Experience" })).toBeVisible();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
+
+  // A section's page under Profile.
+  await page.goto("/profile?section=new");
+  await page.getByRole("button", { name: "Interests" }).click();
+  await page.getByRole("button", { name: "Add section" }).click();
+  await expect(page).toHaveURL(/section=custom/);
+  await page.getByRole("button", { name: "+ Add an item" }).click();
+  await expectAccessible(page);
+});
+
+test("axe: Positions with a search's results, and filtered (E14, E22-5)", async ({ page }) => {
   await page.goto("/jobs");
   await page.getByRole("search", { name: "Search postings" }).getByRole("button", { name: "Search" }).click();
   await expect(page.getByRole("list", { name: "Postings" })).toBeVisible();
   await page.waitForLoadState("networkidle");
   await expectAccessible(page);
 
-  await page.goto("/jobs?view=history");
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await page.goto("/jobs?show=saved&portal=JSEARCH&age=week&covers=half");
+  await expect(page.getByRole("button", { name: /^Found by: / })).toBeVisible();
   await expectAccessible(page);
+  // A filter chip's menu, open (#519).
+  await page.getByRole("button", { name: /^Portal: / }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expectAccessible(page);
+  await page.keyboard.press("Escape");
 });
 
 test("axe: the theme builder and the review step of a new application", async ({ page }) => {
@@ -195,9 +255,9 @@ test("axe: the theme builder and the review step of a new application", async ({
   await expectAccessible(page);
 
   await page.goto("/new?fresh=1");
-  await page.getByLabel("Job posting").fill("Ledgerly: Senior Product Designer, Payments\n- Strong prototyping skills in Figma");
-  await page.getByRole("button", { name: "Read the posting →" }).click();
-  await expect(page.getByRole("heading", { name: "How you match" })).toBeVisible();
+  await fillPosting(page, "Ledgerly: Senior Product Designer, Payments\n- Strong prototyping skills in Figma");
+  await page.getByRole("button", { name: "Read the posting" }).click();
+  await expect(page.getByRole("heading", { name: "What I read from the posting" })).toBeVisible();
   await expectAccessible(page);
 });
 
@@ -222,11 +282,11 @@ test("keyboard: a part's toolbar opens from the keyboard, and Escape comes back"
 
 test("keyboard: each step of a new application takes focus", async ({ page }) => {
   await page.goto("/new?fresh=1");
-  await page.getByLabel("Job posting").fill("Ledgerly: Senior Product Designer, Payments\n- Strong prototyping skills in Figma");
-  await page.getByRole("button", { name: "Read the posting →" }).focus();
+  await fillPosting(page, "Ledgerly: Senior Product Designer, Payments\n- Strong prototyping skills in Figma");
+  await page.getByRole("button", { name: "Read the posting" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "The application" })).toBeFocused();
-  await page.getByRole("button", { name: "← Back to the posting" }).focus();
+  await expect(page.getByRole("heading", { name: "What I read from the posting" })).toBeFocused();
+  await page.getByRole("link", { name: "New", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Job posting")).toBeFocused();
 });
@@ -251,4 +311,17 @@ test("keyboard: a dialog starts on Cancel and gives focus back", async ({ page }
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(page.getByRole("button", { name: "More actions" })).toBeFocused();
+});
+
+test("contrast: a segmented control's selected option is marked at 3:1 in both schemes (WCAG 1.4.11)", async ({ page, context, baseURL }) => {
+  for (const scheme of ["light", "dark"]) {
+    await context.addCookies([{ name: "dossier_theme", value: scheme, url: baseURL! }]);
+    await page.goto("/applications");
+    const view = page.getByRole("radiogroup", { name: "View" });
+    const selected = view.getByRole("radio", { checked: true });
+    expect(await selected.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+    const border = await drawnColor(selected, "border-top-color");
+    expect(contrastRatio(border, await drawnColor(view, "background-color"))).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(border, await drawnColor(selected, "background-color"))).toBeGreaterThanOrEqual(3);
+  }
 });

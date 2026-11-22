@@ -8,7 +8,11 @@ import { LocalProvider } from "../providers/local";
 import { MistralProvider } from "../providers/mistral";
 import { liveLmStudio, liveMistral } from "../test-live";
 
-import { extractPosting, matchRequirements, tailorResume, writeCoverLetter, type TaskOptions } from "./index";
+import { matchFromRequirements } from "@/lib/application-data";
+import { DEFAULT_WORKPLACE } from "@/lib/profile-workplace";
+import { postingLines } from "@/lib/scoring/posting-lines";
+
+import { extractPosting, scorePosting, tailorResume, writeCoverLetter, type TaskOptions } from "./index";
 
 // The whole chain against a real model, skipped unless asked for:
 //
@@ -31,7 +35,7 @@ const provider = mistral
 const options: TaskOptions = { creativity: "BALANCED", strict: true, language: null };
 
 describe.runIf(live.has("ollama") || mistral !== null || lmStudio !== null)("live: the application chain", { timeout: 900_000 }, () => {
-  it("extracts, matches, tailors and writes the Ledgerly application", async () => {
+  it("extracts, scores, tailors and writes the Ledgerly application", async () => {
     const profile = demoProfile();
     const started = Date.now();
     const time = () => `${((Date.now() - started) / 1000).toFixed(1)} s`;
@@ -41,9 +45,12 @@ describe.runIf(live.has("ollama") || mistral !== null || lmStudio !== null)("liv
     expect(extracted.company).toMatch(/ledgerly/i);
     expect(extracted.requirements.length).toBeGreaterThanOrEqual(4);
 
-    const { data: match } = await matchRequirements(provider, { requirements: extracted.requirements, profile }, options);
+    // How you match comes from the scoring engine's answers (E25-7).
+    const posting = { title: extracted.title ?? "", company: extracted.company ?? "", place: extracted.location ?? "", remote: null, salary: "", description: sample.ledgerly.posting };
+    const { data: answers } = await scorePosting(provider, { posting, lines: postingLines(posting.description), profile: { data: profile, levels: { from: "senior", to: "lead" }, workplace: DEFAULT_WORKPLACE } }, options);
+    const match = matchFromRequirements(answers.requirements);
     console.log(`match (${time()}):`, match.items.map((item) => `${item.result.padEnd(7)} ${item.requirement}: ${item.note}`).join("\n"));
-    expect(match.items).toHaveLength(extracted.requirements.length);
+    expect(match.items.length).toBeGreaterThanOrEqual(3);
 
     const { data: resume } = await tailorResume(provider, { profile, extracted, match, facts: [], posting: sample.ledgerly.posting }, options);
     console.log(`resume (${time()}):`, resume.map((unit) => `[${unit.id}] ${unit.text}${unit.unverified ? `  ⚑ ${unit.unverified.join(", ")}` : ""}`).join("\n"));

@@ -23,11 +23,18 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -41,17 +48,31 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -253,11 +274,18 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
           </div>
           <ul
@@ -348,6 +376,58 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -379,10 +459,6 @@ exports[`ResumeDocument > renders the demo profile in Atlas 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -445,11 +521,18 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -463,17 +546,31 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -675,11 +772,18 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
           </div>
           <ul
@@ -770,6 +874,58 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -801,10 +957,6 @@ exports[`ResumeDocument > renders the demo profile in Chronicle 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -867,11 +1019,18 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -885,17 +1044,31 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -1092,11 +1265,18 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -1192,6 +1372,58 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -1223,10 +1455,6 @@ exports[`ResumeDocument > renders the demo profile in Classic 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -1305,11 +1533,18 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
           class="_contactList_fa1ef7"
         >
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="mailto:jane.doe@example.com"
+              rel="noreferrer"
+              target="_blank"
             >
-              jane.doe@example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                jane.doe@example.com
+              </bdi>
+            </a>
           </li>
           <li>
             <bdi
@@ -1326,18 +1561,32 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
             </bdi>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://example.com/"
+              rel="noreferrer"
+              target="_blank"
             >
-              example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                example.com
+              </bdi>
+            </a>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://linkedin.com/in/janedoe-example"
+              rel="noreferrer"
+              target="_blank"
             >
-              linkedin.com/in/janedoe-example
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                linkedin.com/in/janedoe-example
+              </bdi>
+            </a>
           </li>
         </ul>
       </section>
@@ -1567,11 +1816,18 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -1659,6 +1915,58 @@ exports[`ResumeDocument > renders the demo profile in Console 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
       <section
@@ -1726,11 +2034,18 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -1744,17 +2059,31 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -1951,11 +2280,18 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -2051,6 +2387,58 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -2082,10 +2470,6 @@ exports[`ResumeDocument > renders the demo profile in Editorial 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -2148,11 +2532,18 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -2166,17 +2557,31 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -2373,11 +2778,18 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -2473,6 +2885,58 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -2504,10 +2968,6 @@ exports[`ResumeDocument > renders the demo profile in Folio 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -2586,11 +3046,18 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
           class="_contactList_fa1ef7"
         >
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="mailto:jane.doe@example.com"
+              rel="noreferrer"
+              target="_blank"
             >
-              jane.doe@example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                jane.doe@example.com
+              </bdi>
+            </a>
           </li>
           <li>
             <bdi
@@ -2607,18 +3074,32 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
             </bdi>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://example.com/"
+              rel="noreferrer"
+              target="_blank"
             >
-              example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                example.com
+              </bdi>
+            </a>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://linkedin.com/in/janedoe-example"
+              rel="noreferrer"
+              target="_blank"
             >
-              linkedin.com/in/janedoe-example
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                linkedin.com/in/janedoe-example
+              </bdi>
+            </a>
           </li>
         </ul>
       </section>
@@ -2848,11 +3329,18 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -2948,6 +3436,58 @@ exports[`ResumeDocument > renders the demo profile in Ledger 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -3007,11 +3547,18 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -3025,17 +3572,31 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -3232,11 +3793,18 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -3332,6 +3900,58 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -3363,10 +3983,6 @@ exports[`ResumeDocument > renders the demo profile in Minimal 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -3445,11 +4061,18 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
           class="_contactList_fa1ef7"
         >
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="mailto:jane.doe@example.com"
+              rel="noreferrer"
+              target="_blank"
             >
-              jane.doe@example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                jane.doe@example.com
+              </bdi>
+            </a>
           </li>
           <li>
             <bdi
@@ -3466,18 +4089,32 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
             </bdi>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://example.com/"
+              rel="noreferrer"
+              target="_blank"
             >
-              example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                example.com
+              </bdi>
+            </a>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://linkedin.com/in/janedoe-example"
+              rel="noreferrer"
+              target="_blank"
             >
-              linkedin.com/in/janedoe-example
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                linkedin.com/in/janedoe-example
+              </bdi>
+            </a>
           </li>
         </ul>
       </section>
@@ -3707,11 +4344,18 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -3807,6 +4451,58 @@ exports[`ResumeDocument > renders the demo profile in Modern 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -3866,11 +4562,18 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -3884,17 +4587,31 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </header>
   <div
@@ -4091,11 +4808,18 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -4191,6 +4915,58 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -4222,10 +4998,6 @@ exports[`ResumeDocument > renders the demo profile in Signal 1`] = `
           </p>
         </div>
       </section>
-    </div>
-    <div
-      class="_column_fa1ef7"
-    >
       <section
         class="_section_fa1ef7"
       >
@@ -4480,11 +5252,18 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -4580,6 +5359,58 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
         <h2
           class="_sectionTitle_fa1ef7"
         >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
           Publications
         </h2>
         <div
@@ -4627,11 +5458,18 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
           class="_contactList_fa1ef7"
         >
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="mailto:jane.doe@example.com"
+              rel="noreferrer"
+              target="_blank"
             >
-              jane.doe@example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                jane.doe@example.com
+              </bdi>
+            </a>
           </li>
           <li>
             <bdi
@@ -4648,18 +5486,32 @@ exports[`ResumeDocument > renders the demo profile in Studio 1`] = `
             </bdi>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://example.com/"
+              rel="noreferrer"
+              target="_blank"
             >
-              example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                example.com
+              </bdi>
+            </a>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://linkedin.com/in/janedoe-example"
+              rel="noreferrer"
+              target="_blank"
             >
-              linkedin.com/in/janedoe-example
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                linkedin.com/in/janedoe-example
+              </bdi>
+            </a>
           </li>
         </ul>
       </section>
@@ -4741,11 +5593,18 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
           class="_contactList_fa1ef7"
         >
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="mailto:jane.doe@example.com"
+              rel="noreferrer"
+              target="_blank"
             >
-              jane.doe@example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                jane.doe@example.com
+              </bdi>
+            </a>
           </li>
           <li>
             <bdi
@@ -4762,18 +5621,32 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
             </bdi>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://example.com/"
+              rel="noreferrer"
+              target="_blank"
             >
-              example.com
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                example.com
+              </bdi>
+            </a>
           </li>
           <li>
-            <bdi
-              dir="ltr"
+            <a
+              class="_contactLink_fa1ef7"
+              href="https://linkedin.com/in/janedoe-example"
+              rel="noreferrer"
+              target="_blank"
             >
-              linkedin.com/in/janedoe-example
-            </bdi>
+              <bdi
+                dir="ltr"
+              >
+                linkedin.com/in/janedoe-example
+              </bdi>
+            </a>
           </li>
         </ul>
       </section>
@@ -5003,11 +5876,18 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
                 Tidewater design tokens
               </span>
               , 
-              <bdi
-                dir="ltr"
+              <a
+                class="_link_fa1ef7"
+                href="https://github.com/janedoe/tidewater"
+                rel="noreferrer"
+                target="_blank"
               >
-                github.com/janedoe/tidewater
-              </bdi>
+                <bdi
+                  dir="ltr"
+                >
+                  github.com/janedoe/tidewater
+                </bdi>
+              </a>
             </p>
             <span
               class="_dates_fa1ef7"
@@ -5095,6 +5975,58 @@ exports[`ResumeDocument > renders the demo profile in Technical 1`] = `
               2010 – 2013
             </span>
           </div>
+        </div>
+      </section>
+      <section
+        class="_section_fa1ef7"
+      >
+        <h2
+          class="_sectionTitle_fa1ef7"
+        >
+          Certifications
+        </h2>
+        <div
+          class="_entry_fa1ef7"
+          data-unit="certification:c1"
+        >
+          <div
+            class="_entryHead_fa1ef7"
+          >
+            <p>
+              <span
+                class="_entryTitle_fa1ef7"
+              >
+                Certified Accessibility Specialist
+              </span>
+              , 
+              Inclusive Design Institute
+            </p>
+            <span
+              class="_dates_fa1ef7"
+            >
+              Jun 2022
+            </span>
+          </div>
+          <p
+            class="_muted_fa1ef7"
+          >
+            Valid until Jun 2028
+             · 
+            Credential ID IDI-20481
+             · 
+            <a
+              class="_link_fa1ef7"
+              href="https://verify.example.org/IDI-20481"
+              rel="noreferrer"
+              target="_blank"
+            >
+              <bdi
+                dir="ltr"
+              >
+                verify.example.org/IDI-20481
+              </bdi>
+            </a>
+          </p>
         </div>
       </section>
       <section

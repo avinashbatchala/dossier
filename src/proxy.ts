@@ -21,6 +21,11 @@ export async function proxy(request: NextRequest) {
   // The Claude connector (#221) brings its own credentials, an OAuth token,
   // which its routes check; they answer 404 while it's off.
   if (CONNECTOR_PATHS.test(pathname)) return NextResponse.next();
+  // The desktop app signing itself in (desktop.ts), and the system browser
+  // (desktop-browser.ts, #365): the routes check the token or the one-time code.
+  if (pathname === "/api/desktop/sign-in" || pathname === "/api/desktop/browser-link" || pathname === "/api/desktop/browser-sign-in") {
+    return NextResponse.next();
+  }
 
   const session = await decodeSession(
     request.cookies.get(SESSION_COOKIE)?.value,
@@ -33,10 +38,11 @@ export async function proxy(request: NextRequest) {
   if (request.headers.has("next-action")) return pass(request);
 
   // The PDF renderer's headless Chromium opens print pages with a token
-  // instead of a cookie; the page checks it again.
+  // instead of a cookie; the page checks it again. The token is for the page
+  // with its query: Fit to one page's steps are /print/base?fit=1 and so on.
   if (
     pathname.startsWith("/print/") &&
-    (await verifyPrintToken(request.headers.get(PRINT_TOKEN_HEADER), pathname))
+    (await verifyPrintToken(request.headers.get(PRINT_TOKEN_HEADER), `${pathname}${search}`))
   ) {
     return pass(request);
   }

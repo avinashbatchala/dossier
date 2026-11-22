@@ -39,6 +39,11 @@ export const SERVERS: readonly Server[] = [
     name: "OpenRouter",
     domain: "openrouter.ai",
     path: (path) => (/^(\/api|\/v1)?$/.test(path) ? "/api/v1" : path),
+    // Some of the companies behind its models keep or train on what they're
+    // sent, and its docs disagree on whether they're allowed by default.
+    // Resumes go through it, so it's asked to skip them whatever the
+    // account says (E21-7).
+    chat: { provider: { data_collection: "deny" } },
   },
   {
     // OpenCode's Go and Zen plans. Chat refuses a request without a session

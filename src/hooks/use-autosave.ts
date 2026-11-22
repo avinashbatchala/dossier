@@ -37,7 +37,7 @@ function failureMessage(result: unknown): string | null {
  * so the newest value is always the one saved last and responses can't
  * arrive out of order. A failed save is retried once.
  */
-export function createAutosaver<T>({ save: initialSave, delay, onStatus, onFailure }: AutosaverOptions<T>) {
+function createAutosaver<T>({ save: initialSave, delay, onStatus, onFailure }: AutosaverOptions<T>) {
   let save = initialSave;
   let pending: { value: T } | null = null; // changed, not yet sent
   let failed: { value: T } | null = null; // sent, not saved; retried on the next flush

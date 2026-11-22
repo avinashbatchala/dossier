@@ -12,7 +12,11 @@ import { DemoRefused, seedDemo } from "./demo";
 const db = createTestClient();
 const now = new Date("2026-10-10T08:00:00Z");
 const DAY = 86_400_000;
-const basics = async () => basicsFromFields(await db.profileField.findMany());
+// The shared basics, with the first profile's headline and summary (E24-1).
+const basics = async () => {
+  const { headline, summary } = await db.profile.findFirstOrThrow({ orderBy: { sort: "asc" } });
+  return { ...basicsFromFields(await db.profileField.findMany()), headline, summary };
+};
 
 beforeEach(async () => {
   await resetDatabase(db);
@@ -125,11 +129,12 @@ describe("demo seed", () => {
     await seedDemo(db, { now });
     const ledgerly = await db.application.findFirstOrThrow({
       where: { company: "Ledgerly" },
-      include: { documents: { orderBy: { kind: "asc" } }, messages: true },
+      include: { documents: true, messages: true },
     });
     expect(matchScore(matchSchema.parse(ledgerly.match))).toEqual({ hit: 5, total: 7 });
 
-    const [resume, letter] = ledgerly.documents.map((document) => unitsSchema.parse(document.units));
+    const units = (kind: string) => unitsSchema.parse(ledgerly.documents.find((document) => document.kind === kind)?.units);
+    const [resume, letter] = [units("RESUME"), units("COVER_LETTER")];
     expect(resume.map((unit) => unit.label)).toEqual([
       "Summary",
       "Northwind Logistics role",
@@ -139,6 +144,7 @@ describe("demo seed", () => {
       "Skills",
       "MSc Design for Interaction",
       "BA Communication Design",
+      "Certification “Certified Accessibility Specialist”",
       "Publication “Doe, J., & Vermeer, K. (2016). Trust in…”",
       "Languages",
     ]);

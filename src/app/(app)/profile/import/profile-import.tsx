@@ -16,25 +16,14 @@ import { retry } from "@/lib/jobs/actions";
 import type { ImportProfileResult } from "@/lib/jobs/import-profile";
 import { messages } from "@/lib/messages";
 import { citationText } from "@/lib/citation";
-import { BASICS_FIELDS, formatDateRange, languageLevelLabel, type BasicsField } from "@/lib/profile";
-import { IMPORT_PROFILE_STEPS, importCounts, type ImportedProfile, type ImportMode } from "@/lib/profile-import";
+import { BASICS_FIELDS, formatDateRange, formatMonthYear, languageLevelLabel, type BasicsField } from "@/lib/profile";
+import { BASICS_LABELS, IMPORT_PROFILE_STEPS, importCounts, type ImportedProfile, type ImportMode } from "@/lib/profile-import";
 
 import { JobProgress, jobStep } from "../../new/job-progress";
 import { applyProfileImport, discardProfileImport } from "../actions";
+import { levelRange } from "@/lib/profile-levels";
+import { LevelsPicker, type LevelChoice } from "../levels-field";
 
-const BASICS_LABELS: Record<BasicsField, string> = {
-  name: "Full name",
-  headline: "Headline",
-  email: "Email",
-  phone: "Phone",
-  dob: "Date of birth",
-  website: "Website",
-  address: "Street address",
-  city: "City",
-  country: "Country",
-  linkedin: "LinkedIn",
-  summary: "About you",
-};
 
 /**
  * Import a profile from a resume file (E4-10): choose a PDF, Word or Markdown file, wait
@@ -43,16 +32,27 @@ const BASICS_LABELS: Record<BasicsField, string> = {
  * profile before; the reading is deleted once it's used or set aside.
  */
 export function ProfileImport({
+  profileId,
+  profileName,
+  needsLevels = false,
   aiReady,
   provider,
   initialJobId,
   keptFor,
+  inGuide = false,
 }: {
+  /** The profile it goes into (E24-1), and its name when there's more than one to choose from (E24-2). */
+  profileId: string;
+  profileName?: string;
+  /** Whether it has no levels yet (E24-3): the reading's guess is shown to confirm, and taken. */
+  needsLevels?: boolean;
   aiReady: boolean;
   provider: AiProvider;
   initialJobId: string | null;
-  /** How long an unused reading is kept (Settings → Your data), e.g. "24 hours". */
+  /** How long an unused reading is kept (Settings → Data and backups), e.g. "24 hours". */
   keptFor: string;
+  /** Inside the setup guide (E21-6): no page header, and on to the guide's last step once it's in. */
+  inGuide?: boolean;
 }) {
   const router = useRouter();
   const [jobId, setJobId] = useState(initialJobId);
@@ -61,7 +61,11 @@ export function ProfileImport({
   const [uploading, setUploading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const [chosenLevels, setLevels] = useState<LevelChoice | null>(null);
   const job = useJob<ImportProfileResult>(jobId, revision);
+  // The reading's guess fills the picker (E24-3) until the user changes it.
+  const guessed = job?.status === "DONE" ? job.result?.profile.levels : null;
+  const levels: LevelChoice = chosenLevels ?? guessed ?? { from: "", to: "" };
   const fileId = useId();
 
   const phase = !jobId ? "choose" : job?.status === "DONE" && job.result ? "preview" : "reading";
@@ -77,7 +81,8 @@ export function ProfileImport({
 
   const follow = (id: string | null) => {
     setJobId(id);
-    router.replace(id ? `/profile/import?job=${id}` : "/profile/import");
+    const here = inGuide ? "/welcome?step=profile" : `/profile/import?profile=${profileId}`;
+    router.replace(id ? `${here}&job=${id}` : here);
   };
 
   // "Choose another file": the reading goes, with the resume's text.
@@ -107,31 +112,36 @@ export function ProfileImport({
 
   async function apply(mode: ImportMode) {
     if (!jobId) return;
+    const range = levelRange(levels.from, levels.to);
+    if (needsLevels && !range) return void toast("Choose the levels this profile is for.");
     setApplying(true);
-    const result = toastResult(await applyProfileImport({ jobId, mode }));
+    const result = toastResult(await applyProfileImport({ profileId, jobId, mode, ...(needsLevels && range ? { levels: range } : {}) }));
     setApplying(false);
-    if (result.ok) router.push("/profile");
+    if (result.ok) router.push(inGuide ? "/welcome?step=done" : `/profile?profile=${profileId}`);
   }
 
   return (
     <>
-      <PageHeader
-        title="Import from a resume"
-        description={`Start your profile from a resume you already have. Nothing goes into your profile until you've seen what was found. The file's text is deleted once you've chosen, or after ${keptFor} if you don't.`}
-        actions={
-          <Link href="/profile" className={buttonClassName("secondary")}>
-            Back to your profile
-          </Link>
-        }
-      />
-      <div ref={area} className="flex max-w-[816px] flex-col gap-6 px-10 pb-20">
+      {!inGuide && (
+        <PageHeader
+          breadcrumb={[{ label: "Profile", href: `/profile?profile=${profileId}` }, { label: "Import from a resume" }]}
+          title="Import from a resume"
+          description={`${profileName ? `Fill “${profileName}” from a resume you already have.` : "Start your profile from a resume you already have."} Nothing goes into your profile until you've seen what was found. The file's text is deleted once you've chosen, or after ${keptFor} if you don't.`}
+          actions={
+            <Link href={`/profile?profile=${profileId}`} className={buttonClassName("secondary")}>
+              Back to your profile
+            </Link>
+          }
+        />
+      )}
+      <div ref={area} className={inGuide ? "flex flex-col gap-6" : "flex max-w-[816px] flex-col gap-6 px-10 pb-20"}>
         {phase === "choose" && (
           <Card className="flex flex-col items-start gap-5">
             {!aiReady && (
               <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
                 No AI provider is set up yet, so nothing can read the resume.{" "}
-                <Link href="/settings?section=ai" className="font-medium text-warning underline underline-offset-2">
-                  Choose one in Settings → AI provider
+                <Link href={inGuide ? "/welcome?step=ai" : "/settings?section=ai"} className="font-medium text-warning underline underline-offset-2">
+                  {inGuide ? "Choose one in the AI step" : "Choose one in Settings → AI provider"}
                 </Link>
               </p>
             )}
@@ -174,6 +184,15 @@ export function ProfileImport({
         {phase === "preview" && job?.result && (
           <>
             <Preview profile={job.result.profile} />
+            {needsLevels && (
+              <Card className="flex flex-col gap-3">
+                <h3 className="text-[15px] font-medium">The levels this profile is for</h3>
+                <p className="text-meta text-pretty text-muted">
+                  {job.result.profile.levels ? "Guessed from the roles in the resume. Change them if they're off." : "The resume has no roles to guess them from: choose them."}
+                </p>
+                <LevelsPicker value={levels} onChange={setLevels} />
+              </Card>
+            )}
             <Card className="flex flex-col gap-4">
               <p className="text-sm text-muted">
                 <strong className="font-medium text-ink">Merge</strong> adds all this to your profile; where your profile already has the same
@@ -196,7 +215,7 @@ export function ProfileImport({
               open={confirmReplace}
               onOpenChange={setConfirmReplace}
               title="Replace your profile?"
-              description="Your basics, skills, languages, roles, projects, education, publications and references are removed first; then your profile holds exactly what was read from the resume. Your applications and their documents stay as they are."
+              description="This profile's headline, summary, skills, roles, projects, education, certifications, publications and references are removed first; then it holds what was read from the resume. The basics and languages your profiles share take what the resume says and keep the rest. Sections you made and your facts stay. Your applications and their documents stay as they are."
               confirmLabel="Replace my profile"
               onConfirm={() => void apply("replace")}
             />
@@ -220,6 +239,17 @@ function Preview({ profile }: { profile: ImportedProfile }) {
         </h2>
         <p className="text-meta text-muted">{importCounts(profile)}. Anything marked “check” isn&apos;t in the file word for word.</p>
       </div>
+
+      {profile.leftOut.length > 0 && (
+        <Section title="Left out">
+          <p className="text-meta text-muted">The AI gave these, but the file doesn&apos;t say them, so they aren&apos;t kept:</p>
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
+            {profile.leftOut.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       {basics.length > 0 && (
         <Section title="Basics">
@@ -271,7 +301,7 @@ function Preview({ profile }: { profile: ImportedProfile }) {
             <Entry
               key={index}
               title={[entry.role, entry.company].filter(Boolean).join(" · ")}
-              meta={[entry.location, formatDateRange(entry)].filter(Boolean).join(" · ")}
+              meta={[entry.volunteering ? "Volunteering" : "", entry.location, formatDateRange(entry)].filter(Boolean).join(" · ")}
               unverified={entry.unverified}
             >
               {entry.descriptor && <p className="text-muted italic">{entry.descriptor}</p>}
@@ -320,6 +350,21 @@ function Preview({ profile }: { profile: ImportedProfile }) {
               unverified={entry.unverified}
             >
               {entry.notes && <p>{entry.notes}</p>}
+            </Entry>
+          ))}
+        </Section>
+      )}
+
+      {profile.certifications.length > 0 && (
+        <Section title="Certifications">
+          {profile.certifications.map((entry, index) => (
+            <Entry
+              key={index}
+              title={[entry.name, entry.issuer].filter(Boolean).join(" · ")}
+              meta={formatMonthYear(entry.year, entry.month)}
+              unverified={entry.unverified}
+            >
+              {(entry.credentialId || entry.link) && <p>{[entry.credentialId, entry.link].filter(Boolean).join(" · ")}</p>}
             </Entry>
           ))}
         </Section>

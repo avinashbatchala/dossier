@@ -30,7 +30,7 @@ export type FileNameContext = {
 };
 
 /** Longer names are cut to this many characters, which leaves room for ".pdf" on any file system. */
-export const MAX_FILE_NAME_LENGTH = 120;
+const MAX_FILE_NAME_LENGTH = 120;
 
 // Not allowed in file names on Windows, macOS or Linux, plus control characters.
 const INVALID = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;

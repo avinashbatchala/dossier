@@ -4,8 +4,12 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { ReasoningEffort } from "openai/resources/shared";
 
+import type { UsageSink } from "@/lib/usage";
+
+import { AiError, TOO_LONG } from "../errors";
 import { BaseProvider, SCHEMA_REFUSED, withJsonSchema, type ChatAnswer, type ChatCall } from "../provider";
 import { keyGuardedFetch } from "./guarded-fetch";
+import { timedFetch } from "./timed-fetch";
 import { apiAddress, ignoresSchemas, serverAt, type Server } from "./servers";
 
 /** How to ask for JSON, strongest first (E6-4). */
@@ -35,12 +39,16 @@ const promptSchemas = new Set<string>();
 // that support the provided parameters" when none of a model's hosts takes it.
 const JSON_REFUSED = /response_format|json_schema|json_object|structured|invalid schema|support the provided parameters/i;
 
+// An answer that didn't fit. OpenAI's newer models, such as gpt-6-luna,
+// refuse it with a 400 instead of sending it cut off (public PR 51).
+const NO_ROOM = /could not finish the message because max_tokens/i;
+
 /**
  * The answer's text. Some servers, Mistral's among them, send a model that
  * thinks as a list of chunks: the text ones are the answer, the thinking
  * isn't.
  */
-export function answerText(content: unknown): string {
+function answerText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -82,8 +90,9 @@ export class OpenAICompatibleProvider extends BaseProvider {
     apiKey: string | null,
     model: string | null,
     timeoutMs: number,
+    onUsage?: UsageSink,
   ) {
-    super(model, timeoutMs);
+    super(model, timeoutMs, onUsage);
     this.baseURL = apiAddress(baseURL);
     this.server = serverAt(this.baseURL);
     // Local servers often need no key, but the SDK insists on one. It isn't
@@ -95,7 +104,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
       maxRetries: 1,
       defaultHeaders: { ...(apiKey ? {} : { Authorization: null }), ...this.server?.headers?.() },
       // With a key attached, no redirects to other hosts (E11-5).
-      ...(apiKey ? { fetch: keyGuardedFetch() } : {}),
+      fetch: apiKey ? keyGuardedFetch(timedFetch(timeoutMs)) : timedFetch(timeoutMs),
     });
   }
 
@@ -110,11 +119,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
       // A server that ignores a schema silently never says so: start where the model can see it.
       json: ignoresSchemas(this.baseURL, call.model) ? "prompt" : "schema",
     };
+    // Another way of asking for JSON, tried for this call only (see below).
+    let guessed: JsonMode | undefined;
     // A 400 or 422 naming a parameter this model doesn't take, or a gateway's
     // 404 for one: adapt and remember, once per parameter.
     for (;;) {
+      const json: JsonMode = promptSchemas.has(schemaKey) ? "prompt" : (guessed ?? known.json);
       try {
-        const { answer, reasoned } = await this.send(call, promptSchemas.has(schemaKey) ? { ...known, json: "prompt" } : known);
+        const { answer, reasoned } = await this.send(call, { ...known, json });
         // The thinking used up the room for the answer: ask again with room
         // for both, and leave it from now on.
         if (!answer.cutOff || !reasoned || known.thinks || this.thinkingRoom() === 0) return answer;
@@ -127,13 +139,20 @@ export class OpenAICompatibleProvider extends BaseProvider {
           promptSchemas.add(schemaKey);
           continue;
         }
+        // As with an answer cut off: room for thinking, once, and from then on.
+        if (NO_ROOM.test(message)) {
+          if (known.thinks || this.thinkingRoom() === 0) throw AiError.of("cut-off");
+          known = { ...known, thinks: true };
+          quirks.set(key, known);
+          continue;
+        }
         const jsonRefused = call.json !== undefined && JSON_REFUSED.test(message);
         const adapted: Quirks = {
           noTemperature: known.noTemperature || (call.temperature !== undefined && /temperature/i.test(message)),
           maxCompletionTokens: known.maxCompletionTokens || /max_tokens/.test(message),
           noEffort: known.noEffort || (this.reasoningEffort(call) !== undefined && /reasoning_effort/i.test(message)),
           thinks: known.thinks,
-          json: jsonRefused ? (JSON_MODES[JSON_MODES.indexOf(known.json) + 1] ?? known.json) : known.json,
+          json: jsonRefused ? (JSON_MODES[JSON_MODES.indexOf(json) + 1] ?? known.json) : known.json,
         };
         if (
           adapted.noTemperature === known.noTemperature &&
@@ -141,8 +160,20 @@ export class OpenAICompatibleProvider extends BaseProvider {
           adapted.noEffort === known.noEffort &&
           adapted.json === known.json
         ) {
+          // Any other 400 or 422 to a call that asked for JSON may still be
+          // about that, in words we don't know, or about the model's answer
+          // to it: Groq checks the JSON itself and answers 400
+          // json_validate_failed when the model gets it wrong (public issue
+          // 128). Ask the next simpler way, but only for this call, since
+          // the same error can come from something else.
+          if (call.json && (status === 400 || status === 422) && json !== "prompt" && !TOO_LONG.test(message)) {
+            guessed = JSON_MODES[JSON_MODES.indexOf(json) + 1];
+            continue;
+          }
           throw error;
         }
+        // A refusal we know overrides a guess.
+        if (adapted.json !== known.json) guessed = undefined;
         known = adapted;
         quirks.set(key, known);
       }
@@ -190,6 +221,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
       },
       { signal: call.signal },
     );
+    // Thinking is in the completion tokens. Not every server sends a usage.
+    call.used({ input: completion.usage?.prompt_tokens ?? null, output: completion.usage?.completion_tokens ?? null });
     const choice = completion.choices[0];
     // Mistral says `model_length` when the context ran out instead.
     const finish: string | undefined = choice?.finish_reason;

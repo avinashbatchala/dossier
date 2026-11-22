@@ -5,7 +5,7 @@ import { logServerError } from "@/lib/log";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 import type { SettingsData } from "@/lib/settings";
 import { appVersion } from "@/lib/version";
-import { RELEASES_REPOSITORY, type Release } from "@/lib/releases";
+import { isNewer, RELEASES_REPOSITORY, type Release } from "@/lib/releases";
 
 // The update check (E10-9, SET-12, PRD §11): "Check for updates" in
 // Settings → About, and once on each day Dossier is used while "Check for
@@ -17,17 +17,6 @@ export type UpdateCheck =
   | { status: "latest"; version: string }
   | { status: "newer"; version: string; url: string }
   | { status: "unknown" };
-
-/** 1.10.0 is newer than 1.9.2; anything after "-" (a pre-release) is ignored. */
-export function isNewer(candidate: string, current: string): boolean {
-  const parts = (version: string) => version.replace(/^v/i, "").split("-")[0].split(".").map((part) => Number(part) || 0);
-  const [a, b] = [parts(candidate), parts(current)];
-  for (let index = 0; index < Math.max(a.length, b.length); index++) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference > 0;
-  }
-  return false;
-}
 
 /** A release page is only ever linked on GitHub. */
 const isReleasePage = (url: string) => url.startsWith(`https://github.com/${RELEASES_REPOSITORY}/`);

@@ -102,7 +102,7 @@ export function passwordMatches(candidate: string, hash = env.DOSSIER_PASSWORD):
 }
 
 /** Whether the browser reached us over HTTPS, as the reverse proxy reports it. */
-async function isHttps(): Promise<boolean> {
+export async function isHttps(): Promise<boolean> {
   const proto = (await headers()).get("x-forwarded-proto");
   return proto?.split(",")[0]?.trim() === "https";
 }

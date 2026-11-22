@@ -4,6 +4,8 @@ import { Suspense } from "react";
 import { periodFromParam } from "@/lib/dashboard";
 import { waitingByApplication } from "@/lib/google/inbox-data";
 import { loadDashboard } from "@/lib/dashboard-data";
+import { noteDay, noteState } from "@/lib/daily-note";
+import { longDate } from "@/lib/dates";
 import { dayPeriod, hourIn } from "@/lib/greeting";
 import { loadProfileName } from "@/lib/profile-data";
 import { loadSettings } from "@/lib/settings-data";
@@ -35,6 +37,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       figures={figures}
       firstName={name.trim().split(/\s+/)[0] ?? ""}
       period={dayPeriod(hourIn(timeZone))}
+      today={longDate(now, timeZone)}
+      note={noteState(settings.dailyNote, noteDay(now, timeZone))}
       range={range}
       quietDays={settings.quietDays}
       empty={figures.total === 0}

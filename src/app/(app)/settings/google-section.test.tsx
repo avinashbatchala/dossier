@@ -47,12 +47,27 @@ describe("GoogleSection (E15-1)", () => {
     expect(screen.getByRole("link", { name: "Connect Google account" })).toHaveAttribute("href", "/api/google/connect");
   });
 
+  it("asks to connect again once Google refuses the saved access (#136)", () => {
+    const problem = "Google no longer accepts Dossier's access. Connect your Google account again.";
+    render(
+      <GoogleSection
+        client={client}
+        connection={{ status: "connected", email: "jane@gmail.com", canSend: true, canRead: true, canUseCalendar: true, lastSync: null, syncProblem: problem, signInProblem: problem }}
+        initial={settings}
+        browserTimeZone={null}
+        redirectUri={redirect}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Until then, Dossier doesn't check your mail or calendar.");
+    expect(screen.getByRole("link", { name: "Connect again" })).toHaveAttribute("href", "/api/google/connect");
+  });
+
   it("saves each choice, links to missing permissions, and disconnects after asking", async () => {
     const user = userEvent.setup();
     render(
       <GoogleSection
         client={client}
-        connection={{ status: "connected", email: "jane@gmail.com", canSend: true, canRead: true, canUseCalendar: false, lastSync: "today at 10:00", syncProblem: null }}
+        connection={{ status: "connected", email: "jane@gmail.com", canSend: true, canRead: true, canUseCalendar: false, lastSync: "today at 10:00", syncProblem: null, signInProblem: null }}
         initial={settings}
         browserTimeZone="Europe/Berlin"
         redirectUri={redirect}

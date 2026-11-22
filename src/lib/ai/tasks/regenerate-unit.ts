@@ -25,7 +25,7 @@ import {
   type Task,
 } from "./prompt-parts";
 
-export const REGENERATE_UNIT_VERSION = "regenerate-unit@6";
+const REGENERATE_UNIT_VERSION = "regenerate-unit@6";
 
 /** What the letter's frame parts are, for the model (E8-11). */
 const FRAME_PARTS: Record<string, string> = {
@@ -72,6 +72,7 @@ export const regenerateUnit: Task<RegenerateInput, Unit> = async (provider, inpu
   const isProject = unit.id.startsWith("project:");
   const what = DOCUMENT_NAMES[kind];
   const answer = await provider.complete({
+    task: "regenerate-unit",
     system: system(
       `You write a new version of one part of a candidate's ${what} for one job, as JSON with the new text.`,
       `Keep its purpose and about its length, but phrase it differently from the current version, and don't repeat what other parts already say.${

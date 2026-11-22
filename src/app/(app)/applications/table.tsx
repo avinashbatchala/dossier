@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { ScoreRing } from "@/components/score-ring";
 import { StatusDot } from "@/components/ui/status-dot";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
 import type { ApplicationRow } from "@/lib/applications-data";
@@ -113,7 +114,9 @@ export function Table({
                   </select>
                 </span>
               </td>
-              <td className="py-3.5 pr-4 text-sm tabular-nums">{row.match ? `${row.match.hit}/${row.match.total}` : "Not matched"}</td>
+              <td className="py-3.5 pr-4 text-sm tabular-nums">
+                {row.match ? <ScoreRing hit={row.match.hit} total={row.match.total} size="sm" /> : <span className="text-muted">Not matched</span>}
+              </td>
               <td className="truncate py-3.5 pr-4 text-sm text-muted">{row.location || "Not given"}</td>
               <td className="py-3.5 pr-4 text-sm text-muted">{row.sent ?? "Not sent"}</td>
               <td className="py-3.5 pr-4 text-sm text-muted">{row.updated}</td>

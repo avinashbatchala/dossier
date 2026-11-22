@@ -17,7 +17,7 @@ import { loginMessages } from "./messages";
  * signs in and the form's own submit never happens. Before they've run, the
  * browser posts the form to `signInWithForm` instead (#187).
  */
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, keepsSession = false }: { next?: string; /** In the desktop app's window, which keeps its sign-in anyway (#359). */ keepsSession?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState("");
@@ -94,12 +94,14 @@ export function LoginForm({ next }: { next?: string }) {
         )}
       </div>
 
-      <Checkbox
-        label="Keep me signed in for 30 days"
-        name="remember"
-        checked={remember}
-        onChange={(event) => setRemember(event.target.checked)}
-      />
+      {!keepsSession && (
+        <Checkbox
+          label="Keep me signed in for 30 days"
+          name="remember"
+          checked={remember}
+          onChange={(event) => setRemember(event.target.checked)}
+        />
+      )}
 
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}

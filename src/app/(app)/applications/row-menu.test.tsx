@@ -5,11 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import { deleteApplication, setArchived } from "@/lib/application-actions";
 import type { ApplicationRow } from "@/lib/applications-data";
-import { DEFAULT_SORT } from "@/lib/applications-list";
+import { DEFAULT_SORT, sidebarStatuses } from "@/lib/applications-list";
 
 import { ApplicationsScreen } from "./applications-screen";
+import { applicationRow } from "@/test/application-row";
 
-vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })) }));
+vi.mock("./actions", () => ({ rememberListView: vi.fn(async () => ({ ok: true, data: null })), reorderBoard: vi.fn(async () => ({ ok: true, data: null })) }));
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => null }));
 vi.mock("@/components/change-status", () => ({ changeStatus: vi.fn(async () => true) }));
@@ -19,25 +20,11 @@ vi.mock("@/lib/application-actions", () => ({
 }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 
-const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => ({
-  id,
-  company: "Quill & Co",
-  role: "UX Designer",
-  location: "",
-  mode: "Remote",
-  status: "DECLINED",
-  archived: false,
-  deadline: null,
-  match: null,
-  sent: "10 Aug",
-  updated: "4 weeks ago",
-  updatedAt: Date.UTC(2026, 7, 31),
-  ...extra,
-});
-const params = { view: "table" as const, filter: "all" as const, q: "", sort: DEFAULT_SORT, archived: false };
+const row = (id: string, extra: Partial<ApplicationRow> = {}): ApplicationRow => applicationRow(id, { company: "Quill & Co", role: "UX Designer", location: "", mode: "Remote", status: "DECLINED", match: null, sent: "10 Aug", updated: "4 weeks ago", updatedAt: Date.UTC(2026, 7, 31), ...extra });
+const params = { view: "list" as const, status: null, q: "", sort: DEFAULT_SORT, archived: false };
 const open = (extra = {}) =>
   render(
-    <ApplicationsScreen params={params} rows={[row("quill")]} counts={{ all: 1, active: 0, closed: 1 }} summary="1 application" empty={false} archivedCount={0} {...extra} />,
+    <ApplicationsScreen params={params} rows={[row("quill")]} tabs={{ all: 1, statuses: sidebarStatuses(new Map()) }} summary="1 application" empty={false} archivedCount={0} {...extra} />,
   );
 const menu = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(screen.getByRole("button", { name: "Actions for UX Designer, Quill & Co" }));
@@ -102,6 +89,6 @@ describe("archiving and deleting from a row (E9-5)", () => {
     unmount();
     open({ archivedCount: 2 });
     await user.click(screen.getByRole("button", { name: "Show archived 2" }));
-    expect(router.push).toHaveBeenCalledWith("/applications?view=table&archived=1", { scroll: false });
+    expect(router.push).toHaveBeenCalledWith("/applications?view=list&archived=1", { scroll: false });
   });
 });

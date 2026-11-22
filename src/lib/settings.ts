@@ -1,9 +1,14 @@
 import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
-import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
+import { announcementFeedSchema } from "@/lib/announcements/contract";
+import { JOB_SOURCES, JSEARCH_HOSTS } from "@/lib/job-search/search";
+import { setupGuideSchema } from "@/lib/setup-guide";
 import { SCORERS } from "@/lib/scoring/scorers";
 import { startupsRefreshSchema } from "@/lib/startups/types";
+import { AGENT_MAX_SLOTS_PER_RUN } from "@/lib/agent/limits";
+import { AI_TIMEOUT_LIMITS } from "@/lib/ai/provider-options";
+import { COVERS, coversFromScore, type Covers } from "@/lib/posting-coverage";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
 export const DATE_FORMATS: readonly { value: DateFormat; label: string }[] = [
@@ -28,7 +33,7 @@ export function formatDocumentDate(date: Date, format: DateFormat, locale = "en-
 }
 
 /**
- * How long a finished background job is kept (Settings → Your data). Its
+ * How long a finished background job is kept (Settings → Data and backups). Its
  * input and result hold what an AI task was given and wrote: a posting,
  * a resume's text, drafts not yet in an application.
  */
@@ -38,28 +43,20 @@ export const JOB_RETENTION_OPTIONS: readonly { hours: number; label: string }[] 
   { hours: 24 * 7, label: "7 days" },
   { hours: 24 * 30, label: "30 days" },
 ];
-export const DEFAULT_JOB_RETENTION_HOURS = 24;
+const DEFAULT_JOB_RETENTION_HOURS = 24;
 export const isJobRetention = (hours: number) => JOB_RETENTION_OPTIONS.some((option) => option.hours === hours);
+/** Days an untouched posting stays in Positions after a search last found it, before it moves to the Archive (E22-7). */
+export const ARCHIVE_DAYS = [14, 30, 60, 90] as const;
+export const DEFAULT_ARCHIVE_DAYS = 30;
+export const isArchiveDays = (days: number) => (ARCHIVE_DAYS as readonly number[]).includes(days);
 /** "24 hours" */
 export const jobRetentionLabel = (hours: number) =>
   JOB_RETENTION_OPTIONS.find((option) => option.hours === hours)?.label ?? `${hours} hours`;
 
-const pageLimit = z.enum(["1", "2", "none"]);
-export type PageLimit = z.infer<typeof pageLimit>;
-
-/**
- * "Resume length" (SET-9): how many pages a tailored resume may run to. One
- * that runs over is trimmed when its application is created (E10-10).
- */
-export const PAGE_LIMITS: readonly { value: PageLimit; label: string; pages: number | null }[] = [
-  { value: "1", label: "One page", pages: 1 },
-  { value: "2", label: "Up to two pages", pages: 2 },
-  { value: "none", label: "No limit", pages: null },
-];
-/** The most pages a resume may have, or null for no limit. */
-export const maxPages = (limit: PageLimit): number | null => PAGE_LIMITS.find((option) => option.value === limit)?.pages ?? null;
-/** "one page", "two pages" */
-export const pagesInWords = (pages: number) => (pages === 1 ? "one page" : pages === 2 ? "two pages" : `${pages} pages`);
+/** Which documents New application writes (#367): many job sites ask for only one. */
+export const DOCUMENTS_TO_WRITE = ["both", "resume", "letter"] as const;
+export type DocumentsToWrite = (typeof DOCUMENTS_TO_WRITE)[number];
+export const DOCUMENTS_TO_WRITE_LABELS: Record<DocumentsToWrite, string> = { both: "Resume and cover letter", resume: "Resume only", letter: "Cover letter only" };
 
 // ─── Stored settings ─────────────────────────────────────────────────────────
 // Settings are stored in the Setting table, one text row per key: enums by
@@ -68,10 +65,10 @@ export const pagesInWords = (pages: number) => (pages === 1 ? "one page" : pages
 
 export const DEFAULT_BASE_THEME = "editorial";
 
-const flag = (fallback: boolean) => z.stringbool().catch(fallback);
+export const flag = (fallback: boolean) => z.stringbool().catch(fallback);
 
 /** A value stored as JSON. */
-const json = <T extends z.ZodType>(schema: T) =>
+export const json = <T extends z.ZodType>(schema: T) =>
   z
     .string()
     .transform((value): unknown => {
@@ -88,19 +85,64 @@ const stringList = json(z.array(z.string()));
 
 /**
  * One run of the job agent (E16), kept here rather than as its Job, which
- * the task-data sweep deletes: the daily limit counts these.
+ * the task-data sweep deletes: the source-request quota counts these.
  */
-export const agentRunSchema = z.object({
+/** "Test connection" in Settings → AI provider, as last run (E34-1): when, how long, and what went wrong. */
+const aiTestSchema = z.object({
+  at: z.iso.datetime(),
+  provider: z.string(),
+  baseUrl: z.string(),
+  model: z.string(),
+  ok: z.boolean(),
+  /** How long it took, for a test that worked. */
+  seconds: z.number().nullable(),
+  /** What went wrong, for one that didn't. */
+  error: z.string().nullable(),
+});
+export type AiTest = z.infer<typeof aiTestSchema>;
+
+const agentSearchRunSchema = z.object({
+  searchId: z.string(),
+  searchName: z.string(),
+  found: z.number().int().min(0),
+  fresh: z.number().int().min(0),
+  error: z.string().nullable(),
+  /** Since E22-8: the search it ran as, with what it found (Positions → Found by the agent). */
+  postingSearchId: z.string().optional(),
+  /** Since E22-8: each portal it asked, how many it found, and what went wrong. */
+  portals: z.array(z.object({ id: z.string(), status: z.string(), found: z.number().int().min(0), message: z.string().nullable() })).optional(),
+});
+export type AgentSearchRun = z.infer<typeof agentSearchRunSchema>;
+const agentRunSchema = z.object({
   at: z.iso.datetime(),
   manual: z.boolean(),
   /** What the run ended with, for the Agent screen; null while it runs. */
   message: z.string().nullable(),
+  /** Slots reserved together before dispatch. Legacy runs consumed one slot. */
+  sourceRequests: z.number().int().min(1).max(AGENT_MAX_SLOTS_PER_RUN).optional(),
+  /** Each reserved slot's timestamp, advanced immediately before dispatch. */
+  sourceRequestAts: z.array(z.iso.datetime()).min(1).max(AGENT_MAX_SLOTS_PER_RUN).optional(),
+  /** Each slot's portal (E22-8); a slot from before counts against every portal. */
+  sourceRequestPortals: z.array(z.string()).max(AGENT_MAX_SLOTS_PER_RUN).optional(),
+  searches: z.array(agentSearchRunSchema).optional(),
 });
 export type AgentRun = z.infer<typeof agentRunSchema>;
 /** How many runs are kept: more than a day's worth, for the limit and the screen. */
 export const AGENT_RUNS_KEPT = 10;
 
-export const settingsSchema = z.object({
+/** The dashboard's daily note (E28-6, DB2): today's only, replaced the next day. */
+const dailyNoteSchema = z.object({
+  /** The day it's for, YYYY-MM-DD in the user's time zone. */
+  day: z.string(),
+  text: z.string().max(500),
+  /** How many times "Another one" was used that day. */
+  rewrites: z.number().int().min(0),
+  /** "Hide for today": until local midnight, when the day changes. */
+  hidden: z.boolean(),
+});
+export type DailyNote = z.infer<typeof dailyNoteSchema>;
+
+const settingsSchema = z.object({
   // AI provider (SET-1). Null means "not set in the app": fall back to the
   // DOSSIER_AI_* environment variables, then to the built-in defaults.
   provider: z.enum(AiProvider).nullable().catch(null),
@@ -108,6 +150,8 @@ export const settingsSchema = z.object({
   model: z.string().nullable().catch(null),
   /** Encrypted with a key derived from DOSSIER_SECRET (E6-2); never sent to the client. */
   apiKeyEnc: z.string().nullable().catch(null),
+  /** How long one AI request may take, in seconds (public issue 118); null for DOSSIER_AI_TIMEOUT_SECONDS's, or the provider's own. */
+  aiTimeoutSeconds: z.coerce.number().int().min(AI_TIMEOUT_LIMITS.min).max(AI_TIMEOUT_LIMITS.max).nullable().catch(null),
   creativity: z.enum(Creativity).catch(Creativity.BALANCED),
   /** "Never invent experience" (SET-4). */
   strict: flag(true),
@@ -118,38 +162,55 @@ export const settingsSchema = z.object({
   defaultTone: z.enum(Tone).catch(Tone.WARM),
   /** Language for generated documents; null means "the posting's language" (SET-7). */
   docLanguage: z.string().nullable().catch(null),
-  /** The base resume's language, for its headings and dates; null means English, with the direction read from the profile. */
-  resumeLanguage: z.string().nullable().catch(null),
   /** Languages added with "Other language…", kept in the list. */
   customLanguages: stringList.catch([]),
   fileNamePattern: z.string().catch("{name} – {company} – {doc}"),
   includeRefs: flag(false),
   /** Draw the uploaded signature image on new cover letters (E17). */
   signCoverLetters: flag(false),
-  /** Up to two pages unless chosen (decided 22 October 2026: resumes aren't forced to one page). */
-  pageLimit: pageLimit.catch("2"),
+  /** What New application writes unless chosen there (#367). */
+  documentsToWrite: z.enum(DOCUMENTS_TO_WRITE).catch("both"),
   nightlyBackup: flag(true),
   /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */
   jobRetentionHours: z.coerce.number().refine(isJobRetention).catch(DEFAULT_JOB_RETENTION_HOURS),
-  /** A theme's id. loadSettings() reads a deleted one as Editorial. */
-  baseThemeId: z.string().catch(DEFAULT_BASE_THEME),
   /** The Applications screen as last left (LST-7): view, filter and sort, e.g. "-match". */
-  applicationsView: z.enum(["board", "table"]).catch("board"),
+  applicationsView: z
+    .enum(["board", "list", "table"])
+    .transform((view) => (view === "table" ? "list" : view))
+    .catch("board"),
+  /** No longer used: the status tabs replaced In progress and Closed (E29-1). */
   applicationsFilter: z.enum(["all", "active", "closed"]).catch("all"),
+  /** The statuses where Board was chosen over the list (E29-1, LB1), as `status=` writes them. */
+  applicationsBoardStatuses: stringList.catch([]),
   applicationsSort: z.string().catch("updated"),
   /** The dashboard's period as last left (E9-8). */
   dashboardPeriod: z.enum(["30d", "90d", "all"]).catch("all"),
-  /** Days without news before "Worth a look" suggests a follow-up (E9-9). */
+  /** Days without news before Needs you suggests a follow-up (E9-9). */
   quietDays: z.coerce.number().int().min(1).max(60).catch(7),
-  /** Experience, projects and education: newest first by date, or the order set by hand (E4-9). */
-  experienceOrder: z.enum(["date", "manual"]).catch("date"),
-  projectOrder: z.enum(["date", "manual"]).catch("date"),
-  educationOrder: z.enum(["date", "manual"]).catch("date"),
+  /** Today's daily note (E28-6); null before the first one. */
+  dailyNote: json(dailyNoteSchema).nullable().catch(null),
+  /** Whether the AI writes the daily note (U3); off, or without a provider, a written one is picked. */
+  dailyNoteAi: flag(true),
+  /** The profile last opened on Profile or Base resume (E24-2), which they open next; null or a deleted one reads as the first. */
+  openProfileId: z.string().nullable().catch(null),
+  /** Where the setup guide was left (E21); null until it's first opened. */
+  setupGuide: json(setupGuideSchema).nullable().catch(null),
   /** Why the last nightly backup failed; null once one works again (E10-7). */
   backupProblem: z.string().nullable().catch(null),
-  // Job search (E14-4). Null means "not set in the app": DOSSIER_JOBS_SOURCE
-  // decides. "OFF" is a choice. Each source keeps its own key, encrypted
-  // like the AI key, so switching back and forth loses nothing.
+  // Job search (E22-3): which portals are on and their fields, by portal id.
+  // Null means "not set in the app": DOSSIER_JOBS_SOURCE decides. Secrets are
+  // in portalKeysEnc, each encrypted like the AI key, and never exported.
+  portals: json(z.record(z.string(), z.object({ on: z.boolean().catch(false), fields: z.record(z.string(), z.string().max(5000)).catch({}), acceptedAt: z.iso.datetime().nullable().catch(null) })))
+    .nullable()
+    .catch(null),
+  portalKeysEnc: json(z.record(z.string(), z.record(z.string(), z.string()))).catch({}),
+  /** Portals the user keeps searching although the catalog withdrew them (E23-5): portal id → the withdrawal's time. */
+  portalWithdrawalsKept: json(z.record(z.string(), z.string())).catch({}),
+  /** Days before an untouched posting moves to the Archive (E22-7). */
+  archiveAfterDays: z.coerce.number().refine(isArchiveDays).catch(DEFAULT_ARCHIVE_DAYS),
+  // Before E22-3: one source and a key per source. Read until they're moved
+  // into `portals` once (moveJobSettings in src/lib/job-search/config.ts),
+  // and from older exports.
   jobSource: z.enum([...JOB_SOURCES, "OFF"]).nullable().catch(null),
   jsearchKeyEnc: z.string().nullable().catch(null),
   /** Where the JSearch key is from: OpenWeb Ninja, or the RapidAPI marketplace. */
@@ -163,15 +224,20 @@ export const settingsSchema = z.object({
   // AI model. Jev's key is encrypted like the others, under its own key.
   scorer: z.enum(SCORERS).nullable().catch(null),
   typesafeKeyEnc: z.string().nullable().catch(null),
-  // Job agent (E16): one search, run once a day. Off until it's turned on.
+  /** OpenAI Decisions' key (E25-3), and OpenRouter's for scoring with its model (E25-4). */
+  decisionsKeyEnc: z.string().nullable().catch(null),
+  openrouterScoringKeyEnc: z.string().nullable().catch(null),
+  /** The OpenRouter model that scores; null for the default (OPENROUTER_SCORING_MODEL). */
+  openrouterScoringModel: z.string().trim().min(1).max(200).nullable().catch(null),
+  // Job agent (E16): recurring searches, run once a day. Off until turned on.
   // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
-  /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
-  agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),
   /** The hour of the day it runs, in the user's time zone. */
   agentHour: z.coerce.number().int().min(0).max(23).catch(7),
-  /** Postings scored below this stay out of the queue. */
+  /** The 0–100 minimum from before coverage (E32-2); it gives agentCovers until that's set. */
   agentMinScore: z.coerce.number().int().min(0).max(100).catch(70),
+  /** How much of a posting's requirements the profile must cover for the queue (E32-2); null follows agentMinScore. */
+  agentCovers: z.enum(COVERS).nullable().catch(null),
   /** The most postings a run scores, and the most drafts it prepares on its own. */
   agentMaxScores: z.coerce.number().int().min(1).max(30).catch(15),
   agentMaxDrafts: z.coerce.number().int().min(0).max(10).catch(3),
@@ -190,9 +256,16 @@ export const settingsSchema = z.object({
   // asked, and the release "Not now" hid the sidebar notice for. They belong
   // to the install, not its data, so exports leave them out (INSTALL_SETTINGS).
   latestVersion: z.string().nullable().catch(null),
+  /** The AI connection test's last result (E34-1), for the provider, address and model it tested; install-only. */
+  aiTest: json(aiTestSchema).nullable().catch(null),
   latestVersionUrl: z.string().nullable().catch(null),
   updateCheckDay: z.string().nullable().catch(null),
   updateDismissed: z.string().nullable().catch(null),
+  // The backend's notices (announcements/check.ts): its last answer, and the
+  // ones dismissed here. They belong to the install, not its data, so exports
+  // leave them out (INSTALL_SETTINGS).
+  announcementFeed: json(announcementFeedSchema).nullable().catch(null),
+  announcementsDismissed: stringList.catch([]),
   // Gmail and Calendar (E15). Off until the Google account is connected.
   // The OAuth client, entered in Settings → Google. Null means "not set in the
   // app": DOSSIER_GOOGLE_CLIENT_ID and DOSSIER_GOOGLE_CLIENT_SECRET decide.
@@ -243,15 +316,23 @@ export const settingsSchema = z.object({
   // without a request, such as the inbox check (time-zone.ts). It belongs
   // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).
   browserTimeZone: z.string().nullable().catch(null),
+  // The address the user last opened Dossier at (E26-1), for notifications'
+  // links when DOSSIER_PUBLIC_URL isn't set. The install's too, like the zone.
+  lastOrigin: z.string().nullable().catch(null),
+  // What notifications already said, so each is said once (E26-5, E26-7):
+  // portal withdrawals by "withdrawn:<id>" (its date) and updates by
+  // "update:<id>" (the version); the local day the daily check last ran;
+  // the last new version announced. The install's, not its data.
+  portalNotices: json(z.record(z.string(), z.string())).catch({}),
+  notificationsDay: z.string().nullable().catch(null),
+  notifiedVersion: z.string().nullable().catch(null),
 });
 export type SettingsData = z.output<typeof settingsSchema>;
 
 /** The settings from Setting rows; keys it doesn't know are ignored. */
 export function settingsFromRows(rows: readonly { key: string; value: string }[]): SettingsData {
+  // Old keys, such as Resume length's pageLimit (removed with the trimmer, #234), are left out here.
   const values: Record<string, string> = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  // Up to 1.7, the limit was "Keep resumes to one page" (onePage), and off meant no limit. Databases and export files may still have it.
-  if (values.pageLimit === undefined && values.onePage === "false") values.pageLimit = "none";
-  if (values.pageLimit === undefined && values.onePage === "true") values.pageLimit = "1";
   return settingsSchema.parse(values);
 }
 
@@ -260,3 +341,6 @@ export function settingValue(value: SettingsData[keyof SettingsData]): string | 
   if (value === null) return null;
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
+
+/** The agent's cut-off (E32-2): as set, else moved over from the 0–100 minimum. */
+export const agentCoversOf = (settings: Pick<SettingsData, "agentCovers" | "agentMinScore">): Covers => settings.agentCovers ?? coversFromScore(settings.agentMinScore);

@@ -45,21 +45,41 @@ export function companyDomains(application: Pick<MatchableApplication, "postingT
   return new Set(domains);
 }
 
-/** A company name as a word to look for: lowercase, without legal forms. */
-export function companyKey(company: string): string {
-  return company
+/** The words of a text, lowercase, without legal forms. */
+function companyWords(text: string): string[] {
+  return text
     .toLowerCase()
     .replace(/\b(gmbh|ag|se|inc|ltd|llc|bv|b\.v\.|plc|co|corp|corporation|limited|group|the)\b\.?/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "")
-    .trim();
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
 }
 
-/** The most likely of several candidates: one still in progress, most recently changed. */
+/** A company name as a word to look for: lowercase, without legal forms. */
+export function companyKey(company: string): string {
+  return companyWords(company).join("");
+}
+
+/**
+ * Whether the company's words appear side by side in `haystack`, or written
+ * as one word ("NorthwindLogistics", northwindlogistics.com). Whole words
+ * only, so "Vita" isn't found in "invitation".
+ */
+function mentions(haystack: readonly string[], company: readonly string[]): boolean {
+  if (haystack.includes(company.join(""))) return true;
+  return haystack.some((_, start) => company.every((word, i) => haystack[start + i] === word));
+}
+
+/**
+ * The most likely of several candidates: one sent and still in progress,
+ * else a draft, most recently changed. A closed one never is (#358): a new
+ * mail from that company is about something else, and waits in the Inbox
+ * unmatched. A reply in a thread already linked still goes to it.
+ */
 function best(candidates: MatchableApplication[]): MatchableApplication | null {
-  if (candidates.length === 0) return null;
-  const open = candidates.filter((application) => isInProgress(application.status) && application.status !== ApplicationStatus.DRAFT);
-  const pool = open.length > 0 ? open : candidates;
-  return [...pool].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+  const live = candidates.filter((application) => isInProgress(application.status));
+  const sent = live.filter((application) => application.status !== ApplicationStatus.DRAFT);
+  const pool = sent.length > 0 ? sent : live;
+  return [...pool].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
 }
 
 export function matchMail(
@@ -79,10 +99,10 @@ export function matchMail(
 
   // Only applications that were sent: a draft can't have had a reply.
   const sent = applications.filter((application) => application.status !== ApplicationStatus.DRAFT);
-  const haystack = companyKey(`${mail.fromName} ${domain} ${mail.subject}`);
+  const haystack = companyWords(`${mail.fromName} ${domain} ${mail.subject}`);
   const byCompany = sent.filter((application) => {
-    const key = companyKey(application.company);
-    return key.length >= 4 && haystack.includes(key);
+    const words = companyWords(application.company);
+    return words.join("").length >= 4 && mentions(haystack, words);
   });
   // A name that fits several companies proves nothing.
   const companies = new Set(byCompany.map((application) => companyKey(application.company)));

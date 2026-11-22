@@ -1,0 +1,185 @@
+{
+  "format": 1,
+  "id": "ADZUNA",
+  "name": "Adzuna",
+  "version": "1.0.1",
+  "description": "Adzuna's own job index in 19 countries. It only shares the start of each posting.",
+  "tag": "19 countries · free key, its limits shown in your account",
+  "termsUrl": "https://developer.adzuna.com/docs/terms_of_service",
+  "keyUrl": "https://developer.adzuna.com/signup",
+  "countries": [
+    "at",
+    "au",
+    "be",
+    "br",
+    "ca",
+    "ch",
+    "de",
+    "es",
+    "fr",
+    "gb",
+    "in",
+    "it",
+    "mx",
+    "nl",
+    "nz",
+    "pl",
+    "sg",
+    "us",
+    "za"
+  ],
+  "kinds": [
+    "any"
+  ],
+  "radius": true,
+  "hosts": [
+    "api.adzuna.com"
+  ],
+  "base": "https://api.adzuna.com/v1/api/jobs",
+  "fields": [
+    {
+      "name": "appId",
+      "type": "text",
+      "label": "App ID"
+    },
+    {
+      "name": "key",
+      "type": "secret",
+      "label": "App key"
+    }
+  ],
+  "quota": {
+    "period": "today"
+  },
+  "credit": {
+    "text": "Jobs by Adzuna",
+    "link": "https://www.adzuna.co.uk",
+    "localHosts": "www.adzuna.*"
+  },
+  "maps": {
+    "currency": {
+      "at": "EUR",
+      "au": "AUD",
+      "be": "EUR",
+      "br": "BRL",
+      "ca": "CAD",
+      "ch": "CHF",
+      "de": "EUR",
+      "es": "EUR",
+      "fr": "EUR",
+      "gb": "GBP",
+      "in": "INR",
+      "it": "EUR",
+      "mx": "MXN",
+      "nl": "EUR",
+      "nz": "NZD",
+      "pl": "PLN",
+      "sg": "SGD",
+      "us": "USD",
+      "za": "ZAR"
+    }
+  },
+  "kind": "json",
+  "search": {
+    "url": "{base}/{country}/search/{page}",
+    "params": [
+      {
+        "name": "app_id",
+        "value": "{fields.appId}"
+      },
+      {
+        "name": "app_key",
+        "value": "{fields.key}"
+      },
+      {
+        "name": "results_per_page",
+        "value": "{size}"
+      },
+      {
+        "name": "what",
+        "value": "{keywords} remote",
+        "when": "remoteOnly"
+      },
+      {
+        "name": "what",
+        "value": "{keywords}",
+        "when": "!remoteOnly"
+      },
+      {
+        "name": "where",
+        "value": "{place}",
+        "when": "place"
+      },
+      {
+        "name": "distance",
+        "value": "{radiusKm}",
+        "when": [
+          "place",
+          "radiusKm"
+        ]
+      },
+      {
+        "name": "max_days_old",
+        "value": "{postedDays}"
+      }
+    ],
+    "paging": {
+      "type": "page",
+      "size": 20,
+      "total": "count",
+      "first": 1
+    },
+    "items": "results",
+    "posting": {
+      "id": "id",
+      "title": {
+        "path": "title",
+        "clean": "html"
+      },
+      "company": {
+        "path": "company.display_name",
+        "clean": "html"
+      },
+      "place": {
+        "path": "location.display_name",
+        "clean": "html"
+      },
+      "salary": {
+        "min": "salary_min",
+        "max": "salary_max",
+        "currency": {
+          "template": "{country|map:currency}"
+        },
+        "defaultPeriod": "a year",
+        "estimated": {
+          "path": "salary_is_predicted",
+          "in": [
+            "1",
+            1,
+            true
+          ]
+        }
+      },
+      "postedAt": {
+        "path": "created",
+        "as": "iso"
+      },
+      "url": {
+        "path": "redirect_url",
+        "link": true
+      },
+      "description": {
+        "path": "description",
+        "clean": "html"
+      },
+      "complete": false
+    }
+  },
+  "details": {
+    "type": "page"
+  },
+  "test": {
+    "keywords": "developer",
+    "country": "gb"
+  }
+}

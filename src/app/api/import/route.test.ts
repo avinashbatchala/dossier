@@ -13,6 +13,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: { job: { findMany: vi.fn(async () => []
 vi.mock("@/lib/jobs/runner", () => ({ cancelJob: vi.fn() }));
 vi.mock("@/lib/backups", () => ({ writeBackup: vi.fn(async () => "dossier-backup-before-import-2026-09-28-120000.json") }));
 const summary = { applications: 2, roles: 3, skills: 7, themes: 0, notes: 1 };
+vi.mock("@/lib/frozen-copy", () => ({ freezeSentApplications: vi.fn() }));
 vi.mock("@/lib/data-import", () => ({
   parseExport: vi.fn(() => ({ ok: true, data: { exportedAt: new Date("2026-09-27T10:00:00Z") } })),
   summarizeExport: vi.fn(() => summary),

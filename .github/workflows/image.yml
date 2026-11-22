@@ -1,0 +1,146 @@
+name: Image
+
+# Pull requests aren't checked here, only what reaches main: each merge or
+# publish runs CI's jobs (ci.yml) before the production image is built on GHCR,
+# tagged with the commit SHA and "main". A version tag then releases that image
+# (release.yml).
+#
+# The image is for amd64 and arm64 (ARM servers, a Raspberry Pi, Apple
+# Silicon), each built on a runner of its own kind rather than under
+# emulation, and then joined under one tag, so `docker pull` takes the right
+# one by itself.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer publish stops the run it replaces. ci.yml's own group, ci-<ref>, is a
+# different one, so the two don't wait for each other.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Production image (${{ matrix.arch }})
+    needs: checks
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Image name
+        # GHCR names must be lower case.
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pushed by its digest only; the next job tags both platforms together.
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: production
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+
+      # On the platform's own hardware: hash-password runs, and Chromium prints a
+      # PDF with the app's own options. A platform that fails isn't tagged.
+      - name: Check it runs
+        env:
+          BUILT: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+        run: |
+          echo "a password" | docker run --rm -i "$BUILT" hash-password | grep -q '^argon2id:'
+          docker run --rm --entrypoint node -w /app "$BUILT" -e '
+            const { chromium } = require("playwright-core");
+            (async () => {
+              const browser = await chromium.launch({ args: ["--disable-dev-shm-usage"] });
+              const page = await browser.newPage();
+              await page.setContent("<h1>Dossier</h1>");
+              const pdf = await page.pdf({ format: "A4" });
+              await browser.close();
+              if (pdf.subarray(0, 5).toString() !== "%PDF-") throw new Error("That is not a PDF.");
+              console.log(`A PDF of ${pdf.length} bytes on ${process.arch}.`);
+            })().catch((error) => { console.error(error); process.exit(1); });'
+
+      - name: Keep the digest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image:
+    name: Production image
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag both platforms
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --annotation "index:org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:main" \
+            $(printf "$IMAGE@sha256:%s " *)
+
+      - name: Check that both are there
+        run: |
+          platforms=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{range .Manifest.Manifests}}{{.Platform.Architecture}} {{end}}')
+          echo "Platforms: $platforms"
+          for arch in amd64 arm64; do
+            case " $platforms " in *" $arch "*) ;; *) echo "::error::$IMAGE:$GITHUB_SHA has no $arch image."; exit 1 ;; esac
+          done

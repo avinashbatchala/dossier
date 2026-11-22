@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMessage, decodeHeader, encodeAddress, encodeHeader, htmlToText, parseAddress, stripQuoted } from "./mime";
+import { buildMessage, decodeHeader, encodeAddress, encodeHeader, fromLine, htmlToText, parseAddress, stripQuoted } from "./mime";
 
 const decodeBody = (message: string) => {
   const [, ...rest] = message.split("\r\n\r\n");
@@ -43,6 +43,14 @@ describe("buildMessage", () => {
     expect(encodeHeader("Hi\r\nBcc: x@y.z")).toBe("Hi Bcc: x@y.z");
     expect(encodeAddress("x@y.z\r\nBcc: a@b.c")).toBe("x@y.z Bcc: a@b.c");
     expect(encodeAddress("Jane <x@y.z\r\nBcc: a@b.c>")).toBe("Jane <x@y.z Bcc: a@b.c>");
+  });
+});
+
+describe("fromLine (#358)", () => {
+  it("names the sender as the mail goes out, without characters that would break the header", () => {
+    expect(fromLine("Jane Doe", "jane@gmail.com")).toBe("Jane Doe <jane@gmail.com>");
+    expect(fromLine(' "Jane" <Doe> ', "jane@gmail.com")).toBe("Jane Doe <jane@gmail.com>");
+    expect(fromLine("  ", "jane@gmail.com")).toBe("jane@gmail.com");
   });
 });
 

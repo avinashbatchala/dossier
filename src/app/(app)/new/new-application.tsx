@@ -1,36 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { PageHeader } from "@/components/page-header";
 import { toast, toastResult } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Stepper } from "@/components/ui/stepper";
-import { Textarea } from "@/components/ui/textarea";
 import type { Tone } from "@/generated/prisma/enums";
 import { useJob } from "@/hooks/use-job";
+import type { DocumentsToWrite } from "@/lib/settings";
 import { withSkillAdded, type Extracted } from "@/lib/application-data";
+import type { PostingFit } from "@/lib/fit";
 import { cancel, retry } from "@/lib/jobs/actions";
-import { READ_POSTING_STEPS, WRITE_DOCUMENTS_STEPS } from "@/lib/jobs/application-steps";
+import { READ_POSTING_STEPS } from "@/lib/jobs/application-steps";
 import type { ReadPostingResult } from "@/lib/jobs/read-posting";
-import type { WriteDocumentsResult } from "@/lib/jobs/write-documents";
 
 import { openPendingTab, sendPendingTab } from "@/lib/claude-tab";
 
-import { addSkill } from "../profile/actions";
 
-import { createApplication, fetchPostingText, handOffToClaude, startReadingPosting, startWritingDocuments } from "./actions";
-import { DetailsCard } from "./details-card";
+import { addGapSkill, fetchPostingText, handOffToClaude, savePostingForLater, startReadingPosting, startScoringPosting, startWritingApplication } from "./actions";
+import { AlreadySent } from "./already-sent";
 import { createDraftStore } from "./draft-store";
-import { MatchCard } from "./match-card";
-import { TailoringCard } from "./tailoring-card";
+import { PasteStep, type StartFrom } from "./paste-step";
+import { ReviewStep } from "./review-step";
+import type { GapAnswer } from "../applications/[id]/fit-column";
 import { JobProgress, jobStep } from "./job-progress";
-
-const STEPS = ["Paste the posting", "Check the details", "Tailored documents"] as const;
 
 /** The editable details of "The application" (NEW-3). */
 export type Details = {
@@ -46,7 +40,7 @@ export type Details = {
 
 /** Everything the flow knows so far; nothing reaches the server as an application until the end. */
 export type Draft = {
-  step: "paste" | "reading" | "review" | "creating";
+  step: "paste" | "reading" | "review";
   posting: string;
   postingUrl: string;
   readJobId: string | null;
@@ -56,15 +50,25 @@ export type Draft = {
   details: Details;
   tone: Tone;
   note: string;
-  writeJobId: string | null;
+  /** Which documents to write (#367); missing in drafts from before, which wrote both. */
+  write?: DocumentsToWrite;
+  /** The documents' language (E31-3); "" or missing for Settings', else the posting's. */
+  language?: string;
+  /** Requirements marked "I don't have this" before writing (E30-5). */
+  knownGaps?: string[];
   /** The Find jobs posting it was started from (E14-8); missing in drafts from before. */
   postingId?: string | null;
   /** The startup it was started from with "Write to them" (#222). */
   startupId?: string | null;
+  /** "Score it" (public issue 66): the job scoring the posting, and its score; missing in drafts from before. */
+  scoreJobId?: string | null;
+  score?: PostingFit | null;
+  /** The profile it's made from (E24-6); missing in drafts from before, which use the default. */
+  profileId?: string | null;
 };
 
 /** A posting handed over by "Start application" on Find jobs (E14-8), or by "Write to them" on Startups (#222). */
-export type FromPosting = {
+type FromPosting = {
   /** The Find jobs posting; null for a startup. */
   id: string | null;
   /** The startup and its name, from Startups. */
@@ -75,7 +79,7 @@ export type FromPosting = {
   complete: boolean;
 };
 
-export function detailsFrom(extracted: Extracted): Details {
+function detailsFrom(extracted: Extracted): Details {
   return {
     title: extracted.title ?? "",
     company: extracted.company ?? "",
@@ -93,7 +97,7 @@ const EMPTY_DETAILS: Details = { title: "", company: "", role: "", location: "",
 const draftStore = typeof window === "undefined" ? null : createDraftStore<Draft>();
 const noStore = () => () => {};
 
-const LEAVE_WARNING = "Leave now? I'll stop working on this application, and nothing will be created.";
+const LEAVE_WARNING = "Leave now? I'll stop reading the posting.";
 
 /**
  * While `active`, leaving the page asks first (E7-7): the browser's own
@@ -140,14 +144,46 @@ export type NewApplicationProps = {
   samplePosting: string | null;
   /** Settings → default cover letter tone (SET-6). */
   defaultTone: Tone;
+  /** Settings → Documents to write (#367). */
+  defaultWrite?: DocumentsToWrite;
   /** "+ New application": start over, whatever the tab kept. */
   fresh?: boolean;
   /** "Start application" on Find jobs: start over from this posting. */
   fromPosting?: FromPosting | null;
+  /** Every profile, and the one to start with: the one last opened (E24-6). */
+  profiles?: { id: string; name: string }[];
+  defaultProfileId?: string;
+  /** "Or start from one you saved" (E31-2). */
+  startFrom?: readonly StartFrom[];
+  /** Each profile's roles, for "Where you used it" on a gap (E30-5). */
+  roles?: Readonly<Record<string, readonly { id: string; label: string }[]>>;
+  /** Settings → Documents' language, or null to follow the posting (E31-3). */
+  docLanguage?: string | null;
 };
 
+/** The two steps with a URL of their own (E31-1, public 111): `/new?step=paste|review`. */
+type UrlStep = "paste" | "review";
+
+/** Moves to a step with a history entry of its own, so Back and Forward move between steps. */
+function pushStep(step: UrlStep) {
+  window.history.pushState(null, "", `/new?step=${step}`);
+}
+
 /** The new application flow (E7): paste → read → review → create. */
-export function NewApplication({ aiReady, writeInClaude = false, samplePosting, defaultTone, fresh = false, fromPosting = null }: NewApplicationProps) {
+export function NewApplication({
+  aiReady,
+  writeInClaude = false,
+  samplePosting,
+  defaultTone,
+  defaultWrite = "both",
+  fresh = false,
+  fromPosting = null,
+  profiles = [],
+  defaultProfileId,
+  startFrom = [],
+  roles = {},
+  docLanguage = null,
+}: NewApplicationProps) {
   const [initial] = useState<Draft>(() => ({
     step: "paste",
     posting: "",
@@ -158,7 +194,7 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     details: EMPTY_DETAILS,
     tone: defaultTone,
     note: "",
-    writeJobId: null,
+    write: defaultWrite,
     postingId: null,
   }));
   // The server renders a fresh draft; the tab's own draft takes over once the page is live.
@@ -172,9 +208,27 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     if (updated.step !== current.step) stepChanged.current = true;
     draftStore?.set(updated);
   };
+  /** Moves to another step: the draft's, and the URL's with a history entry. */
+  const goTo = (patch: Partial<Draft> & { step: Draft["step"] }) => {
+    stepChanged.current = true;
+    setDraft((current) => ({ ...current, ...patch }));
+    const target: UrlStep = patch.step === "paste" ? "paste" : "review";
+    if (target !== urlStep) pushStep(target);
+  };
   const update = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
+  // The profile it's made from (E24-6): the draft's, if it's still there, else the default.
+  const profileId = profiles.some((entry) => entry.id === draft.profileId) ? draft.profileId! : defaultProfileId;
 
   const router = useRouter();
+  // The step on screen is the URL's (E31-1); reading and the review share `?step=review`.
+  const urlStep: UrlStep = useSearchParams().get("step") === "review" ? "review" : "paste";
+  const reviewable = draft.step !== "paste" && (draft.step !== "review" || draft.read !== null);
+  const step: Draft["step"] = urlStep === "review" && reviewable ? draft.step : "paste";
+  // `?step=review` with nothing read yet, e.g. Forward after starting over: the paste step's URL instead.
+  const live = useSyncExternalStore(noStore, () => true, () => false);
+  useEffect(() => {
+    if (live && urlStep === "review" && !reviewable) window.history.replaceState(null, "", "/new?step=paste");
+  }, [live, urlStep, reviewable]);
   useEffect(() => {
     if (!fresh) return;
     draftStore?.clear();
@@ -196,6 +250,8 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
   }, [fromPosting, initial, router]);
   const [starting, setStarting] = useState(false);
   const [fetching, setFetching] = useState(false);
+  // "Already sent it?" (public #129), open under the paste step.
+  const [alreadySent, setAlreadySent] = useState(false);
   const [readRevision, setReadRevision] = useState(0);
 
   // E11-3: a new step replaces the controls of the last one, so focus moves to
@@ -205,7 +261,7 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     if (!stepChanged.current) return;
     stepChanged.current = false;
     stepArea.current?.querySelector<HTMLElement>("h2[tabindex], textarea")?.focus();
-  }, [draft.step]);
+  }, [step]);
 
   // Reading ends on its own; move on to the review with what it found (E7-2).
   const readJob = useJob<ReadPostingResult>(draft.readJobId, readRevision, (job) => {
@@ -218,20 +274,34 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     );
   });
 
-  const read = async () => {
+  const readPosting = async () => {
     if (!draft.posting.trim()) {
       toast(samplePosting ? "Paste a job posting first, or try the sample." : "Paste a job posting first.");
       return;
     }
     // Back and on again with the same posting: keep what was read and edited.
     if (draft.read && draft.readFor === draft.posting.trim()) {
-      update({ step: "review" });
+      goTo({ step: "review" });
       return;
     }
     setStarting(true);
-    const result = toastResult(await startReadingPosting({ posting: draft.posting }));
+    const result = toastResult(await startReadingPosting({ posting: draft.posting, profileId, postingId: draft.postingId ?? null }));
     setStarting(false);
-    if (result.ok) update({ step: "reading", readJobId: result.data, readFor: draft.posting.trim(), read: null });
+    if (result.ok) goTo({ step: "reading", readJobId: result.data, readFor: draft.posting.trim(), read: null, scoreJobId: null, score: null });
+  };
+
+  // Public issue 66: the posting's score, with its reasons, before anything is written.
+  const scoreJob = useJob<PostingFit>(draft.scoreJobId ?? null, 0, (job) => {
+    if (job.status !== "DONE" && job.status !== "FAILED") return;
+    if (job.status === "FAILED") toast(job.error ?? "The posting couldn't be scored.");
+    update({ scoreJobId: null, ...(job.status === "DONE" && job.result ? { score: job.result } : {}) });
+  });
+  const scoring = Boolean(draft.scoreJobId) && (!scoreJob || scoreJob.status === "QUEUED" || scoreJob.status === "RUNNING");
+  const scoreIt = async () => {
+    if (scoring) return;
+    const { title, company, location, mode, salary } = draft.details;
+    const result = toastResult(await startScoringPosting({ posting: draft.posting, details: { title, company, location, mode, salary }, profileId }));
+    if (result.ok) update({ scoreJobId: result.data });
   };
 
   // #221: Claude chat writes it on the user's own Claude plan, through the
@@ -241,7 +311,7 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     // Opened now, while the click still counts: a tab opened after waiting is blocked as a pop-up.
     const chat = openPendingTab();
     setStarting(true);
-    const result = toastResult(await handOffToClaude({ posting: draft.posting, postingUrl: draft.postingUrl }));
+    const result = toastResult(await handOffToClaude({ posting: draft.posting, postingUrl: draft.postingUrl, profileId }));
     setStarting(false);
     if (!result.ok) return void chat?.close();
     sendPendingTab(chat, result.data.url);
@@ -259,216 +329,219 @@ export function NewApplication({ aiReady, writeInClaude = false, samplePosting, 
     update({ posting: result.data.text });
     const site = new URL(result.data.url).hostname.replace(/^www\./, "");
     toast(
-      `Fetched the posting from ${site}. Check it before reading it.`,
+      result.data.doubtful
+        ? `What came back from ${site} looks like menus or links, not a job posting. Check it, or paste the posting instead.`
+        : `Fetched the posting from ${site}. Check it before reading it.`,
       previous.trim() ? { action: { label: "Undo", onClick: () => update({ posting: previous }) } } : {},
     );
   };
 
-  // NEW-5: a missing skill goes into the profile, and the row becomes partly covered.
-  const addToProfile = async (index: number, skill: string) => {
-    const result = toastResult(await addSkill({ name: skill }));
-    if (!result.ok) return;
-    const name = result.data.skill.name;
+  // E30-5 before writing: a gap's skill goes into the profile, with the role it was used in; the row is covered, or partly.
+  const addToProfile = async (index: number, skill: string, answer: GapAnswer): Promise<boolean> => {
+    const result = toastResult(await addGapSkill({ profileId, name: skill, experienceId: answer.experienceId, did: answer.did }));
+    if (!result.ok) return false;
+    const { name, where, experienceId } = result.data;
     setDraft((current) => {
       if (!current.read) return current;
-      const items = current.read.match.items.map((item, position) => (position === index ? withSkillAdded(item, name) : item));
+      const items = current.read.match.items.map((item, position) =>
+        position !== index ? item : experienceId ? { ...item, result: "covered" as const, skill: name, experienceIds: [experienceId], note: where ? `At ${where}` : "In a role" } : withSkillAdded(item, name),
+      );
       return { ...current, read: { ...current.read, match: { items } } };
     });
-    toast(`Added “${name}” to your skills. Attach it to a role under Experience to make it count.`);
+    toast(experienceId ? `Added “${name}” to your profile, at ${where || "that role"}.` : `Added “${name}” to your skills. Attach it to a role under Experience to make it count.`);
+    return true;
+  };
+  // "I don't have this": kept with the application once it's made.
+  const knownGap = (requirement: string) => {
+    setDraft((current) => ({ ...current, knownGaps: [...new Set([...(current.knownGaps ?? []), requirement])] }));
+    toast("Noted: you don't have this. I won't suggest adding it.");
   };
 
-  // E7-6: write the documents, then create the application from them.
-  const [writeRevision, setWriteRevision] = useState(0);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saving = useRef(false);
+  // Done with the draft: it's cleared once the page has gone, so it doesn't show the paste step on the way out.
+  const leaving = useRef(false);
+  useEffect(
+    () => () => {
+      if (leaving.current) draftStore?.clear();
+    },
+    [],
+  );
 
-  const save = async (writeJobId: string) => {
-    if (saving.current) return;
-    saving.current = true;
-    setSaveError(null);
-    const result = await createApplication({
-      writeJobId,
-      details: draft.details,
-      postingUrl: draft.postingUrl,
-      postingId: draft.postingId ?? null,
-      startupId: draft.startupId ?? null,
-    });
-    saving.current = false;
-    if (!result.ok) {
-      setSaveError(result.error);
-      return;
-    }
-    toast("Your application is ready. Nothing gets sent until you say so.");
-    draftStore?.clear();
-    router.push(`/applications/${result.data}`);
-  };
-
-  const writeJob = useJob<WriteDocumentsResult>(draft.writeJobId, writeRevision, (job) => {
-    if (job.status === "DONE" && job.id === draft.writeJobId) void save(job.id);
-  });
-
-  const create = async () => {
+  // E31-4: the Draft is made on the server at once, and its documents are written into it there; it opens straight away.
+  const write = async () => {
     if (!draft.read || !draft.readJobId || starting) return;
     setStarting(true);
     const result = toastResult(
-      await startWritingDocuments({ readJobId: draft.readJobId, details: draft.details, match: draft.read.match, tone: draft.tone, note: draft.note }),
+      await startWritingApplication({
+        readJobId: draft.readJobId,
+        details: draft.details,
+        match: draft.read.match,
+        tone: draft.tone,
+        note: draft.note,
+        write: draft.write ?? "both",
+        language: draft.language ?? "",
+        knownGaps: draft.knownGaps ?? [],
+        postingUrl: draft.postingUrl,
+        postingId: draft.postingId ?? null,
+        startupId: draft.startupId ?? null,
+      }),
     );
-    setStarting(false);
-    if (!result.ok) return;
-    setSaveError(null);
-    update({ step: "creating", writeJobId: result.data });
+    if (!result.ok) return setStarting(false);
+    // The application's own URL from here on (E31-1); the draft goes once the page has moved on.
+    leaving.current = true;
+    router.replace(`/applications/${result.data}${draft.write === "letter" ? "?tab=letter" : ""}`);
   };
 
-  // Leaving while the AI works stops it; nothing gets created either way.
-  const working =
-    (draft.step === "reading" && readJob?.status !== "DONE" && readJob?.status !== "FAILED") ||
-    (draft.step === "creating" && writeJob?.status !== "FAILED" && !saveError);
+  // "Not applying? Save it for later" (E31-3): into Positions, under Saved.
+  const [saving, setSaving] = useState(false);
+  const saveForLater = async () => {
+    if (saving) return;
+    setSaving(true);
+    const { title, company, role, location, mode, salary } = draft.details;
+    const result = toastResult(
+      await savePostingForLater({ posting: draft.posting, postingUrl: draft.postingUrl, details: { title, company, role, location, mode, salary }, readJobId: draft.readJobId, postingId: draft.postingId ?? null }),
+    );
+    if (!result.ok) return setSaving(false);
+    toast("Saved for later, under Saved in Positions.");
+    leaving.current = true;
+    router.push("/jobs?show=saved");
+  };
+
+  // Leaving while the posting is read stops it; nothing gets created.
+  const working = step === "reading" && readJob?.status !== "DONE" && readJob?.status !== "FAILED";
   useLeaveGuard(working, () => {
-    const id = draft.step === "reading" ? draft.readJobId : draft.writeJobId;
-    if (id) void cancel({ id });
+    if (draft.readJobId) void cancel({ id: draft.readJobId });
   });
-
-  const retryCreating = async () => {
-    if (!draft.writeJobId) return;
-    if (writeJob?.status === "DONE") return save(draft.writeJobId);
-    if (toastResult(await retry({ id: draft.writeJobId })).ok) setWriteRevision((count) => count + 1);
-  };
 
   const retryReading = async () => {
     if (!draft.readJobId) return;
     if (toastResult(await retry({ id: draft.readJobId })).ok) setReadRevision((count) => count + 1);
   };
 
-  return (
-    <>
-      <PageHeader
-        title="New application"
-        description="Paste a job posting. I'll pull out the details, check it against your profile, and draft a tailored resume and cover letter."
-      />
-      <div className="flex max-w-[816px] flex-col gap-6 px-10 pb-20">
-        <Stepper
-          steps={STEPS}
-          current={draft.step === "creating" ? 2 : draft.step === "review" ? 1 : 0}
-          aria-label="New application steps"
-        />
-
-        <div ref={stepArea} className="contents">
-          {draft.step === "paste" && (
+  if (step === "paste") {
+    const read = writeInClaude ? (
+      <Button aria-disabled={!draft.posting.trim() || starting || undefined} onClick={() => void (starting ? undefined : writeWithClaude())}>
+        Write it with Claude
+      </Button>
+    ) : (
+      <Button
+        aria-disabled={!aiReady || !draft.posting.trim() || starting || undefined}
+        onClick={() => void (starting ? undefined : aiReady ? readPosting() : toast("Choose an AI provider in Settings first, or write it with Claude."))}
+      >
+        Read the posting
+      </Button>
+    );
+    const link = "text-ink underline underline-offset-[3px] hover:text-ink";
+    return (
+      <div ref={stepArea} className="contents">
+        <PasteStep
+          posting={draft.posting}
+          onPosting={(posting) => update({ posting })}
+          postingUrl={draft.postingUrl}
+          onPostingUrl={(postingUrl) => update({ postingUrl })}
+          fetching={fetching}
+          onFetch={() => void fetchFromLink()}
+          profiles={profiles}
+          profileId={profileId}
+          // Another profile matches differently: what was read for the other one goes.
+          onProfile={(id) => update({ profileId: id, read: null, readFor: null, score: null, scoreJobId: null })}
+          action={read}
+          links={
             <>
-              {writeInClaude ? (
-                <p role="note" className="rounded-card border border-line-card bg-card px-4 py-3 text-meta text-muted">
-                  Dossier has no AI model of its own, so Claude writes this one: <strong className="text-ink">Write it with Claude</strong> opens a
-                  chat in Claude that uses your Claude plan and the Dossier connector, and saves the resume and cover letter here as a Draft. To
-                  have Dossier write it instead,{" "}
-                  <Link href="/settings?section=ai" className="font-medium text-ink underline underline-offset-2">
-                    choose a model in Settings → AI provider
+              <span>
+                Already sent it?{" "}
+                <button type="button" className={link} onClick={() => setAlreadySent(true)}>
+                  Add it to keep track
+                </button>
+              </span>
+              {!aiReady && !writeInClaude && (
+                <span>
+                  No AI provider yet?{" "}
+                  <Link href="/settings?section=ai" className={link}>
+                    Choose one
+                  </Link>{" "}
+                  or{" "}
+                  <Link href="/settings?section=connector" className={link}>
+                    write it with Claude
                   </Link>
-                  .
-                </p>
-              ) : !aiReady && (
-                <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-                  No AI provider is set up yet, so nothing can read the posting.{" "}
-                  <Link href="/settings?section=ai" className="font-medium text-warning underline underline-offset-2">
-                    Choose one in Settings → AI provider
-                  </Link>
-                </p>
+                </span>
               )}
-              <Card className="flex flex-col gap-5">
-                <Textarea
-                  label="Job posting"
-                  rows={14}
-                  placeholder="Paste the full posting here: title, company, requirements, the lot."
-                  value={draft.posting}
-                  onChange={(event) => update({ posting: event.target.value })}
-                />
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-end gap-3">
-                    <Input
-                      className="flex-1"
-                      label={
-                        <>
-                          Link to the posting <span className="text-muted">(optional, saved with the application)</span>
-                        </>
-                      }
-                      type="url"
-                      inputMode="url"
-                      placeholder="https://"
-                      value={draft.postingUrl}
-                      onChange={(event) => update({ postingUrl: event.target.value })}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="mb-px"
-                      aria-disabled={fetching || undefined}
-                      onClick={() => void (fetching ? undefined : fetchFromLink())}
-                    >
-                      {fetching ? "Fetching…" : "Fetch"}
-                    </Button>
-                  </div>
-                  <p className="text-meta text-muted">
-                    Fetch asks the job site for the page from your server, so it needs internet access. Check what it brings before reading it.
-                  </p>
-                </div>
-              </Card>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                {samplePosting ? (
-                  <Button variant="text" className="underline underline-offset-[3px]" onClick={() => update({ posting: samplePosting })}>
-                    Use a sample posting
-                  </Button>
-                ) : (
-                  <span />
-                )}
-                <Button
-                  aria-disabled={!draft.posting.trim() || starting || undefined}
-                  onClick={() => void (starting ? undefined : writeInClaude ? writeWithClaude() : read())}
-                >
-                  {writeInClaude ? "Write it with Claude →" : "Read the posting →"}
-                </Button>
-              </div>
+              {writeInClaude && (
+                <span>
+                  Rather have Dossier write it?{" "}
+                  <Link href="/settings?section=ai" className={link}>
+                    Choose a model
+                  </Link>
+                </span>
+              )}
+              {samplePosting && !draft.posting.trim() && (
+                <button type="button" className={link} onClick={() => update({ posting: samplePosting })}>
+                  Use a sample posting
+                </button>
+              )}
             </>
-          )}
-
-          {draft.step === "reading" && (
-            <JobProgress
-              title="Reading the posting…"
-              steps={READ_POSTING_STEPS}
-              current={jobStep(READ_POSTING_STEPS, readJob)}
-              error={readJob?.status === "FAILED" ? readJob.error : null}
-              onRetry={() => void retryReading()}
-              onBack={() => update({ step: "paste" })}
-            />
-          )}
-
-          {draft.step === "review" && draft.read && (
-            <>
-              <DetailsCard details={draft.details} onChange={(details) => update({ details })} />
-              <MatchCard match={draft.read.match} requirements={draft.read.extracted.requirements} onAddSkill={(index, skill) => void addToProfile(index, skill)} />
-              <TailoringCard tone={draft.tone} note={draft.note} onTone={(tone) => update({ tone })} onNote={(note) => update({ note })} />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Button variant="text" onClick={() => update({ step: "paste" })}>
-                  ← Back to the posting
-                </Button>
-                <Button aria-disabled={starting || undefined} onClick={() => void create()}>
-                  Create application →
-                </Button>
-              </div>
-            </>
-          )}
-
-          {draft.step === "creating" && (
-            <JobProgress
-              title="Putting your application together…"
-              steps={WRITE_DOCUMENTS_STEPS}
-              // "Saving the application" is the last step, once the documents are written.
-              current={writeJob?.status === "DONE" ? 2 : jobStep(WRITE_DOCUMENTS_STEPS, writeJob)}
-              error={writeJob?.status === "FAILED" ? writeJob.error : saveError}
-              onRetry={() => void retryCreating()}
-              onBack={() => update({ step: "review" })}
-              backLabel="← Back to the details"
-            />
-          )}
-        </div>
+          }
+          alreadySent={
+            alreadySent && (
+              <AlreadySent
+                from={{ posting: draft.posting, postingUrl: draft.postingUrl, profileId, postingId: draft.postingId ?? null, startupId: draft.startupId ?? null }}
+                initial={{ company: draft.details.company, role: draft.details.role }}
+                onAdded={(id) => {
+                  toast("Added to your applications.");
+                  draftStore?.clear();
+                  router.push(`/applications/${id}`);
+                }}
+                onCancel={() => setAlreadySent(false)}
+              />
+            )
+          }
+          startFrom={startFrom}
+        />
       </div>
-    </>
+    );
+  }
+
+  const read = draft.read;
+  return (
+    <div ref={stepArea} className="contents">
+      <ReviewStep
+        details={draft.details}
+        onDetails={(details) => update({ details })}
+        posting={draft.posting}
+        postingUrl={draft.postingUrl}
+        match={step === "review" && read ? read.match : null}
+        requirements={read?.extracted.requirements ?? []}
+        profileName={profiles.length > 1 ? (profiles.find((entry) => entry.id === profileId)?.name ?? "") : ""}
+        knownGaps={draft.knownGaps ?? []}
+        roles={roles[profileId ?? ""] ?? []}
+        gapActions={{ onAddSkill: addToProfile, onKnownGap: knownGap }}
+        // The reading's score against the profile (E25-7), until it's scored again.
+        score={{ fit: draft.score ?? read?.fit ?? null, scoring, step: scoreJob?.step ?? null, onScore: () => void scoreIt() }}
+        scoreWaits={read?.scoreWaits}
+        reading={
+          <JobProgress
+            title="Reading the posting…"
+            steps={READ_POSTING_STEPS}
+            current={jobStep(READ_POSTING_STEPS, readJob)}
+            error={readJob?.status === "FAILED" ? readJob.error : null}
+            onRetry={() => void retryReading()}
+            onBack={() => goTo({ step: "paste" })}
+          />
+        }
+        write={draft.write ?? "both"}
+        onWrite={(write) => update({ write })}
+        tone={draft.tone}
+        onTone={(tone) => update({ tone })}
+        language={draft.language ?? ""}
+        onLanguage={(language) => update({ language })}
+        languages={{ fallback: docLanguage ? `${docLanguage}, from Settings` : `${read?.extracted.language || "English"}, like the posting` }}
+        note={draft.note}
+        onNote={(note) => update({ note })}
+        starting={starting}
+        onStart={() => void write()}
+        saving={saving}
+        onSave={() => void saveForLater()}
+        onBack={() => goTo({ step: "paste" })}
+      />
+    </div>
   );
 }

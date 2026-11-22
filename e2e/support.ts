@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { crc32, deflateSync } from "node:zlib";
 
-import type { Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { Pool } from "pg";
 
 // What the end-to-end tests (E11-2) run against: a production build on its
@@ -21,7 +21,7 @@ export const STORAGE_STATE = "e2e/.auth/state.json";
  * DATABASE_URL with "_e2e" added to the database name (or E2E_DATABASE_URL).
  * Refuses any other name, so the tests can never wipe real data.
  */
-export function e2eDatabaseUrl(): string {
+function e2eDatabaseUrl(): string {
   const explicit = process.env.E2E_DATABASE_URL;
   const base = process.env.DATABASE_URL;
   if (!explicit && !base) throw new Error("End-to-end tests need DATABASE_URL or E2E_DATABASE_URL.");
@@ -58,6 +58,8 @@ export function appEnv(): Record<string, string> {
     DOSSIER_USAGE_PING_TEST_URL: `http://localhost:${FAKE_JOBS_PORT}/ping`,
     // Jev is the fake job sources' too, once a spec chooses it in Settings → Scoring (#274).
     DOSSIER_TYPESAFE_TEST_BASE_URL: `http://localhost:${FAKE_JOBS_PORT}/typesafe`,
+    // A production server, so it would ask the project's backend for its notices (E18).
+    DOSSIER_API_URL: `http://localhost:${FAKE_JOBS_PORT}/v1`,
     PORT: String(APP_PORT),
   };
 }
@@ -68,6 +70,15 @@ let pool: Pool | undefined;
 export async function sql<Row extends object = Record<string, unknown>>(text: string, values: unknown[] = []): Promise<Row[]> {
   pool ??= new Pool({ connectionString: e2eDatabaseUrl(), max: 2 });
   return (await pool.query<Row>(text, values)).rows;
+}
+
+/** The first profile's id (E24-1): the one the Profile page and the Base resume open. */
+export const FIRST_PROFILE = `(SELECT id FROM "Profile" ORDER BY sort, "createdAt" LIMIT 1)`;
+
+/** Sets one of the first profile's own settings (src/lib/profile-settings.ts), stored as text; null forgets it. */
+export async function setProfileSetting(key: string, value: string | null): Promise<void> {
+  if (value === null) await sql(`UPDATE "Profile" SET settings = settings - $1::text WHERE id = ${FIRST_PROFILE}`, [key]);
+  else await sql(`UPDATE "Profile" SET settings = jsonb_set(settings, ARRAY[$1::text], to_jsonb($2::text)) WHERE id = ${FIRST_PROFILE}`, [key, value]);
 }
 
 /** USAGE_PING_TEXT_VERSION in src/lib/usage-ping.ts, which a spec can't import (it's server-only). */
@@ -94,7 +105,18 @@ export async function resetData(): Promise<void> {
   const tables = await sql<{ tablename: string }>(
     "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'",
   );
-  await sql(`TRUNCATE TABLE ${tables.map(({ tablename }) => `"${tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
+  const truncate = `TRUNCATE TABLE ${tables.map(({ tablename }) => `"${tablename}"`).join(", ")} RESTART IDENTITY CASCADE`;
+  // The app may be writing as it's emptied (the last test's requests, its background checks), and
+  // Postgres can end that in a deadlock (40P01): it rolls the TRUNCATE back, so trying again is safe.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sql(truncate);
+      break;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "40P01" || attempt === 3) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    }
+  }
   execFileSync("yarn", ["prisma", "db", "seed", "--", "--demo"], {
     env: { ...process.env, DATABASE_URL: e2eDatabaseUrl() },
     stdio: "pipe",
@@ -106,6 +128,28 @@ export async function resetData(): Promise<void> {
 export async function fakeStartupRequests(): Promise<{ url: string; userAgent: string }[]> {
   const response = await fetch(`http://localhost:${FAKE_JOBS_PORT}/startup-requests`);
   return ((await response.json()) as { requests: { url: string; userAgent: string }[] }).requests;
+}
+
+/** What the fake notification webhook got (E26-2), newest last. */
+export async function fakeWebhookPosts(): Promise<{ signature?: string; event?: string; body: string }[]> {
+  const response = await fetch(`http://localhost:${FAKE_JOBS_PORT}/webhook-posts`);
+  return ((await response.json()) as { posts: { signature?: string; event?: string; body: string }[] }).posts;
+}
+
+/** What the fake backend answers from now on (E18): these notices, 503, or no answer at all. */
+export async function fakeAnnouncements(announcements: unknown[], answer: "ok" | "down" | "silent" = "ok"): Promise<void> {
+  await fetch(`http://localhost:${FAKE_JOBS_PORT}/announcement-answer`, { method: "POST", body: JSON.stringify({ announcements, answer }) });
+}
+
+/** The portal catalog the fake backend serves at /v1/portals (E23). */
+export async function fakeCatalog(catalog: { portals: unknown[]; withdrawn: unknown[] }): Promise<void> {
+  await fetch(`http://localhost:${FAKE_JOBS_PORT}/portals-answer`, { method: "POST", body: JSON.stringify({ commit: "e2e", ...catalog }) });
+}
+
+/** The requests the fake backend got so far, with their headers. */
+export async function fakeAnnouncementRequests(): Promise<{ url: string; headers: Record<string, string> }[]> {
+  const response = await fetch(`http://localhost:${FAKE_JOBS_PORT}/announcement-requests`);
+  return ((await response.json()) as { requests: { url: string; headers: Record<string, string> }[] }).requests;
 }
 
 /** How many searches the fake JSearch has answered so far (E14-10). */
@@ -197,4 +241,48 @@ export function portraitPng(width = 900, height = 800): Buffer {
     chunk("IDAT", deflateSync(rows)),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+/**
+ * A colour as the page draws it, as "#rrggbb": the element's `property`
+ * blended over its parents' backgrounds, which many tokens are see-through
+ * tints of. Opacity isn't counted.
+ */
+export function drawnColor(locator: Locator, property: string): Promise<string> {
+  return locator.evaluate((element, property) => {
+    const parse = (value: string) => value.match(/[\d.]+/g)!.map(Number);
+    // Nearest first, each [r, g, b, alpha?].
+    const layers = [parse(getComputedStyle(element).getPropertyValue(property))];
+    for (let node = element.parentElement; node; node = node.parentElement) layers.push(parse(getComputedStyle(node).backgroundColor));
+    const drawn = layers.reduceRight((below, [r, g, b, alpha = 1]) => [r, g, b].map((channel, i) => channel * alpha + below[i] * (1 - alpha)), [255, 255, 255]);
+    return `#${drawn.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+  }, property);
+}
+
+/**
+ * Opens Jump to with Ctrl+K (E27-6) and gives its search box. Until the page
+ * has hydrated the key does nothing in the app, so it's pressed again until
+ * the palette is open (never while it is, which would close it).
+ */
+export async function openJumpTo(page: Page): Promise<Locator> {
+  const box = page.getByRole("combobox", { name: "Jump to" });
+  await expect(async () => {
+    if (!(await box.isVisible())) await page.keyboard.press("Control+K");
+    await expect(box).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  return box;
+}
+
+/**
+ * Pastes a posting into New application. `?fresh=1` clears the tab's draft
+ * once the page is live, which can wipe a paste made before that; so it's
+ * pasted again until "Read the posting" takes it.
+ */
+export async function fillPosting(page: Page, text: string): Promise<void> {
+  const box = page.getByLabel("Job posting");
+  const read = page.getByRole("button", { name: "Read the posting" });
+  await expect(async () => {
+    await box.fill(text);
+    await expect(read).not.toHaveAttribute("aria-disabled", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
 }

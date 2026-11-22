@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "x".repeat(40), DOSSIER_PUBLIC_URL: undefined } }));
 
 import { encryptSecret, GOOGLE_CLIENT_SECRET } from "@/lib/secrets";
 
-import { authorizeUrl, emailFromIdToken, hasScopes, redirectUri, resolveGoogleClient, SCOPES, signState, verifyState } from "./oauth";
+import { authorizeUrl, emailFromIdToken, hasScopes, pkcePair, redirectUri, resolveGoogleClient, SCOPES, signState, verifyState } from "./oauth";
 
 const secret = "a".repeat(40);
 
@@ -24,12 +26,22 @@ describe("OAuth state", () => {
 
 describe("the consent page", () => {
   it("asks for offline access to the scopes given", () => {
-    const url = new URL(authorizeUrl({ clientId: "id", redirect: "https://d.example/api/google/callback", state: "s", scopes: [...SCOPES.identity, ...SCOPES.send, ...SCOPES.send] }));
+    const url = new URL(authorizeUrl({ clientId: "id", redirect: "https://d.example/api/google/callback", state: "s", scopes: [...SCOPES.identity, ...SCOPES.send, ...SCOPES.send], challenge: "c" }));
     expect(url.origin).toBe("https://accounts.google.com");
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("include_granted_scopes")).toBe("true");
     expect(url.searchParams.get("scope")).toBe("openid email https://www.googleapis.com/auth/gmail.send");
     expect(redirectUri("http://localhost:3000")).toBe("http://localhost:3000/api/google/callback");
+  });
+
+  it("makes a PKCE pair: a random verifier, and its SHA-256 as the challenge (#358)", () => {
+    const { verifier, challenge } = pkcePair();
+    expect(verifier).toMatch(/^[\w-]{43}$/);
+    expect(challenge).toBe(createHash("sha256").update(verifier).digest("base64url"));
+    expect(pkcePair().verifier).not.toBe(verifier);
+    const url = new URL(authorizeUrl({ clientId: "id", redirect: "https://d.example/api/google/callback", state: "s", scopes: SCOPES.identity, challenge }));
+    expect(url.searchParams.get("code_challenge")).toBe(challenge);
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
   });
 
   it("tells which features were granted", () => {

@@ -5,7 +5,10 @@ import { countPages, DocumentPreview } from "./document-preview";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const element of pages.splice(0)) element.remove();
 });
+
+const pages: HTMLElement[] = [];
 
 /** A page 640 units wide at `unit` px each, `height` units tall, with 50 units of padding, on A4. */
 function page(height: number, { unit = 0.5, pageHeight = 905 } = {}) {
@@ -16,6 +19,9 @@ function page(height: number, { unit = 0.5, pageHeight = 905 } = {}) {
   element.style.setProperty("--pad-y", "50");
   Object.defineProperty(element, "offsetWidth", { value: 640 * unit });
   Object.defineProperty(element, "offsetHeight", { value: height * unit });
+  // In the document, as on screen: a detached element has no computed style (jsdom 31, as browsers).
+  document.body.append(element);
+  pages.push(element);
   return element;
 }
 

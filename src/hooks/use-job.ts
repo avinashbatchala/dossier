@@ -5,6 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { JobView } from "@/lib/jobs/runner";
 
 const POLL_MS = 1500;
+/** What a job that's no longer there ends with. */
+export const JOB_GONE = "This is no longer kept: it was used or deleted.";
 const finished = (job: JobView) => job.status === "DONE" || job.status === "FAILED";
 
 /**
@@ -38,6 +40,8 @@ export function useJob<R = unknown>(
     const poll = async () => {
       try {
         const response = await fetch(`/api/jobs/${id}`);
+        // Used, discarded or past "Keep task data for": asking again won't bring it back.
+        if (response.status === 404) return update({ id, type: "", status: "FAILED", step: null, error: JOB_GONE, result: null });
         if (response.ok) {
           const job = (await response.json()) as JobView<R>;
           update(job);

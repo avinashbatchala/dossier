@@ -2,18 +2,21 @@
 
 import { useId } from "react";
 
-import { profileStrength, type ProfileData } from "@/lib/profile";
+import { nextMissing, paidRoles, profileStrength, type ProfileData } from "@/lib/profile";
 
-/** "Profile strength" with a progress bar and an encouraging hint (PRO-9). */
+/** "Profile strength" with a progress bar and a hint that names the next missing thing (PRO-9, E33-1). */
 export function StrengthMeter({ profile }: { profile: ProfileData }) {
   const labelId = useId();
   const hintId = useId();
-  const { percent, hint } = profileStrength({
+  const strength = profileStrength({
     basics: profile.basics,
-    experience: profile.experience.length,
+    experience: paidRoles(profile.experience).length,
     education: profile.education.length,
     skills: profile.skills.length,
   });
+  const { percent } = strength;
+  const next = nextMissing(profile);
+  const hint = next ? `${percent >= 80 ? "Nearly there." : percent >= 50 ? "Good progress." : "A good start."} ${next}` : strength.hint;
 
   return (
     <div className="flex flex-col gap-2">

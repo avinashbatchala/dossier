@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { encryptApiKey } from "./api-key";
-import { isAiUsable, resolveAiConfig } from "./config";
+import { isAiUsable, resolveAiConfig, sameServer } from "./config";
 import { AiError } from "./errors";
 import { createProvider } from "./index";
 
@@ -34,17 +34,24 @@ describe("resolveAiConfig", () => {
     expect(config).toMatchObject({
       provider: "ANTHROPIC",
       baseUrl: "https://api.anthropic.com",
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       apiKey: "sk-env",
       timeoutMs: 90_000,
     });
+  });
+
+  it("takes a timeout saved in Settings before DOSSIER_AI_TIMEOUT_SECONDS and the provider's own, for any provider (public issue 118)", () => {
+    const env = { DOSSIER_AI_PROVIDER: "anthropic", DOSSIER_AI_TIMEOUT_SECONDS: 90 } as Parameters<typeof resolveAiConfig>[1];
+    expect(resolveAiConfig({ ...nothingSaved, aiTimeoutSeconds: 900 }, env).timeoutMs).toBe(900_000);
+    expect(resolveAiConfig({ ...nothingSaved, provider: "LMSTUDIO", aiTimeoutSeconds: 1_200 }, noEnv).timeoutMs).toBe(1_200_000);
+    expect(resolveAiConfig({ ...nothingSaved, aiTimeoutSeconds: null }, env).timeoutMs).toBe(90_000);
   });
 
   it("knows Mistral's address and a default model", () => {
     expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "mistral", DOSSIER_AI_KEY: "mk-env" })).toMatchObject({
       provider: "MISTRAL",
       baseUrl: "https://api.mistral.ai/v1",
-      model: "mistral-medium-latest",
+      model: "mistral-small-2603",
       apiKey: "mk-env",
       timeoutMs: 120_000,
     });
@@ -69,6 +76,15 @@ describe("resolveAiConfig", () => {
     const saved = { provider: "ANTHROPIC" as const, baseUrl: null, model: null, apiKeyEnc: null };
     expect(resolveAiConfig(saved, { DOSSIER_AI_PROVIDER: "anthropic", DOSSIER_AI_KEY: "sk-env" }).apiKey).toBe("sk-env");
     expect(resolveAiConfig(saved, { DOSSIER_AI_PROVIDER: "openai", DOSSIER_AI_KEY: "sk-env" }).apiKey).toBeNull();
+  });
+
+  it("lends the env key only to the env's own server (public PR 107)", () => {
+    const source = { DOSSIER_AI_PROVIDER: "openai" as const, DOSSIER_AI_URL: "https://openrouter.ai/api/v1", DOSSIER_AI_KEY: "sk-or-env" };
+    const saved = { provider: "OPENAI" as const, baseUrl: "https://api.deepseek.com", model: null, apiKeyEnc: null };
+    expect(resolveAiConfig(saved, source).apiKey).toBeNull();
+    expect(resolveAiConfig({ ...saved, baseUrl: "https://openrouter.ai/v1" }, source).apiKey).toBe("sk-or-env");
+    // Neither address set: both are the provider's default.
+    expect(resolveAiConfig({ ...saved, baseUrl: null }, { DOSSIER_AI_PROVIDER: "openai", DOSSIER_AI_KEY: "sk-env" }).apiKey).toBe("sk-env");
   });
 
   it("reports a saved key it can't read instead of failing", () => {
@@ -108,5 +124,16 @@ describe("isAiUsable (#221)", () => {
     expect(await usable({ provider: "ANTHROPIC" })).toBe(false);
     expect(await usable({ provider: "ANTHROPIC", apiKeyEnc: encryptApiKey("sk-saved") })).toBe(true);
     expect(await usable({ provider: "MISTRAL", apiKeyEnc: encryptApiKey("sk", "b".repeat(32)) })).toBe(false);
+  });
+});
+
+describe("sameServer", () => {
+  it("compares scheme, host and port, with the provider's default for an empty address", () => {
+    expect(sameServer("OPENAI", "https://openrouter.ai/v1", "https://OpenRouter.ai/api/v1/")).toBe(true);
+    expect(sameServer("OPENAI", "", "https://api.openai.com/v1")).toBe(true);
+    expect(sameServer("OPENAI", "https://openrouter.ai/api/v1", "https://openrouter.ai.example/api/v1")).toBe(false);
+    expect(sameServer("OPENAI", "https://openrouter.ai", "http://openrouter.ai")).toBe(false);
+    expect(sameServer("LMSTUDIO", "http://localhost:1234", "http://host.docker.internal:1234")).toBe(false);
+    expect(sameServer("OPENAI", "https://", "https://")).toBe(false);
   });
 });

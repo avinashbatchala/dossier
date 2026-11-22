@@ -55,9 +55,19 @@ describe("the fact guard (E6-6)", () => {
   });
 
   it("flags acronyms and credentials the profile doesn't have", () => {
-    expect(check("An MBA and a certified scrum master")).toEqual(["MBA", "certified"]);
+    const uncertified = sourcesFor({ ...profile, certifications: [] }, extracted, sample.ledgerly.posting, 11);
+    expect(unverifiedFacts("An MBA and a certified scrum master", uncertified)).toEqual(["MBA", "certified"]);
+    // Jane is certified in accessibility (#293).
+    expect(check("A Certified Accessibility Specialist since 2022")).toEqual([]);
     expect(check("An MSc in Design for Interaction from TU Delft")).toEqual([]);
     expect(check("Knows WCAG 2.2 well")).toEqual([]);
+  });
+
+  it("takes what the candidate's own sections say as true (#298)", () => {
+    const item = { id: "i1", title: "Chartered MBA, 2009", subtitle: "", startYear: null, startMonth: null, endYear: null, endMonth: null, current: false, details: "", link: "", onResumes: true };
+    const backed = sourcesFor({ ...profile, customSections: [{ id: "s1", title: "Honours", format: "LINES", countsAs: "EXTRA_ACTIVITIES" as const, items: [item] }] }, extracted, sample.ledgerly.posting, 11);
+    expect(unverifiedFacts("An MBA since 2009", backed)).toEqual([]);
+    expect(check("An MBA since 2009")).toEqual(["MBA", "2009"]);
   });
 
   it("flags years the profile doesn't have", () => {
@@ -80,6 +90,13 @@ describe("the fact guard on runaway output", () => {
     expect(check(`Led the redesign at Northwind Logistics.${"\n".repeat(100_000)}`)).toEqual([]);
     expect(performance.now() - started).toBeLessThan(500);
   });
+
+  it("reads words with a long run of marks inside quickly", () => {
+    const started = performance.now();
+    expect(factSources([`a${".".repeat(100_000)}b.`]).words.size).toBe(1);
+    check(`A${"-".repeat(100_000)}b`);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("guardUnits", () => {
@@ -87,14 +104,21 @@ describe("guardUnits", () => {
     const units = guardUnits(
       [
         { id: "summary", label: "Summary", text: "Led a team of 12 at Google." },
-        { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign", unverified: ["old"] },
+        {
+          id: "experience:e1",
+          label: "Northwind Logistics role",
+          text: "Led the carrier portal redesign",
+          unverified: ["old"],
+          serves: [{ line: "Led the carrier portal redesign", requirements: ["Portals"] }],
+        },
         { id: "skills", label: "Skills", text: "Kubernetes · Figma" },
       ],
       factSources(["Northwind Logistics", "Led the carrier portal redesign", "Figma"]),
     );
     expect(units).toEqual([
       { id: "summary", label: "Summary", text: "Led a team of 12 at Google.", unverified: ["Google", "12"] },
-      { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign" },
+      // Which requirements it serves stays (E30-4).
+      { id: "experience:e1", label: "Northwind Logistics role", text: "Led the carrier portal redesign", serves: [{ line: "Led the carrier portal redesign", requirements: ["Portals"] }] },
       { id: "skills", label: "Skills", text: "Kubernetes · Figma" },
     ]);
   });

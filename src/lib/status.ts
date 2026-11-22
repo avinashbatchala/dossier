@@ -3,7 +3,7 @@ import { ApplicationStatus, FunnelStage } from "@/generated/prisma/enums";
 // The status model (PRD §8). Every status change goes through `advance`, so
 // the funnel figures stay consistent however the change was made.
 
-export type StatusGroup = "in-progress" | "closed";
+type StatusGroup = "in-progress" | "closed";
 
 export type StatusInfo = {
   value: ApplicationStatus;

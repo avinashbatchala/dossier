@@ -1,3 +1,5 @@
+import type { TokenCount, UsageSink } from "@/lib/usage";
+
 import { BaseProvider, type ChatAnswer, type ChatCall } from "../provider";
 
 export type MockReply = (call: ChatCall) => unknown;
@@ -13,14 +15,23 @@ export class MockProvider extends BaseProvider {
   readonly calls: ChatCall[] = [];
 
   constructor(
-    private readonly options: { model?: string | null; models?: string[]; reply?: MockReply; timeoutMs?: number } = {},
+    private readonly options: {
+      model?: string | null;
+      models?: string[];
+      reply?: MockReply;
+      timeoutMs?: number;
+      /** What each answer reports it used; nothing by default. */
+      tokens?: TokenCount;
+      onUsage?: UsageSink;
+    } = {},
   ) {
-    super(options.model === undefined ? "mock-model" : options.model, options.timeoutMs ?? 60_000);
+    super(options.model === undefined ? "mock-model" : options.model, options.timeoutMs ?? 60_000, options.onUsage);
   }
 
   protected async chat(call: ChatCall): Promise<ChatAnswer> {
     this.calls.push(call);
     const answer = await (this.options.reply ?? (() => "OK"))(call);
+    call.used(this.options.tokens ?? { input: null, output: null });
     return { text: typeof answer === "string" ? answer : JSON.stringify(answer), cutOff: false };
   }
 

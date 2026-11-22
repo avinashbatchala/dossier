@@ -23,7 +23,8 @@ const RESUME = docxWith([
 async function readResume(page: Page) {
   await page.goto("/profile");
   await page.getByRole("link", { name: "Import from a resume" }).click();
-  await expect(page).toHaveURL("/profile/import");
+  await expect(page).toHaveURL(/\/profile\/import\?profile=/);
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Your resume, as PDF, Word (.docx) or Markdown (.md)").setInputFiles({
     name: "resume.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -35,6 +36,7 @@ async function readResume(page: Page) {
 
 test("says which files it takes", async ({ page }) => {
   await page.goto("/profile/import");
+  await page.waitForLoadState("networkidle");
   const file = page.getByLabel("Your resume, as PDF, Word (.docx) or Markdown (.md)");
   await file.setInputFiles({ name: "resume.png", mimeType: "image/png", buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]) });
   await page.getByRole("button", { name: "Read my resume →" }).click();
@@ -46,7 +48,7 @@ test("says which files it takes", async ({ page }) => {
 
 test("reads a resume, shows what it found and merges it into the profile", async ({ page }) => {
   await readResume(page);
-  await expect(page).toHaveURL(/\/profile\/import\?job=/);
+  await expect(page).toHaveURL(/\/profile\/import\?profile=[^&]+&job=/);
   const preview = page.locator("section", { has: page.getByRole("heading", { name: "Experience" }) });
   await expect(preview).toContainText("Design Lead · Acme Payments");
   await expect(preview).toContainText("Payouts for online marketplaces, 60 people");
@@ -57,8 +59,14 @@ test("reads a resume, shows what it found and merges it into the profile", async
   expect(violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical")).toEqual([]);
 
   await page.getByRole("button", { name: "Merge into my profile" }).click();
-  await expect(page).toHaveURL("/profile");
+  await expect(page).toHaveURL(/\/profile\?profile=/);
   await expect(page.getByText(/^Added to your profile: 1 role, 0 projects, 0 degrees, 2 skills, 1 language, 0 references\./)).toBeVisible();
+  // The reading went when it was used: Back says so and offers a new file, instead of waiting for it.
+  await page.goBack();
+  await expect(page.getByText("This is no longer kept: it was used or deleted.")).toBeVisible();
+  await page.getByRole("button", { name: "← Choose another file" }).click();
+  await expect(page.getByLabel("Your resume, as PDF, Word (.docx) or Markdown (.md)")).toBeVisible();
+  await page.goto("/profile");
   // What the resume says wins; the demo profile's other roles stay.
   await expect(page.getByLabel("Full name")).toHaveValue("John Doe");
   await page.goto("/profile?section=experience");
@@ -70,15 +78,18 @@ test("replaces the profile after asking", async ({ page }) => {
   await readResume(page);
   await page.getByRole("button", { name: "Replace my profile…" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Replace my profile" }).click();
-  await expect(page).toHaveURL("/profile");
+  await expect(page).toHaveURL(/\/profile\?profile=/);
   await page.goto("/profile?section=experience");
-  await expect(page.locator("button[aria-expanded]")).toHaveCount(1);
+  // One role card; the profile switcher's menu button is expanded-able too (E24-2).
+  await expect(page.locator("main button[aria-expanded]:not([aria-haspopup])")).toHaveCount(1);
   await expect(page.getByRole("button", { name: /^Design Lead.*Acme Payments/, expanded: false })).toBeVisible();
 });
 
 test("reads a PDF too: Dossier's own base resume", async ({ page }) => {
   const pdf = await (await page.request.get("/api/pdf?doc=base")).body();
   await page.goto("/profile/import");
+  // A file chosen before the page has hydrated is lost, and "Read my resume" stays off.
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Your resume, as PDF, Word (.docx) or Markdown (.md)").setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: pdf });
   await page.getByRole("button", { name: "Read my resume →" }).click();
   await expect(page.getByRole("heading", { name: "Here's what your resume says" })).toBeVisible();
@@ -96,6 +107,8 @@ test("reads Markdown too", async ({ page }) => {
     "**Skills:** Figma · **Languages:** Dutch (native)",
   ].join("\n");
   await page.goto("/profile/import");
+  // A file chosen before the page has hydrated is lost, and "Read my resume" stays off.
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Your resume, as PDF, Word (.docx) or Markdown (.md)").setInputFiles({ name: "resume.md", mimeType: "text/markdown", buffer: Buffer.from(markdown) });
   await page.getByRole("button", { name: "Read my resume →" }).click();
   await expect(page.getByRole("heading", { name: "Here's what your resume says" })).toBeVisible();

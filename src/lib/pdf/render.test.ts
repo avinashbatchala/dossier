@@ -10,6 +10,7 @@ const fake = vi.hoisted(() => {
     releases: [] as (() => void)[],
     routes: [] as string[],
     disconnect: undefined as Handler | undefined,
+    redirected: false,
   };
   const launch = async () => {
     state.launches += 1;
@@ -29,7 +30,8 @@ const fake = vi.hoisted(() => {
           }
         },
         newPage: async () => ({
-          goto: async () => ({ ok: () => true, status: () => 200 }),
+          goto: async () => ({ ok: () => true, status: () => 200, request: () => ({ redirectedFrom: () => (state.redirected ? {} : null) }) }),
+          url: () => "http://localhost:3000/login?next=%2Fprint%2Fbase",
           evaluate: async () => {},
           pdf: async () => {
             state.printing += 1;
@@ -73,6 +75,15 @@ describe("renderPdf", () => {
       "continue http://localhost:3000/_next/static/app.css",
       "abort https://fonts.example/font.woff2",
     ]);
+  });
+
+  it("refuses to print a page that redirected, rather than print the sign-in page as the document (#328)", async () => {
+    fake.state.redirected = true;
+    try {
+      await expect(renderPdf("/print/base?fit=1")).rejects.toThrow("The print page /print/base?fit=1 redirected to /login.");
+    } finally {
+      fake.state.redirected = false;
+    }
   });
 
   it("reuses one browser and prints at most two pages at once, queueing the rest", async () => {

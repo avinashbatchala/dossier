@@ -2,49 +2,50 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { citationText } from "@/lib/citation";
-import { BASICS_FIELDS, sameName } from "@/lib/profile";
+import { isOwnBasic, sameName } from "@/lib/profile";
 import type { ImportedProfile, ImportMode } from "@/lib/profile-import";
-import { settingsFromRows } from "@/lib/settings";
-import { saveSettings } from "@/lib/settings-data";
+import { loadProfileSettings, saveProfileSettings } from "@/lib/profiles";
 
 type Tx = Prisma.TransactionClient;
 
 /**
- * Applies an imported profile in one transaction (E4-10). Replace clears the
- * profile first. Merge lets the file win (decided 29 September 2026): its
- * basics overwrite the profile's, and an entry it shares with the profile
- * (the same role and company, project name, degree and school, citation, or
- * reference name) takes
- * what the file says; what the file leaves out is kept. Everything else is
- * added, first in a section ordered by hand, else by date.
+ * Applies an imported profile to one profile in one transaction (E4-10,
+ * E24-1). Replace clears that profile's own sections, headline and summary
+ * first. Merge lets the file win (decided 29 September 2026): its basics
+ * overwrite the profile's, and an entry it shares with the profile (the same
+ * role and company, project name, degree and school, citation, or reference
+ * name) takes what the file says; what the file leaves out is kept.
+ * Everything else is added, first in a section ordered by hand, else by date.
+ * The shared basics and languages are merged either way: other profiles use
+ * them too.
  */
-export async function applyImportedProfile(db: PrismaClient, profile: ImportedProfile, mode: ImportMode): Promise<void> {
+export async function applyImportedProfile(db: PrismaClient, profileId: string, profile: ImportedProfile, mode: ImportMode): Promise<void> {
+  const own = { where: { profileId } };
   await db.$transaction(
     async (tx) => {
       if (mode === "replace") {
-        await tx.experience.deleteMany();
-        await tx.project.deleteMany();
-        await tx.education.deleteMany();
-        await tx.publication.deleteMany();
-        await tx.reference.deleteMany();
-        await tx.language.deleteMany();
-        await tx.skill.deleteMany();
-        await tx.profileField.deleteMany({ where: { key: { in: [...BASICS_FIELDS] } } });
-        await saveSettings({ experienceOrder: "date", projectOrder: "date", educationOrder: "date" }, tx);
+        await tx.experience.deleteMany(own);
+        await tx.project.deleteMany(own);
+        await tx.education.deleteMany(own);
+        await tx.certification.deleteMany(own);
+        await tx.publication.deleteMany(own);
+        await tx.reference.deleteMany(own);
+        await tx.skill.deleteMany(own);
+        await tx.profile.update({ where: { id: profileId }, data: { headline: "", summary: "" } });
+        await saveProfileSettings(profileId, { experienceOrder: "date", projectOrder: "date", educationOrder: "date" }, tx);
       }
-      const order = settingsFromRows(
-        await tx.setting.findMany({ where: { key: { in: ["experienceOrder", "projectOrder", "educationOrder"] } } }),
-      );
+      const order = await loadProfileSettings(profileId, tx);
 
       for (const [key, value] of Object.entries(profile.basics)) {
-        await tx.profileField.upsert({ where: { key }, create: { key, value }, update: { value } });
+        if (isOwnBasic(key)) await tx.profile.update({ where: { id: profileId }, data: { [key]: value } });
+        else await tx.profileField.upsert({ where: { key }, create: { key, value }, update: { value } });
       }
 
-      const skillIds = await applySkills(tx, profile);
+      const skillIds = await applySkills(tx, profileId, profile);
       await applyLanguages(tx, profile);
 
-      const nextExperienceSort = await sorter(tx, "experience", order.experienceOrder === "manual");
-      const roles = await tx.experience.findMany({ include: { skills: { select: { skillId: true } } } });
+      const nextExperienceSort = await sorter(tx, profileId, "experience", order.experienceOrder === "manual");
+      const roles = await tx.experience.findMany({ ...own, include: { skills: { select: { skillId: true } } } });
       for (const entry of profile.experience) {
         const { skills, ...fields } = withoutFlags(entry);
         const linked = skills.flatMap((name) => skillIds.get(name.toLowerCase()) ?? []);
@@ -55,13 +56,13 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
           await tx.experienceSkill.createMany({ data: linked.filter((id) => !known.has(id)).map((skillId) => ({ experienceId: match.id, skillId })) });
         } else {
           await tx.experience.create({
-            data: { ...fields, sort: nextExperienceSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
+            data: { ...fields, profileId, sort: nextExperienceSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
           });
         }
       }
 
-      const nextProjectSort = await sorter(tx, "project", order.projectOrder === "manual");
-      const known = await tx.project.findMany({ include: { skills: { select: { skillId: true } } } });
+      const nextProjectSort = await sorter(tx, profileId, "project", order.projectOrder === "manual");
+      const known = await tx.project.findMany({ ...own, include: { skills: { select: { skillId: true } } } });
       for (const entry of profile.projects) {
         const { skills, ...fields } = withoutFlags(entry);
         const linked = skills.flatMap((name) => skillIds.get(name.toLowerCase()) ?? []);
@@ -72,47 +73,58 @@ export async function applyImportedProfile(db: PrismaClient, profile: ImportedPr
           await tx.projectSkill.createMany({ data: linked.filter((id) => !links.has(id)).map((skillId) => ({ projectId: match.id, skillId })) });
         } else {
           await tx.project.create({
-            data: { ...fields, sort: nextProjectSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
+            data: { ...fields, profileId, sort: nextProjectSort(), skills: { create: [...new Set(linked)].map((skillId) => ({ skillId })) } },
           });
         }
       }
 
-      const nextEducationSort = await sorter(tx, "education", order.educationOrder === "manual");
-      const degrees = await tx.education.findMany();
+      const nextEducationSort = await sorter(tx, profileId, "education", order.educationOrder === "manual");
+      const degrees = await tx.education.findMany(own);
       for (const fields of profile.education.map(withoutFlags)) {
         const match = degrees.find((degree) => sameName(degree.degree, fields.degree) && sameName(degree.school, fields.school));
         if (match) await tx.education.update({ where: { id: match.id }, data: filled(fields) });
-        else await tx.education.create({ data: { ...fields, sort: nextEducationSort() } });
+        else await tx.education.create({ data: { ...fields, profileId, sort: nextEducationSort() } });
+      }
+
+      // Certifications are in an order set by hand: the file's go after the ones there, in its order (#293).
+      const certifications = await tx.certification.findMany(own);
+      let certificationSort = ((await tx.certification.aggregate({ ...own, _max: { sort: true } }))._max.sort ?? -1) + 1;
+      for (const { year, month, expiryYear, expiryMonth, ...fields } of profile.certifications.map(withoutFlags)) {
+        const match = certifications.find((entry) => sameName(entry.name, fields.name));
+        // A date the file doesn't give keeps the one that's there.
+        const dates = { ...(year === null ? {} : { year, month }), ...(expiryYear === null ? {} : { expiryYear, expiryMonth }) };
+        if (match) await tx.certification.update({ where: { id: match.id }, data: { ...filled(fields), ...dates } });
+        else await tx.certification.create({ data: { ...fields, ...dates, profileId, sort: certificationSort++ } });
       }
 
       // Publications are in an order set by hand: the file's go after the ones there, in its order (#218).
       // One that's already there keeps its citation, which may have bold and italics; the file can give it a link.
-      const publications = await tx.publication.findMany();
-      let publicationSort = ((await tx.publication.aggregate({ _max: { sort: true } }))._max.sort ?? -1) + 1;
+      const publications = await tx.publication.findMany(own);
+      let publicationSort = ((await tx.publication.aggregate({ ...own, _max: { sort: true } }))._max.sort ?? -1) + 1;
       for (const fields of profile.publications.map(withoutFlags)) {
         const match = publications.find((publication) => sameName(citationText(publication.citation), citationText(fields.citation)));
         if (match) await tx.publication.update({ where: { id: match.id }, data: filled({ link: fields.link }) });
-        else await tx.publication.create({ data: { ...fields, sort: publicationSort++ } });
+        else await tx.publication.create({ data: { ...fields, profileId, sort: publicationSort++ } });
       }
 
-      const references = await tx.reference.findMany();
-      let referenceSort = ((await tx.reference.aggregate({ _max: { sort: true } }))._max.sort ?? -1) + 1;
+      const references = await tx.reference.findMany(own);
+      let referenceSort = ((await tx.reference.aggregate({ ...own, _max: { sort: true } }))._max.sort ?? -1) + 1;
       for (const fields of profile.references.map(withoutFlags)) {
         const match = references.find((reference) => sameName(reference.name, fields.name));
         if (match) await tx.reference.update({ where: { id: match.id }, data: filled(fields) });
-        else await tx.reference.create({ data: { ...fields, sort: referenceSort++ } });
+        else await tx.reference.create({ data: { ...fields, profileId, sort: referenceSort++ } });
       }
     },
     { timeout: 30_000, maxWait: 10_000 },
   );
 }
 
-/** Finds or creates each skill (names ignore case); answers with the ids by lower-case name. */
-async function applySkills(tx: Tx, profile: ImportedProfile): Promise<Map<string, string>> {
+/** Finds or creates each skill in the profile (names ignore case); answers with the ids by lower-case name. */
+async function applySkills(tx: Tx, profileId: string, profile: ImportedProfile): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
-  let sort = ((await tx.skill.aggregate({ _max: { sort: true } }))._max.sort ?? -1) + 1;
+  let sort = ((await tx.skill.aggregate({ where: { profileId }, _max: { sort: true } }))._max.sort ?? -1) + 1;
   for (const { name } of profile.skills) {
-    const skill = (await tx.skill.findUnique({ where: { name } })) ?? (await tx.skill.create({ data: { name, sort: sort++ } }));
+    const skill = (await tx.skill.findUnique({ where: { profileId_name: { profileId, name } } })) ?? (await tx.skill.create({ data: { profileId, name, sort: sort++ } }));
     ids.set(name.toLowerCase(), skill.id);
   }
   return ids;
@@ -129,8 +141,8 @@ async function applyLanguages(tx: Tx, profile: ImportedProfile): Promise<void> {
 }
 
 /** Sort values for new entries: first in an order set by hand, else after the rest. */
-async function sorter(tx: Tx, section: "experience" | "project" | "education", manual: boolean): Promise<() => number> {
-  const range = { _min: { sort: true }, _max: { sort: true } } as const;
+async function sorter(tx: Tx, profileId: string, section: "experience" | "project" | "education", manual: boolean): Promise<() => number> {
+  const range = { where: { profileId }, _min: { sort: true }, _max: { sort: true } } as const;
   const { _min, _max } =
     section === "experience"
       ? await tx.experience.aggregate(range)

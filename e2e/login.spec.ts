@@ -9,6 +9,11 @@ test.afterEach(async () => {
   await sql(`DELETE FROM "LoginThrottle"`);
 });
 
+test("has no image optimizer for anyone to reach, signed in or not", async ({ request }) => {
+  const response = await request.get("/_next/image?url=%2Fapple-icon.png&w=64&q=75");
+  expect(response.status()).toBe(404);
+});
+
 test("sends a signed-out visitor to sign in, then on to where they were going", async ({ page }) => {
   await page.goto("/applications");
   await expect(page).toHaveURL("/login?next=%2Fapplications");
@@ -34,6 +39,34 @@ test("slows down guessing after five wrong passwords", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText(/^Too many attempts/)).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
+});
+
+// Many wrong passwords from everywhere pause new browsers, but not one that
+// signed in before, even after signing out (#334).
+test("lets a browser that signed in before in while new browsers wait", async ({ page, browser }) => {
+  await page.goto("/login");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login/);
+
+  await sql(`INSERT INTO "LoginThrottle" (key, failures, "windowStart", "blockedUntil", "updatedAt")
+    VALUES ('*', 30, now(), now() + interval '15 minutes', now())
+    ON CONFLICT (key) DO UPDATE SET failures = excluded.failures, "blockedUntil" = excluded."blockedUntil"`);
+
+  // A context of its own doesn't get the project's options, the address included.
+  const stranger = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  const elsewhere = await stranger.newPage();
+  await elsewhere.goto("/login");
+  await elsewhere.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await elsewhere.getByRole("button", { name: "Sign in" }).click();
+  await expect(elsewhere.getByText(/^Too many wrong passwords were tried lately, so new browsers have to wait 15 minutes\./)).toBeVisible();
+  await stranger.close();
+
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
 // Before the page's scripts run, or with them off, the browser submits the

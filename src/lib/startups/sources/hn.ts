@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { getJson, SourceError } from "../http";
 import { reach, type Place } from "../place";
-import { companySite, emailLabel, findEmails, firstLine, firstLink, headerParts, htmlToText } from "../text";
+import { companySite, emailLabel, findEmails, firstLine, firstLink, headerParts, htmlToText, isJobSeeker } from "../text";
 import type { FoundStartup } from "../types";
 import { hnItemLink } from "./yc";
 
@@ -35,6 +35,7 @@ export function startupFromHnPost(post: z.output<typeof postSchema>, place: Plac
   if (!post.text) return null;
   const text = htmlToText(post.text);
   const parts = headerParts(text);
+  if (isJobSeeker(parts.join(" | "), text)) return null;
   const company = (parts[0] ?? "")
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\s*\(.*\)\s*$/, "")
@@ -65,7 +66,7 @@ export function startupFromHnPost(post: z.output<typeof postSchema>, place: Plac
     remote: where.remote ? true : where.here ? false : null,
     // A round named in the header, else the YC batch in the company's brackets: "Tiller (YC W24)".
     stage: parts.slice(1).find((part) => /^(pre-seed|seed|series [a-e]|bootstrapped|profitable)\b/i.test(part)) ?? /\((yc [wsfpx]\d{2})\)/i.exec(parts[0] ?? "")?.[1]?.toUpperCase() ?? "",
-    roles: parts.filter((part) => ROLE.test(part) && part.length < 160).slice(0, 6),
+    roles: [...new Set(parts.filter((part) => ROLE.test(part) && part.length < 160))].slice(0, 6),
     // Addresses the post gives for applying, as written; hidden ones ("jane at acme dot com") stay in the text for the reader.
     emails: findEmails(text).map((email) => ({ email, label: emailLabel(email), from: link, onRequest: false, foundAt: post.created_at ?? "" })),
     links: [{ label: "Hiring post", url: link }, ...(website ? [{ label: "Website", url: website }] : [])],

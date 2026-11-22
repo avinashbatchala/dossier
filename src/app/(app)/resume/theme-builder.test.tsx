@@ -81,9 +81,8 @@ describe("ThemeBuilder", () => {
 
   it("sets each font chip in its own typeface", () => {
     renderBuilder();
-    expect(within(group("Heading font")).getByRole("radio", { name: "Plex Mono" })).toHaveStyle({
-      fontFamily: "var(--typeface-plex-mono)",
-    });
+    // Its own style: without the app's stylesheet, the computed one can't resolve the variable (jsdom 31, as browsers).
+    expect(within(group("Heading font")).getByRole("radio", { name: "Plex Mono" }).style.fontFamily).toBe("var(--typeface-plex-mono)");
   });
 
   it("names the accent swatches, not only their colours", () => {

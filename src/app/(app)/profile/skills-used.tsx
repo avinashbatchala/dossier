@@ -87,7 +87,7 @@ export function SkillsUsed({
         <span className="text-xs text-muted">
           {skills.length > 0
             ? `${attached} of ${skills.length} attached`
-            : "Add skills in Skills & languages, or type one below"}
+            : "Add skills under Skills, or type one below"}
         </span>
       </div>
       {skills.length > 0 && (

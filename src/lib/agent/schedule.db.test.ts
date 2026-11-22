@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentRun } from "@/lib/settings";
 import { saveSettings } from "@/lib/settings-data";
+import { EMPTY_QUERY } from "@/lib/job-search/search";
 import { createTestClient, resetDatabase } from "@/test/db";
 
 import { nextAgentRun, resetInterruptedDrafts, scheduledRunDue, startDueRun } from "./schedule";
@@ -14,6 +15,8 @@ vi.mock("@/lib/prisma", async () => {
   return { prisma: db.client };
 });
 const zone = vi.hoisted(() => ({ value: "Europe/Berlin" }));
+// The job search settings read the environment (E22-8: the budget counts each portal's requests).
+vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/time-zone", () => ({ lastKnownTimeZone: async () => zone.value }));
 vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/jobs/runner")>()),
@@ -75,11 +78,12 @@ describe("the limits (E16-4)", () => {
     expect(runLimitProblem([run("2026-10-20T11:35:00Z")], now, { manual: false })).toBeNull();
   });
 
-  it("allows 3 runs in any 24 hours", () => {
+  it("allows 3 requests to a portal in any 24 hours", () => {
     const three = [run("2026-10-20T11:00:00Z"), run("2026-10-20T08:00:00Z"), run("2026-10-19T13:00:00Z")];
-    expect(runLimitProblem(three, now, { manual: false })).toBe("The agent has run 3 times in the past 24 hours, as many as it may. Try again in 1 hour.");
-    expect(runLimitProblem(three, new Date("2026-10-20T13:00:01Z"), { manual: false })).toBeNull();
-    expect(runLimitProblem(three.slice(0, 2), now, { manual: false })).toBeNull();
+    const one = { manual: false, slots: ["JSEARCH"] };
+    expect(runLimitProblem(three, now, one)).toBe("The agent needs 1 request to JSearch this run, but may send each portal only 3 in 24 hours. Next eligible: Tue 20 Oct, 13:00 (UTC).");
+    expect(runLimitProblem(three, new Date("2026-10-20T13:00:01Z"), one)).toBeNull();
+    expect(runLimitProblem(three.slice(0, 2), now, one)).toBeNull();
   });
 });
 
@@ -88,7 +92,8 @@ describe("the schedule (E16-4)", () => {
     const { startJob } = await import("@/lib/jobs/runner");
     const due = new Date("2026-10-20T06:00:00Z");
     expect(await startDueRun(due)).toBeNull();
-    await saveSettings({ agentEnabled: true });
+    await saveSettings({ agentEnabled: true, portals: { FREEHIRE: { on: true, fields: {}, acceptedAt: null } } });
+    await prisma().agentSearch.create({ data: { name: "Designer", query: { ...EMPTY_QUERY, keywords: "Designer", country: "nl" } } });
     expect(await startDueRun(due)).toBe("agent-job");
     expect(startJob).toHaveBeenCalledWith(expect.objectContaining({ type: "agent-scan" }), { manual: false }, { key: "agent" });
 

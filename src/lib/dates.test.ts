@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { daysBetween, formatCalendarDate, formatDate, formatDateTime, formatShortCalendarDate, formatShortDate, formatTime, isoInZone } from "./dates";
+import { daysBetween, formatCalendarDate, formatDate, formatDateTime, formatShortCalendarDate, formatShortDate, formatTime, isoInZone, longDate } from "./dates";
 
 describe("dates", () => {
   it("shows a calendar date as stored, whatever the time zone", () => {
@@ -48,5 +48,14 @@ describe("isoInZone", () => {
     expect(isoInZone(new Date("2026-11-02T11:00:00Z"), "Europe/Berlin")).toBe("2026-11-02T12:00:00+01:00");
     expect(isoInZone(new Date("2026-10-18T11:00:00Z"), "America/New_York")).toBe("2026-10-18T07:00:00-04:00");
     expect(isoInZone(new Date("2026-10-18T11:00:00Z"), "UTC")).toBe("2026-10-18T11:00:00+00:00");
+  });
+});
+
+describe("longDate (E28-1)", () => {
+  it("names the weekday and the month, in the user's time zone", () => {
+    // 23:30 on Sunday in New York is already Monday in Berlin.
+    const late = new Date("2026-11-16T04:30:00Z");
+    expect(longDate(late, "Europe/Berlin")).toBe("Monday, 16 November");
+    expect(longDate(late, "America/New_York")).toBe("Sunday, 15 November");
   });
 });

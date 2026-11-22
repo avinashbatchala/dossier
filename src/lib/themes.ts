@@ -182,6 +182,36 @@ export const DENSITIES: Record<
   [Density.AIRY]: { label: "Airy", paddingY: 62, paddingX: 64, gap: 26, fontSize: 10.5, lineHeight: 1.65, itemGap: 13 },
 };
 
+export type DensityMetrics = (typeof DENSITIES)[Density];
+
+/** How many steps "Fit to one page" can take (public issue 69). */
+export const FIT_LEVELS = 4;
+
+/**
+ * The density tightened by `level` steps, for a base resume that has to fit
+ * one page (public issue 69): first the page padding and the gaps, then the
+ * line height, then the type, never under 9.25 units, so it stays readable.
+ * Level 0 is the theme as it is.
+ */
+export function squeeze(density: DensityMetrics, level: number): DensityMetrics {
+  if (level <= 0) return density;
+  const step = [
+    { paddingY: 0.7, gap: 0.6, itemGap: 0.65, lineHeight: 1, fontSize: 1 },
+    { paddingY: 0.65, gap: 0.55, itemGap: 0.6, lineHeight: 0.93, fontSize: 1 },
+    { paddingY: 0.6, gap: 0.5, itemGap: 0.55, lineHeight: 0.92, fontSize: 0.95 },
+    { paddingY: 0.55, gap: 0.45, itemGap: 0.5, lineHeight: 0.9, fontSize: 0.88 },
+  ][Math.min(level, FIT_LEVELS) - 1];
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return {
+    ...density,
+    paddingY: Math.max(28, Math.round(density.paddingY * step.paddingY)),
+    gap: Math.max(8, Math.round(density.gap * step.gap)),
+    itemGap: Math.max(4, Math.round(density.itemGap * step.itemGap)),
+    lineHeight: Math.max(1.35, round(density.lineHeight * step.lineHeight)),
+    fontSize: Math.max(9.25, round(density.fontSize * step.fontSize)),
+  };
+}
+
 export const LAYOUTS: Record<ThemeLayout, { label: string }> = {
   [ThemeLayout.SINGLE]: { label: "Single column" },
   [ThemeLayout.SIDE_HEADINGS]: { label: "Side headings" },
@@ -251,9 +281,10 @@ function documentFamily(font: ThemeFont): string {
 
 /**
  * A theme's settings resolved for rendering. `layout` overrides the theme's
- * own, e.g. a tailored resume in a single column (E5-1 decision).
+ * own, e.g. a tailored resume in a single column (E5-1 decision); `fit` is
+ * how far the density is squeezed to fit one page (public issue 69).
  */
-export function resolveTheme(theme: ThemeData, layout: ThemeLayout = theme.layout) {
+export function resolveTheme(theme: ThemeData, layout: ThemeLayout = theme.layout, fit = 0) {
   const split = hasSidebar(layout);
   const serifHeading = THEME_FONTS[theme.headFont].serif;
   return {
@@ -277,7 +308,7 @@ export function resolveTheme(theme: ThemeData, layout: ThemeLayout = theme.layou
     /** Text on the accent, e.g. in a banner: white, or ink when that reads better. */
     onAccent: contrastRatio(theme.accent, "#ffffff") >= contrastRatio(theme.accent, INK) ? "#ffffff" : INK,
     heading: HEADING_STYLES[theme.headingStyle],
-    density: DENSITIES[theme.density],
+    density: squeeze(DENSITIES[theme.density], fit),
     name: serifHeading ? { size: 30, weight: 500 } : { size: 25, weight: 600 },
   };
 }
@@ -293,9 +324,9 @@ export function unitsToMm(units: number, paper: PaperSize): number {
  * page margins (so every page gets it, not just the first and last), and the
  * unit size for that paper. Rendered by the print route (E5-5).
  */
-export function printCss(theme: ThemeData, paper: PaperSize): string {
+export function printCss(theme: ThemeData, paper: PaperSize, fit = 0): string {
   const { widthMm, heightMm } = PAPER_SIZES[paper];
-  const { paddingY, paddingX } = DENSITIES[theme.density];
+  const { paddingY, paddingX } = squeeze(DENSITIES[theme.density], fit);
   return [
     `@page { size: ${widthMm}mm ${heightMm}mm; margin: ${unitsToMm(paddingY, paper)}mm ${unitsToMm(paddingX, paper)}mm; }`,
     `:root { --u: ${widthMm / PAGE_WIDTH}mm; }`,

@@ -66,7 +66,7 @@ test("shows interviews and Google's events, and keeps interviews in step both wa
   await page.goto(onDay);
   await expect(calendar.getByRole("button", { name: `${dayLabel(day)}, 1 interview, 1 event` })).toBeVisible();
   await expect(calendar.getByRole("link", { name: /Dentist/ })).toHaveAttribute("href", dentist.htmlLink);
-  await expect(calendar.getByRole("link", { name: /^14:00–\d\d:\d\d Interview · Lead Product Designer · Northstar Health$/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
+  await expect(calendar.getByRole("link", { name: /Interview · Lead Product Designer · Northstar Health 14:00–\d\d:\d\d$/ })).toHaveAttribute("href", `/applications/${northstar.id}`);
   await expectAccessible(page);
 
   // Moved in Google: Dossier follows when the dashboard opens.

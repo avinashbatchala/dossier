@@ -1,0 +1,10 @@
+-- The Archive (E22-7, #393): an untouched posting moves there some days after
+-- a search last found it (archivedAt); the user can move it back (movedBackAt)
+-- or remove it (removedAt).
+-- AlterTable
+ALTER TABLE "Posting" ADD COLUMN     "archivedAt" TIMESTAMP(3),
+ADD COLUMN     "movedBackAt" TIMESTAMP(3),
+ADD COLUMN     "removedAt" TIMESTAMP(3);
+
+-- CreateIndex
+CREATE INDEX "Posting_archivedAt_idx" ON "Posting"("archivedAt");

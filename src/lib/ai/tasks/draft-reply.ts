@@ -10,7 +10,7 @@ import { factSources, guardSources, unverifiedFacts } from "../fact-guard";
 import { emailForPrompt, UNTRUSTED_EMAIL } from "./classify-reply";
 import { applicationFacts, candidateFacts, CREATIVITY, jobForPrompt, NO_EM_DASHES, profileForPrompt, system, truthfulness, type Task } from "./prompt-parts";
 
-export const DRAFT_REPLY_VERSION = "draft-reply@3";
+const DRAFT_REPLY_VERSION = "draft-reply@3";
 
 const answerSchema = z.object({
   greeting: z.string(),
@@ -53,6 +53,7 @@ export type DraftedReply = { body: string; gaps: string[]; unverified: string[] 
 export const draftReply: Task<DraftReplyInput, DraftedReply> = async (provider, input, options) => {
   const { profile, extracted, tone, email, timeZone, thread, slots, note, facts, posting } = input;
   const answer = await provider.complete({
+    task: "draft-reply",
     system: system(
       INSTRUCTIONS,
       `Tone: ${TONES[tone].label}. ${TONES[tone].description}`,

@@ -4,10 +4,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import type { ActionResult } from "@/lib/action";
 
-/** How long a toast stays on screen. */
+/** How long a toast without an action stays on screen. */
 export const TOAST_DURATION_MS = 3200;
-/** How long a toast with an action (e.g. Undo) stays, so there's time to use it. */
-export const TOAST_WITH_ACTION_DURATION_MS = 6000;
 
 export type ToastAction = { label: string; onClick: () => void };
 
@@ -36,7 +34,8 @@ function dismiss(id: number) {
 
 /**
  * Shows a short confirmation or friendly error at the bottom of the screen.
- * With an `action`, the toast gets a button (e.g. Undo) and stays longer.
+ * With an `action`, the toast gets a button (e.g. Undo) and stays until it's
+ * used, dismissed or replaced, so there's no time limit on it (WCAG 2.2.1).
  */
 export function toast(message: string, options: { action?: ToastAction } = {}): void {
   publish({ id: nextId++, message, action: options.action });
@@ -57,7 +56,8 @@ export function toastResult<T>(result: ActionResult<T>): ActionResult<T> {
 /**
  * Renders the current toast. Mounted once in the root layout. The live
  * region is always present, so screen readers announce each new message.
- * The timer pauses while the pointer or keyboard focus is on the toast.
+ * The timer of a toast without an action pauses while the pointer or keyboard
+ * focus is on it.
  */
 export function Toaster() {
   const shown = useSyncExternalStore(subscribe, () => current, () => null);
@@ -67,9 +67,8 @@ export function Toaster() {
   const paused = shown !== null && pausedId === shown.id;
 
   useEffect(() => {
-    if (!shown || paused) return;
-    const duration = shown.action ? TOAST_WITH_ACTION_DURATION_MS : TOAST_DURATION_MS;
-    const timer = setTimeout(() => dismiss(shown.id), duration);
+    if (!shown || shown.action || paused) return;
+    const timer = setTimeout(() => dismiss(shown.id), TOAST_DURATION_MS);
     return () => clearTimeout(timer);
   }, [shown, paused]);
 
@@ -99,6 +98,15 @@ export function Toaster() {
               className="shrink-0 font-medium underline underline-offset-3 focus-visible:outline-on-inverse"
             >
               {shown.action.label}
+            </button>
+          )}
+          {shown.action && (
+            <button
+              type="button"
+              onClick={() => dismiss(shown.id)}
+              className="shrink-0 text-on-inverse-muted hover:text-on-inverse focus-visible:outline-on-inverse"
+            >
+              Dismiss
             </button>
           )}
         </div>

@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { useTrackSave } from "@/components/save-tracker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useAutosave } from "@/hooks/use-autosave";
 import { formatDateRange, type EntryOrder, type ProfileData, type ProjectItem } from "@/lib/profile";
 
@@ -19,10 +18,12 @@ import {
   setProjectSkill,
   sortEntriesByDate,
 } from "./actions";
+import { BulletsField } from "./bullets-field";
 import { EntryList } from "./entry-list";
 import { MonthYearField } from "./month-year-field";
 import type { UpdateProfile } from "./skills-section";
 import { SkillsUsed } from "./skills-used";
+import { useProfileId } from "./profile-id";
 
 /** The fields of an open project, autosaved as you type. */
 function ProjectForm({
@@ -77,20 +78,14 @@ function ProjectForm({
           onChange={(event) => set({ current: event.target.checked })}
         />
       </div>
-      <Textarea
-        className="col-span-2"
-        label="What you did"
-        placeholder="One point per line: what you built, how, and what came of it."
-        rows={4}
-        value={entry.bullets}
-        onChange={(event) => set({ bullets: event.target.value })}
-      />
+      <BulletsField placeholder="One point per line: what you built, how, and what came of it." value={entry.bullets} onChange={(bullets) => set({ bullets })} />
     </div>
   );
 }
 
 /** Projects (PRO-13): side, open-source, course or thesis work, with the skills used, like roles. */
 export function ProjectsSection({ profile, update, order }: { profile: ProfileData; update: UpdateProfile; order: EntryOrder }) {
+  const profileId = useProfileId();
   const skillNames = (entry: ProjectItem) =>
     profile.skills.filter((skill) => entry.skillIds.includes(skill.id)).map((skill) => skill.name);
 
@@ -101,8 +96,8 @@ export function ProjectsSection({ profile, update, order }: { profile: ProfileDa
       addLabel="Add a project"
       ordering={{
         mode: order,
-        save: (ids) => reorderEntries({ section: "project", ids }),
-        sortByDate: () => sortEntriesByDate({ section: "project" }),
+        save: (ids) => reorderEntries({ profileId, section: "project", ids }),
+        sortByDate: () => sortEntriesByDate({ profileId, section: "project" }),
       }}
       summary={(entry) => ({
         title: entry.name.trim() || "New project",
@@ -110,9 +105,9 @@ export function ProjectsSection({ profile, update, order }: { profile: ProfileDa
         meta: formatDateRange(entry),
         footnote: skillNames(entry).join(" · ") || undefined,
       })}
-      create={() => createProject({})}
+      create={() => createProject({ profileId })}
       remove={(entry) => removeProject({ id: entry.id })}
-      restore={(entry) => restoreProject(entry)}
+      restore={(entry) => restoreProject({ ...entry, profileId })}
       renderForm={(entry, { onChange, autoFocus }) => (
         <>
           <ProjectForm entry={entry} onChange={onChange} autoFocus={autoFocus} />

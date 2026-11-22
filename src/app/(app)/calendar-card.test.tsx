@@ -37,7 +37,8 @@ const props: ComponentProps<typeof CalendarCard> = {
   source: { status: "google" },
   links: { previous: "/?date=2026-09-01", next: "/?date=2026-11-01", today: "/" },
 };
-const agendaDays = () => screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+/** The days in the agenda, once each, as its rows say them (E28-5). */
+const agendaDays = () => [...new Set([...document.querySelectorAll("[data-agenda-day]")].map((label) => label.textContent))];
 
 describe("the dashboard's calendar (E15-6)", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -57,9 +58,10 @@ describe("the dashboard's calendar (E15-6)", () => {
 
   it("lists the week from today: interviews open their application, events Google Calendar", () => {
     render(<CalendarCard {...props} />);
-    expect(agendaDays()).toEqual(["Today · Tue 20 Oct", "Fri 23 Oct", "Sat 24 Oct", "Sun 25 Oct"]);
-    expect(screen.getByRole("link", { name: "12:00–12:45 Interview · Product Designer · Northwind" })).toHaveAttribute("href", "/applications/nw");
-    const dentist = screen.getByRole("link", { name: /^15:00–15:30 Dentist/ });
+    expect(screen.getByRole("heading", { level: 3, name: "Next 7 days" })).toBeInTheDocument();
+    expect(agendaDays()).toEqual(["Today", "Fri 23 Oct", "Sat 24 Oct", "Sun 25 Oct"]);
+    expect(screen.getByRole("link", { name: "Today Interview · Product Designer · Northwind 12:00–12:45" })).toHaveAttribute("href", "/applications/nw");
+    const dentist = screen.getByRole("link", { name: /Dentist 15:00–15:30 · Google Calendar/ });
     expect(dentist).toHaveAttribute("href", "https://calendar.google.com/event?eid=dentist");
     expect(dentist).toHaveAttribute("target", "_blank");
     expect(screen.getAllByText("Trip")).toHaveLength(2);
@@ -73,6 +75,7 @@ describe("the dashboard's calendar (E15-6)", () => {
     render(<CalendarCard {...props} />);
     await user.click(screen.getByRole("button", { name: "Sunday 1 November" }));
     expect(screen.getByRole("button", { name: "Sunday 1 November" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { level: 3, name: "7 days from Sun 1 Nov" })).toBeInTheDocument();
     expect(agendaDays()).toEqual(["Tue 3 Nov"]);
     expect(screen.getByText("Workshop")).toBeInTheDocument();
     expect(router.push).not.toHaveBeenCalled();
@@ -82,7 +85,7 @@ describe("the dashboard's calendar (E15-6)", () => {
 
     // Today's month is on show, so it's picked without loading anything.
     await user.click(screen.getByRole("link", { name: "Today" }));
-    expect(agendaDays()[0]).toBe("Today · Tue 20 Oct");
+    expect(agendaDays()[0]).toBe("Today");
     expect(router.push).not.toHaveBeenCalled();
   });
 

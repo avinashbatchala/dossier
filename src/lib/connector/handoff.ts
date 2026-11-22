@@ -19,7 +19,7 @@ export const PASTE_DAYS = 14;
 export type Handoff = "write" | "score";
 
 /** A new claude.ai chat that starts with `prompt`. Prompts stay short: links over about 2,000 characters break. */
-export const claudeChatUrl = (prompt: string) => `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
+const claudeChatUrl = (prompt: string) => `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
 
 /** Whether the buttons hand work to Claude: the connector is on and Dossier has no usable model of its own. */
 export async function handsOffToClaude(aiUsable: boolean): Promise<boolean> {
@@ -32,12 +32,23 @@ const describe = (title: string, company: string) =>
     .filter(Boolean)
     .join(" at ");
 
-function promptFor(kind: Handoff, ref: string, about: string): string {
+/**
+ * `profile` names one of several profiles (E24-6), for get_profile and
+ * save_application to use; without it they use the first.
+ */
+function promptFor(kind: Handoff, ref: string, about: string, profile = ""): string {
   const what = about ? `the job posting ${ref} (${about})` : `the job posting ${ref}`;
+  if (profile) {
+    return (
+      `Using my Dossier connector: write a tailored resume and cover letter for ${what} from my profile "${profile}". ` +
+      `Read it with get_posting and that profile with get_profile (profile "${profile}"). Use only facts from it and tell me about any gaps. ` +
+      `Show me a short summary and the fit, then save it with save_application (profile "${profile}").`
+    );
+  }
   if (kind === "score") {
     return (
       `Using my Dossier connector: score how well ${what} fits my profile. ` +
-      "Read it with get_posting and my profile with get_profile, give a score from 0 to 100 with the reasons and any red flags, and save it with save_job_scores."
+      "Read it with get_posting and my profile with get_profile, judge each of its requirements and the other questions save_job_scores asks, and save the answers with save_job_scores."
     );
   }
   return (
@@ -54,13 +65,17 @@ export async function handOffFoundPosting(posting: FoundPosting, kind: Handoff):
   return claudeChatUrl(promptFor(kind, `with posting_id "${stored.id}"`, describe(posting.title, posting.company)));
 }
 
-/** For a posting pasted into New application: keeps its text for Claude to read, and gives the chat to open. */
-export async function handOffPastedPosting({ text, url }: { text: string; url: string }, now = new Date()): Promise<string> {
+/**
+ * For a posting pasted into New application: keeps its text for Claude to
+ * read, and gives the chat to open. `profile` is the name of the profile
+ * chosen there, when there are several.
+ */
+export async function handOffPastedPosting({ text, url, profile = "" }: { text: string; url: string; profile?: string }, now = new Date()): Promise<string> {
   const paste = await prisma.claudePaste.create({
     data: { text, url, expiresAt: new Date(now.getTime() + PASTE_DAYS * 24 * 60 * 60 * 1000) },
     select: { id: true },
   });
-  return claudeChatUrl(promptFor("write", `with paste_id "${paste.id}"`, ""));
+  return claudeChatUrl(promptFor("write", `with paste_id "${paste.id}"`, "", profile.slice(0, 100)));
 }
 
 /** A pasted posting kept for Claude, or null once it's gone or expired. */

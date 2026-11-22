@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash, randomBytes } from "node:crypto";
+
 import { jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
 
@@ -30,9 +32,6 @@ export const SCOPES = {
 
 export type ScopeGroup = keyof typeof SCOPES;
 
-/** Every scope Dossier can use. */
-export const ALL_SCOPES: readonly string[] = Object.values(SCOPES).flat();
-
 /** Whether `granted` (space-separated, as Google returns it) covers a feature. */
 export function hasScopes(granted: string, group: ScopeGroup): boolean {
   const scopes = new Set(granted.split(/\s+/));
@@ -40,7 +39,7 @@ export function hasScopes(granted: string, group: ScopeGroup): boolean {
 }
 
 /** Where a part of the client comes from: saved in Settings, the environment, nowhere, or saved but unreadable. */
-export type ClientPartState = "set" | "env" | "none" | "unreadable";
+type ClientPartState = "set" | "env" | "none" | "unreadable";
 
 export type GoogleClientConfig = {
   /** The client in effect, or null while Google isn't set up. */
@@ -122,12 +121,25 @@ export async function verifyState(state: string | null, { secret, now }: { secre
   }
 }
 
+/** The cookie that keeps the PKCE verifier until Google sends the browser back (#358), only for the callback. */
+export const PKCE_COOKIE = "dossier_google_pkce";
+
+/**
+ * A PKCE pair (RFC 7636, #358): the verifier stays with the browser in an
+ * httpOnly cookie, the challenge goes to Google, so a code that leaks on the
+ * way back is no use without that browser.
+ */
+export function pkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(32).toString("base64url");
+  return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+}
+
 /**
  * Google's consent page for `scopes`. `include_granted_scopes` keeps what was
  * granted before, so features can be added one at a time; `prompt=consent`
  * makes sure a refresh token comes back.
  */
-export function authorizeUrl({ clientId, redirect, state, scopes }: { clientId: string; redirect: string; state: string; scopes: readonly string[] }): string {
+export function authorizeUrl({ clientId, redirect, state, scopes, challenge }: { clientId: string; redirect: string; state: string; scopes: readonly string[]; challenge: string }): string {
   const url = new URL(googleUrl("accounts", "/o/oauth2/v2/auth"));
   url.search = new URLSearchParams({
     client_id: clientId,
@@ -138,6 +150,8 @@ export function authorizeUrl({ clientId, redirect, state, scopes }: { clientId: 
     include_granted_scopes: "true",
     prompt: "consent",
     state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   }).toString();
   return url.toString();
 }
@@ -175,11 +189,11 @@ async function postToken(body: Record<string, string>, signal?: AbortSignal): Pr
   return parsed.data;
 }
 
-/** Trades the code from the callback for tokens. */
-export async function exchangeCode(code: string, redirect: string): Promise<TokenAnswer> {
+/** Trades the code from the callback for tokens, with the PKCE verifier its sign-in started with. */
+export async function exchangeCode(code: string, redirect: string, verifier: string): Promise<TokenAnswer> {
   const client = await googleClient();
   if (!client) throw new GoogleError("not-configured", NOT_CONFIGURED);
-  return postToken({ code, client_id: client.id, client_secret: client.secret, redirect_uri: redirect, grant_type: "authorization_code" });
+  return postToken({ code, client_id: client.id, client_secret: client.secret, redirect_uri: redirect, grant_type: "authorization_code", code_verifier: verifier });
 }
 
 /** A fresh access token from the refresh token. */
@@ -215,4 +229,4 @@ export function emailFromIdToken(idToken: string | undefined): string | null {
   }
 }
 
-export const NOT_CONFIGURED = "Google isn't set up yet. Enter the OAuth client ID and secret in Settings → Google.";
+const NOT_CONFIGURED = "Google isn't set up yet. Enter the OAuth client ID and secret in Settings → Google.";

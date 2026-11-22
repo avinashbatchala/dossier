@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bulletLines, cleanUnitText, isBulletUnit, unitName } from "./unit-text";
+import { bulletLines, cleanUnitText, isBulletUnit, isVerbatimUnit, unitName } from "./unit-text";
 
 describe("unit text", () => {
   it("keeps bullets one per line, without bullet characters or empty lines", () => {
@@ -21,6 +21,21 @@ describe("unit text", () => {
     expect(cleanUnitText("experience:e1", " - One \n - Two ")).toBe("One\nTwo");
     expect(cleanUnitText("paragraph:1", "  First line.\n\nSecond.  ")).toBe("First line.\n\nSecond.");
   });
+
+  it("treats a custom section's parts as word for word, and only an entry's as bullets (#298)", () => {
+    for (const id of ["custom-entry:i1", "custom-line:i1", "custom-inline:s1"]) expect(isVerbatimUnit(id)).toBe(true);
+    expect(isBulletUnit("custom-entry:i1")).toBe(true);
+    expect(isBulletUnit("custom-line:i1")).toBe(false);
+    expect(cleanUnitText("custom-entry:i1", "- Taught")).toBe("Taught");
+    expect(cleanUnitText("custom-line:i1", "- A line stays as written")).toBe("- A line stays as written");
+    expect(unitName({ id: "custom-line:i1", label: "Best Paper" })).toBe("Best Paper");
+  });
+
+  it("knows the parts copied word for word: certifications and publications (#293, #218)", () => {
+    expect(isVerbatimUnit("certification:c1")).toBe(true);
+    expect(isVerbatimUnit("publication:u1")).toBe(true);
+    expect(isVerbatimUnit("education:d1")).toBe(false);
+  });
 });
 
 describe("unitName", () => {
@@ -31,5 +46,6 @@ describe("unitName", () => {
     expect(unitName({ id: "paragraph:2", label: "Middle paragraph" })).toBe("middle paragraph");
     expect(unitName({ id: "experience:e1", label: "Northwind Logistics role" })).toBe("Northwind Logistics role");
     expect(unitName({ id: "education:d1", label: "MSc Design for Interaction" })).toBe("MSc Design for Interaction");
+    expect(unitName({ id: "certification:c1", label: "Certification “Certified Accessibility Specialist”" })).toBe("Certification “Certified Accessibility Specialist”");
   });
 });

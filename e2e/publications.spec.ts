@@ -14,7 +14,7 @@ test.beforeAll(async () => {
 
 test("adds a publication with italics and a DOI, and shows it on the base resume", async ({ page }) => {
   await page.goto("/profile?section=publications");
-  await expect(page.getByRole("link", { name: /Publications\s*optional\s*1/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Publications\b.*1 publication/ })).toBeVisible();
   await page.getByRole("button", { name: "+ Add a publication" }).click();
   const citation = page.getByRole("textbox", { name: "Citation" });
   await expect(citation).toBeFocused();
@@ -31,6 +31,8 @@ test("adds a publication with italics and a DOI, and shows it on the base resume
   await expect(page.getByLabel(/^Link/)).toHaveValue("https://doi.org/10.5555/98765");
   await expect(page.getByText("Saved just now")).toBeVisible();
 
+  // "Saved just now" can be the citation's save while the link's is still on its way.
+  await page.waitForLoadState("networkidle");
   await page.reload();
   await expect(page.getByRole("button", { name: /Doe, J\. \(2024\)\. Calm payouts.*doi\.org\/10\.5555\/98765/ })).toBeVisible();
 

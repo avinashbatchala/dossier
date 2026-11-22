@@ -1,0 +1,37 @@
+/* The window's top bar. It takes its colours from the page below it (main.ts),
+   so the two read as one surface. The rest of it drags the window.
+
+   This page lies under the whole window, behind the view showing the page, so
+   it has to stay exactly as tall as the bar (BAR_HEIGHT in main.ts). A drag area
+   takes the mouse even under that view, so a taller one stops every click. */
+
+@font-face { font-family: "Geist"; src: url("../start/fonts/Geist-Medium.woff2") format("woff2"); font-weight: 500; }
+
+html, body { height: 32px; margin: 0; overflow: hidden; }
+
+body {
+  --bar: light-dark(#eeebe4, #1a1917);
+  --bar-ink: light-dark(#1d1c1a, #f0ede7);
+  color-scheme: light dark;
+  background: var(--bar);
+  color: var(--bar-ink);
+  font: 500 12.5px/1 "Geist", "Segoe UI", Helvetica, Arial, sans-serif;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+nav { display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 8px; width: fit-content; }
+
+button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  opacity: 0.72;
+  -webkit-app-region: no-drag;
+}
+button:hover, button:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+button:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }

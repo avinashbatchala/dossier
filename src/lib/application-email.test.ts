@@ -25,6 +25,13 @@ describe("email addresses", () => {
     expect(isEmailAddress("John <john@example.com>")).toBe(false);
     expect(isEmailAddress("john@example")).toBe(false);
     expect(isEmailAddress("john@example.com.")).toBe(false);
+    expect(isEmailAddress("john@doe@example.com")).toBe(false);
+  });
+
+  it("reads a long posting quickly", () => {
+    const started = performance.now();
+    expect(emailAddresses(`${"a".repeat(100_000)} Write to jobs@acme.example.`)).toEqual(["jobs@acme.example"]);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });
 

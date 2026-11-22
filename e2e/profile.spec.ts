@@ -13,10 +13,11 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
   await page.getByLabel("City").blur();
   await expect(page.getByText("Saved just now")).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: /Skills & languages/ }).click();
+  await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: /^Skills/ }).click();
   await page.getByLabel("Add a skill").fill("Accessibility");
   await page.getByLabel("Add a skill").press("Enter");
   await expect(page.getByRole("list", { name: "Your skills" })).toContainText("Accessibility");
+  await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: /^Languages/ }).click();
   await page.getByLabel("Language", { exact: true }).fill("French");
   await page.getByLabel("Language", { exact: true }).press("Enter");
   await expect(page.getByLabel("French level")).toBeVisible();
@@ -34,6 +35,11 @@ test("fills in the profile, keeps it and shows it on the base resume", async ({ 
 
   await page.reload();
   await expect(page.getByRole("button", { name: /Design Lead.*Acme Payments/ })).toBeVisible();
+  // How many tailored resumes use each role (E33-2): the demo application's resume has the others.
+  await expect(page.getByRole("button", { name: /Design Lead.*Acme Payments/ })).toContainText("2 lines · not used in a resume yet");
+  await expect(page.getByRole("button", { name: /^Senior Product Designer/ })).toContainText("3 lines · used in 1 resume");
+  await page.getByRole("button", { name: /^Senior Product Designer/ }).click();
+  await expect(page.getByRole("button", { name: /^Senior Product Designer/, expanded: true })).toContainText("Used in 1 of 1 resume");
   await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: /Basics/ }).click();
   await expect(page.getByLabel("Full name")).toHaveValue("John Doe");
 
@@ -54,7 +60,7 @@ test("puts skills in groups and prints a line per group on the base resume (#280
   await page.getByLabel("Add to Tools").fill("Ahrefs");
   await page.getByLabel("Add to Tools").press("Enter");
   await expect(page.getByRole("list", { name: "Skills in Tools" })).toContainText("Ahrefs");
-  await page.getByRole("button", { name: "Figma (change its group)" }).click();
+  await page.getByRole("button", { name: "Figma: move it, or change its group" }).click();
   await page.getByRole("menuitemradio", { name: "Tools" }).click();
   await expect(page.getByRole("list", { name: "Skills in Tools" })).toContainText("Figma");
   await expect(page.getByText("Saved just now")).toBeVisible();
@@ -65,6 +71,17 @@ test("puts skills in groups and prints a line per group on the base resume (#280
   const skills = page.getByRole("article", { name: "Resume" }).locator('[data-unit="skills"] p');
   await expect(skills.last()).toHaveText("Tools: Figma · Ahrefs");
   await expect(skills.last().locator("strong")).toHaveText("Tools:");
+
+  // The order is yours, from a skill's menu, and the resume follows (public issue 62).
+  await page.goto("/profile?section=skills");
+  await page.getByRole("button", { name: "Ahrefs: move it, or change its group" }).click();
+  await page.getByRole("menuitem", { name: "Move left" }).click();
+  await expect(page.getByText("In your own order, which tailored resumes keep.")).toBeVisible();
+  await expect(page.getByText("Saved just now")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Skills in Tools" })).toHaveText(/Ahrefs.*Figma/);
+  await page.goto("/resume");
+  await expect(skills.last()).toHaveText("Tools: Ahrefs · Figma");
 });
 
 test("adds a project with its skills and shows it on the base resume (PRO-13)", async ({ page }) => {

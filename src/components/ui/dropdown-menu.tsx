@@ -82,6 +82,22 @@ export function DropdownMenuRadioItem({
   );
 }
 
+/** An on/off choice in a menu, e.g. "Photo"; ticked when on. */
+export function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: MenuPrimitive.DropdownMenuCheckboxItemProps) {
+  return (
+    <MenuPrimitive.CheckboxItem className={cn(itemClassName, className)} {...props}>
+      <span className="flex flex-1 items-center gap-2.5">{children}</span>
+      <MenuPrimitive.ItemIndicator className="text-xs" aria-hidden="true">
+        ✓
+      </MenuPrimitive.ItemIndicator>
+    </MenuPrimitive.CheckboxItem>
+  );
+}
+
 export function DropdownMenuSeparator({
   className,
   ...props

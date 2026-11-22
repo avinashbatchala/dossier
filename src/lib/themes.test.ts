@@ -4,10 +4,13 @@ import {
   ACCENTS,
   BUILT_IN_THEMES,
   contrastRatio,
+  DENSITIES,
+  FIT_LEVELS,
   hasSidebar,
   printCss,
   readableOnWhite,
   resolveTheme,
+  squeeze,
   unitsToMm,
   withoutSidebar,
 } from "./themes";
@@ -90,5 +93,32 @@ describe("printCss", () => {
   it("converts page units to millimetres", () => {
     expect(unitsToMm(640, "A4")).toBe(210);
     expect(unitsToMm(640, "LETTER")).toBe(215.9);
+  });
+});
+
+describe("squeeze (public issue 69)", () => {
+  it("tightens the spacing first, then the line height, then the type, never under the floors", () => {
+    const regular = DENSITIES.REGULAR;
+    expect(squeeze(regular, 0)).toBe(regular);
+    const levels = Array.from({ length: FIT_LEVELS }, (_, index) => squeeze(regular, index + 1));
+    expect(levels[0]).toMatchObject({ paddingY: 35, gap: 12, itemGap: 7, lineHeight: regular.lineHeight, fontSize: regular.fontSize });
+    expect(levels[1].lineHeight).toBeLessThan(regular.lineHeight);
+    expect(levels[1].fontSize).toBe(regular.fontSize);
+    expect(levels[2].fontSize).toBeLessThan(regular.fontSize);
+    for (let index = 1; index < levels.length; index++) {
+      for (const key of ["paddingY", "gap", "itemGap", "lineHeight", "fontSize"] as const) expect(levels[index][key]).toBeLessThanOrEqual(levels[index - 1][key]);
+    }
+    const tightest = squeeze(DENSITIES.COMPACT, FIT_LEVELS);
+    expect(tightest.fontSize).toBeGreaterThanOrEqual(9.25);
+    expect(tightest.lineHeight).toBeGreaterThanOrEqual(1.35);
+    expect(tightest.paddingY).toBeGreaterThanOrEqual(28);
+    expect(squeeze(regular, FIT_LEVELS + 5)).toEqual(squeeze(regular, FIT_LEVELS));
+  });
+
+  it("reaches the resolved theme and the print margins", () => {
+    const editorial = theme("editorial");
+    expect(resolveTheme(editorial, undefined, 2).density.gap).toBeLessThan(resolveTheme(editorial).density.gap);
+    expect(printCss(editorial, "A4", 1)).toContain(`margin: ${unitsToMm(35, "A4")}mm`);
+    expect(printCss(editorial, "A4")).toContain(`margin: ${unitsToMm(50, "A4")}mm`);
   });
 });

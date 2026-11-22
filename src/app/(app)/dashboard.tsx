@@ -1,36 +1,48 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { PageHeader } from "@/components/page-header";
 import { buttonClassName } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import type { ApplicationStatus } from "@/generated/prisma/enums";
-import { DASHBOARD_PERIODS, DEFAULT_QUIET_DAYS, type DashboardFigures, type DashboardPeriod } from "@/lib/dashboard";
+import { statusHref } from "@/lib/applications-list";
+import { DEFAULT_QUIET_DAYS, type DashboardFigures, type DashboardPeriod } from "@/lib/dashboard";
 import type { DayPeriod } from "@/lib/greeting";
 import { STATUSES } from "@/lib/status";
 
 import { ActivityChart } from "./activity-chart";
+import { DailyNote, type DailyNoteValue } from "./daily-note";
 import { FunnelChart } from "./funnel-chart";
 import { Greeting } from "./greeting";
-import { PeriodFilter, PeriodScoped } from "./period-filter";
-import { QuietDays } from "./quiet-days";
+import { NeedsYou } from "./needs-you";
+import { PeriodControl, PeriodProvider, PeriodScoped } from "./period-filter";
 
 const card = "flex flex-col rounded-panel border border-line-card bg-card";
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
-/** The dashboard (DSH-1 to DSH-6): the funnel, where things stand, what's worth a look, and the calendar. */
+/**
+ * The dashboard (DSH-1 to DSH-6, laid out as the UI refresh's 2a, E28-1): a
+ * header with today's date, the greeting and what needs the user this week;
+ * then two zones. On the left, "Your search so far", which the period
+ * scopes: the funnel, week by week, and where things stand. On the right,
+ * this week, which it doesn't: Needs you and the calendar. Below about
+ * 1500px they stack, the left zone first.
+ */
 export function Dashboard({
   figures,
   firstName,
   period,
+  today,
   range = "all",
   quietDays = DEFAULT_QUIET_DAYS,
   empty,
   calendar,
+  note,
 }: {
   figures: DashboardFigures;
   firstName: string;
   period: DayPeriod;
+  /** "Monday, 16 November", in the user's time zone. */
+  today?: string;
   /** The time filter (E9-8). */
   range?: DashboardPeriod;
   /** Days without news before a follow-up is suggested (E9-9). */
@@ -39,68 +51,78 @@ export function Dashboard({
   empty: boolean;
   /** The calendar (E15-6), which the time filter doesn't scope. */
   calendar?: ReactNode;
+  /** Today's note (E28-6): its text, null until it's written, "hidden" for today, or undefined for none. */
+  note?: DailyNoteValue | "hidden";
 }) {
-  const { sent, heardBack } = figures;
-  // The summary follows the time filter, so it says which period it covers.
-  const within = range === "all" ? null : DASHBOARD_PERIODS.find((entry) => entry.value === range)?.label.toLowerCase();
+  const { sent, heardBack } = figures.overall;
+  const thisWeek = figures.needsYou.filter((item) => item.soon).length;
   return (
     <>
-      <PageHeader
-        title={<Greeting name={firstName} serverPeriod={period} />}
-        description={
-          sent > 0
-            ? `${within ? `In the ${within} you've` : "You've"} sent ${plural(sent, "application", "applications")} and heard back from ${heardBack}. That's a solid run. Keep it going.`
-            : within
-              ? `Nothing sent in the ${within}. Your next application is only a paste away.`
-              : "Nothing sent yet. Your first application is only a paste away."
-        }
-        actions={
-          <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
-            + New application
-          </Link>
-        }
-      />
+      <header className="-mx-px bg-paper pt-2">
+        <div className="flex flex-col gap-1 rounded-t-panel border border-b-0 border-line-card bg-surface px-12 pt-7">
+          {note !== undefined && note !== "hidden" && (
+            <div className="pb-6">
+              <DailyNote initial={note} />
+            </div>
+          )}
+          {today && <p className="text-meta text-muted">{today}</p>}
+          <h1 className="font-serif text-title text-pretty">
+            <Greeting name={firstName} serverPeriod={period} />
+          </h1>
+          <p className="pt-1 text-lead text-pretty text-muted">
+            {sent > 0 ? `${sent} sent, ${heardBack} heard back. ` : "Nothing sent yet. "}
+            <strong className="font-medium text-ink">
+              {thisWeek > 0 ? `${plural(thisWeek, "thing needs", "things need")} you this week.` : empty ? "Your first application is only a paste away." : "Nothing needs you this week."}
+            </strong>
+          </p>
+        </div>
+      </header>
 
-      {empty ? (
-        <Columns calendar={calendar}>
-          <Welcome />
-        </Columns>
-      ) : (
-        <PeriodFilter period={range}>
-          <Columns calendar={calendar}>
-            <PeriodScoped className="grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] items-start gap-5">
-              <Funnel figures={figures} />
-              <ActivityChart weeks={figures.weeks} />
-              <WhereThingsStand byStatus={figures.byStatus} />
-              <WorthALook items={figures.attention} quietDays={quietDays} />
-            </PeriodScoped>
-          </Columns>
-        </PeriodFilter>
-      )}
-    </>
-  );
-}
-
-/**
- * The cards, with the calendar beside them where there's room for both.
- * Where there isn't, it comes after them, as wide as one card.
- */
-function Columns({ calendar, children }: { calendar?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="@container px-10 pb-[72px]">
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[1240px]:grid-cols-[minmax(0,1200px)_400px]">
-        {children}
-        {calendar && <div className="min-w-0 @min-[780px]:max-w-[calc(50%-10px)] @min-[1240px]:max-w-none">{calendar}</div>}
+      <div className="@container px-12 pt-7 pb-[72px]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 @min-[1500px]:grid-cols-[minmax(0,1fr)_580px]">
+          {empty ? (
+            <Welcome />
+          ) : (
+            <PeriodProvider period={range}>
+              <section aria-labelledby="search-heading" className="flex min-w-0 flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 id="search-heading" className="text-meta text-muted">
+                    Your search so far
+                  </h2>
+                  <PeriodControl aria-label="Period" />
+                </div>
+                <PeriodScoped className="flex flex-col gap-5">
+                  <Funnel figures={figures} />
+                  <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[900px]:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+                    <ActivityChart weeks={figures.weeks} />
+                    <WhereThingsStand byStatus={figures.byStatus} />
+                  </div>
+                </PeriodScoped>
+              </section>
+            </PeriodProvider>
+          )}
+          <section aria-labelledby="week-heading" className="@container/week flex min-w-0 flex-col gap-3">
+            <h2 id="week-heading" className="flex min-h-[30px] items-center text-meta text-muted">
+              This week · not affected by the period
+            </h2>
+            {/* One above the other in the 580px column; side by side when the zones stack and there's room. */}
+            <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 @min-[900px]/week:grid-cols-2">
+              {!empty && <NeedsYou items={figures.needsYou} quietDays={quietDays} />}
+              {calendar}
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 /** "Your funnel" (DSH-2): how far every sent application got, closed ones included, as a Sankey diagram. */
 function Funnel({ figures }: { figures: DashboardFigures }) {
   const { funnel, sent, heardBackPercent, reachedInterview } = figures;
+  const offers = funnel.find((step) => step.stage === "OFFER")?.count ?? 0;
   return (
-    <section aria-labelledby="funnel-heading" className={`${card} col-span-full gap-6 p-7`}>
+    <section aria-labelledby="funnel-heading" className={`${card} gap-6 p-7`}>
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 id="funnel-heading" className="font-serif text-section">
@@ -112,6 +134,7 @@ function Funnel({ figures }: { figures: DashboardFigures }) {
           <Figure value={String(sent)} label="sent" />
           <Figure value={heardBackPercent === null ? "None yet" : `${heardBackPercent}%`} label="heard back" />
           <Figure value={String(reachedInterview)} label="reached interview" />
+          <Figure value={String(offers)} label="offers" />
         </dl>
       </div>
       <FunnelChart funnel={funnel} />
@@ -128,7 +151,7 @@ function Figure({ value, label }: { value: string; label: string }) {
   );
 }
 
-/** "Where things stand" (DSH-4): every application by its status now. */
+/** "Where things stand" (DSH-4): every application by its status now, each row opening that status's list (E28-3). */
 function WhereThingsStand({ byStatus }: { byStatus: Record<ApplicationStatus, number> }) {
   const present = STATUSES.filter(({ value }) => byStatus[value] > 0);
   return (
@@ -149,49 +172,18 @@ function WhereThingsStand({ byStatus }: { byStatus: Record<ApplicationStatus, nu
       </div>
       <ul className="grid grid-cols-2 gap-x-5 gap-y-1">
         {STATUSES.map(({ value, label }) => (
-          <li key={value} className={`flex items-center gap-[9px] py-1.5 text-sm ${byStatus[value] > 0 ? "text-ink" : "text-muted"}`}>
-            <StatusDot status={value} />
-            <span className="flex-1">{label}</span>
-            <span className="tabular-nums">{byStatus[value]}</span>
+          <li key={value}>
+            <Link
+              href={statusHref(value)}
+              className={`-mx-2 flex items-center gap-[9px] rounded-control px-2 py-1.5 text-sm no-underline hover:bg-hover hover:text-ink ${byStatus[value] > 0 ? "text-ink" : "text-muted"}`}
+            >
+              <StatusDot status={value} />
+              <span className="flex-1">{label}</span>
+              <span className="tabular-nums">{byStatus[value]}</span>
+            </Link>
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-/** "Worth a look" (DSH-5): offers, drafts, quiet applications and interviews. */
-function WorthALook({ items, quietDays }: { items: DashboardFigures["attention"]; quietDays: number }) {
-  return (
-    <section aria-labelledby="attention-heading" className={`${card} px-7 pt-[26px] pb-3.5`}>
-      <div className="flex items-baseline justify-between gap-3 pb-3">
-        <h2 id="attention-heading" className="text-[15px] font-medium">
-          Worth a look
-        </h2>
-        {items.length > 0 && <span className="text-meta text-muted">{plural(items.length, "thing", "things")}</span>}
-      </div>
-      {items.length === 0 ? (
-        <p className="border-t border-line py-5 text-sm text-muted">All caught up. Nice.</p>
-      ) : (
-        <ul>
-          {items.map((item) => (
-            <li key={item.id} className="-mx-2.5 border-t border-line">
-              <Link href={`/applications/${item.id}${item.tab ? `?tab=${item.tab}` : ""}`} className="flex items-start gap-3 rounded-control px-2.5 py-[13px] text-ink hover:bg-hover">
-                <StatusDot status={item.status} className="mt-1.5" />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-field font-medium">
-                    {[item.company, item.role].filter(Boolean).join(", ")}
-                    {item.soon && <span className="ml-2 rounded-[6px] bg-warning-surface px-2 py-[3px] align-[1px] text-xs font-normal text-warning">Soon</span>}
-                  </span>
-                  <span className="text-meta leading-[1.45] text-muted">{item.reason}</span>
-                </span>
-                <span className="mt-px flex-none text-meta text-muted">{item.action} →</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      <QuietDays days={quietDays} />
     </section>
   );
 }
@@ -212,11 +204,14 @@ function Welcome() {
         <Link href="/new?fresh=1" className={buttonClassName("primary", "md", "hover:text-on-primary")}>
           + New application
         </Link>
+        <Link href="/welcome" className="text-sm text-muted underline underline-offset-2 hover:text-ink">
+          Open the setup guide
+        </Link>
       </div>
     </Panel>
   );
 }
 
 function Panel({ children }: { children: ReactNode }) {
-  return <div className={`${card} max-w-[640px] items-start gap-3 p-7`}>{children}</div>;
+  return <div className={`${card} items-start gap-3 p-7`}>{children}</div>;
 }

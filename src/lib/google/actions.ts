@@ -18,8 +18,9 @@ import { applyStatusChange } from "@/lib/status-changes";
 import { disconnectGoogle, googleConnection } from "./account";
 import { proposeSlots, scheduleInterview } from "./availability";
 import { GoogleError } from "./errors";
+import { worthSuggesting } from "./matching";
 import { loadGoogleClientConfig } from "./oauth";
-import { sendApplicationEmail, sendReply } from "./send";
+import { sendApplicationEmail, sendApplicationMessage, sendReply } from "./send";
 import { formatSlot } from "./slots";
 import { checkInboxNow, readReply } from "./sync";
 
@@ -124,7 +125,10 @@ export const checkInbox = action(z.object({}), async (_, { toast }) => {
   const result = await google(checkInboxNow);
   refreshEverything();
   if (!result) toast("Already checking. It'll be done in a moment.");
-  else toast(result.kept === 0 ? "Nothing new about your applications." : `${result.kept} new ${result.kept === 1 ? "email" : "emails"} about your applications.`);
+  else {
+    const news = result.kept === 0 ? "Nothing new about your applications." : `${result.kept} new ${result.kept === 1 ? "email" : "emails"} about your applications.`;
+    toast(result.unread ? `${news} ${result.unread} couldn't be read from Gmail; the next check tries again.` : news);
+  }
   return result;
 });
 
@@ -134,6 +138,14 @@ export const sendWithGmail = action(z.object({ id: z.string().min(1) }), async (
   refreshEverything();
   toast(sent.eventId ? `Sent. ${statusInfo(ApplicationStatus.SENT).toast}` : "Sent. I'll watch for replies.");
   return { eventId: sent.eventId };
+});
+
+/** "Send reply" on a drafted follow-up or answer to the offer (E30-7, E30-8), after the confirmation. */
+export const sendMessageWithGmail = action(z.object({ id: z.string().min(1) }), async ({ id }, { toast }) => {
+  await google(() => sendApplicationMessage(id));
+  refreshEverything();
+  toast("Sent, in the same thread.");
+  return null;
 });
 
 /** Drafts (or redrafts) the answer to an email in the background. */
@@ -171,7 +183,7 @@ export const markHandled = action(z.object({ emailId: z.string().min(1), handled
   return null;
 });
 
-/** Links a mail to an application ("Needs a look"), with the rest of its thread. Null unlinks. */
+/** Links a mail to an application, with the rest of its thread: from "Needs a look", or moved from another (public #134). Null unlinks. */
 export const linkEmail = action(z.object({ emailId: z.string().min(1), applicationId: z.string().min(1).nullable() }), async ({ emailId, applicationId }, { toast }) => {
   const email = await prisma.emailMessage.findUnique({ where: { id: emailId }, select: { threadId: true } });
   if (!email) throw new ActionError("That email is no longer in Dossier.");
@@ -179,7 +191,7 @@ export const linkEmail = action(z.object({ emailId: z.string().min(1), applicati
   // Mail dismissed before has nothing left to show, so it stays dismissed.
   await prisma.emailMessage.updateMany({ where: { threadId: email.threadId, dismissedAt: null }, data: { applicationId } });
   refreshEverything();
-  toast(applicationId ? "Linked. Replies in this thread will go there too." : "Unlinked.");
+  toast(applicationId ? "Linked. Replies in this thread will go there too." : "Unlinked. It's under Needs a look in the inbox.");
   return null;
 });
 
@@ -226,10 +238,16 @@ export const rereadEmail = action(z.object({ emailId: z.string().min(1) }), asyn
 
 /** Takes up a reply's suggested status (or turns it down), through the status module. */
 export const applySuggestedStatus = action(z.object({ emailId: z.string().min(1), accept: z.boolean() }), async ({ emailId, accept }, { toast }) => {
-  const email = await prisma.emailMessage.findUnique({ where: { id: emailId }, select: { applicationId: true, suggestedStatus: true } });
+  const email = await prisma.emailMessage.findUnique({
+    where: { id: emailId },
+    select: { applicationId: true, suggestedStatus: true, application: { select: { status: true } } },
+  });
   if (!email) throw new ActionError("That email is no longer in Dossier.");
   await prisma.emailMessage.update({ where: { id: emailId }, data: { suggestedStatus: null } });
-  if (!accept || !email.applicationId || !email.suggestedStatus) return { eventId: null };
+  // Checked again against where the application is now, so a suggestion made
+  // before it moved on never takes it backwards (#141).
+  if (!accept || !email.applicationId || !email.suggestedStatus || !email.application) return { eventId: null };
+  if (!worthSuggesting(email.application.status, email.suggestedStatus)) return { eventId: null };
   const result = await applyStatusChange(prisma, email.applicationId, email.suggestedStatus);
   refreshEverything();
   if (result.outcome !== "changed") return { eventId: null };

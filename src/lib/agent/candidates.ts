@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { linkKey, type FoundPosting } from "@/lib/job-search/search";
+import type { Breakdown } from "@/lib/scoring/factors";
+import { coverageOf, type Coverage } from "@/lib/posting-coverage";
 
 // The job agent's candidates (E16): postings it found and scored. A dismissed
 // one stays, so the posting never comes back, but keeps only what dedupe
@@ -30,7 +32,8 @@ export function agentDedupeKey(posting: Pick<FoundPosting, "source" | "externalI
 }
 
 /** A posting as a new candidate, with its score. */
-export function candidateData(posting: FoundPosting, score: { score: number; reasons: string[]; redFlags: string[] }): Prisma.AgentCandidateCreateInput {
+export function candidateData(posting: FoundPosting, score: { score: number; reasons: string[]; redFlags: string[]; breakdown?: Breakdown | null }): Prisma.AgentCandidateCreateInput {
+  const coverage = coverageOf(score);
   return {
     source: posting.source,
     externalId: posting.externalId,
@@ -47,6 +50,9 @@ export function candidateData(posting: FoundPosting, score: { score: number; rea
     score: score.score,
     reasons: score.reasons,
     redFlags: score.redFlags,
+    covered: coverage.hit,
+    requirements: coverage.total,
+    mustMissing: coverage.mustMissing,
     dedupeKey: agentDedupeKey(posting),
   };
 }
@@ -74,3 +80,20 @@ export const DISMISSED_TRIM = {
 export function stringsOf(value: Prisma.JsonValue | null): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
+
+/** A candidate's coverage, as stored with it. */
+export const candidateCoverage = (candidate: { covered: number; requirements: number; mustMissing: number }): Coverage => ({
+  hit: candidate.covered,
+  total: candidate.requirements,
+  mustMissing: candidate.mustMissing,
+});
+
+/** Why a run left a posting unscored (E32-5, PL3). Under the cut-off isn't kept: it follows the cut-off as it is now. */
+export type SkipReason = "budget" | "known" | "dismissed";
+
+/** A skip as the Skipped tab says it. */
+export const SKIP_WORDS: Record<SkipReason, string> = {
+  budget: "Past the run's scoring limit: it stays in Positions unscored",
+  known: "Already in Positions: saved, applied for or archived",
+  dismissed: "Dismissed earlier",
+};

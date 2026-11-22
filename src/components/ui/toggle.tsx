@@ -37,7 +37,7 @@ export function Toggle({ label, description, id, className, ...props }: TogglePr
         className="flex h-6 w-10 shrink-0 items-center rounded-full bg-toggle-off p-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary motion-safe:transition-colors"
         {...props}
       >
-        <Switch.Thumb className="block size-[18px] rounded-full bg-white shadow-knob data-[state=checked]:translate-x-4 motion-safe:transition-transform" />
+        <Switch.Thumb className="block size-[18px] rounded-full bg-white shadow-knob data-[state=checked]:translate-x-4 data-[state=checked]:bg-on-primary motion-safe:transition-[transform,background-color]" />
       </Switch.Root>
     </div>
   );

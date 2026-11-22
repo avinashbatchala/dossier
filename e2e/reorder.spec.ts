@@ -8,7 +8,8 @@ test.beforeAll(resetData);
 
 /** The role titles in the order the cards show them. */
 const roles = (page: Page) =>
-  page.locator("button[aria-expanded]").evaluateAll((buttons) => buttons.map((button) => button.querySelector("span span")?.textContent));
+  // Not the profile switcher, whose menu button is expanded too (E24-2), nor the sidebar's toggles (E27).
+  page.locator("main button[aria-expanded]:not([aria-haspopup])").evaluateAll((buttons) => buttons.map((button) => button.querySelector("span span")?.textContent));
 
 test("moves roles by keyboard and by dragging, and the resume follows", async ({ page }) => {
   await page.goto("/profile?section=experience");
@@ -35,6 +36,8 @@ test("moves roles by keyboard and by dragging, and the resume follows", async ({
   await page.mouse.up();
   await expect.poll(() => roles(page)).toEqual(["Product Designer", "UX Designer", "Senior Product Designer"]);
 
+  // The new order shows at once; reload only once it's saved.
+  await page.waitForLoadState("networkidle");
   await page.reload();
   expect(await roles(page)).toEqual(["Product Designer", "UX Designer", "Senior Product Designer"]);
 

@@ -1,8 +1,10 @@
 import "server-only";
 
-import { ApplicationStatus, DocumentKind, EmailDirection } from "@/generated/prisma/enums";
+import { Prisma } from "@/generated/prisma/client";
+import { ApplicationStatus, DocumentKind, EmailDirection, SentVia } from "@/generated/prisma/enums";
 import { unitsSchema } from "@/lib/application-data";
 import { emailAddresses, emailParts } from "@/lib/application-email";
+import { messageDraftSchema } from "@/lib/message-draft";
 import { resolveFileName } from "@/lib/file-name";
 import { renderPdf } from "@/lib/pdf/render";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +15,7 @@ import { applyStatusChange } from "@/lib/status-changes";
 import { loadGoogleAccount } from "./account";
 import { GoogleError } from "./errors";
 import { sendMail } from "./gmail";
-import type { Attachment } from "./mime";
+import { fromLine, type Attachment } from "./mime";
 
 // Sending through Gmail (E15-2): the application's email with its PDFs, and
 // answers to employers in their thread. Each send is asked for by the user;
@@ -26,8 +28,7 @@ const PRINTED = [
 
 /** "Jane Doe <jane@gmail.com>", from the profile's name and the account. */
 async function sender(address: string): Promise<string> {
-  const name = (await loadProfileName()).trim().replace(/[<>"]/g, "");
-  return name ? `${name} <${address}>` : address;
+  return fromLine(await loadProfileName(), address);
 }
 
 export type SentApplication = { threadId: string; eventId: string | null; attachments: string[] };
@@ -85,14 +86,14 @@ export async function sendApplicationEmail(applicationId: string): Promise<SentA
 
   let eventId: string | null = null;
   if (application.status === ApplicationStatus.DRAFT) {
-    const change = await applyStatusChange(prisma, applicationId, ApplicationStatus.SENT);
+    const change = await applyStatusChange(prisma, applicationId, ApplicationStatus.SENT, new Date(), { sentVia: SentVia.GMAIL });
     if (change.outcome === "changed") eventId = change.event.id;
   }
   return { threadId: sent.threadId, eventId, attachments: attachments.map((file) => file.fileName) };
 }
 
 /** "Re: …", unless it already is. */
-export const replySubject = (subject: string) => (/^\s*(re|aw|sv|antw)\s*:/i.test(subject) ? subject.trim() : `Re: ${subject.trim()}`);
+const replySubject = (subject: string) => (/^\s*(re|aw|sv|antw)\s*:/i.test(subject) ? subject.trim() : `Re: ${subject.trim()}`);
 
 /** Sends the answer to an employer's mail in its thread, and marks the mail as answered. */
 export async function sendReply(emailId: string, body: string): Promise<{ applicationId: string | null }> {
@@ -130,4 +131,50 @@ export async function sendReply(emailId: string, body: string): Promise<{ applic
     }),
   ]);
   return { applicationId: email.applicationId };
+}
+
+/**
+ * "Send reply" on a drafted message (E30-7, E30-8): in the application's
+ * Gmail thread, as an answer to its latest mail, after the confirmation.
+ * It's kept as sent mail, which restarts "Quiet for", and the draft goes.
+ */
+export async function sendApplicationMessage(applicationId: string): Promise<void> {
+  const account = await loadGoogleAccount();
+  if (!account) throw new GoogleError("not-connected", "Connect your Google account in Settings → Google first.");
+  const application = await prisma.application.findUnique({ where: { id: applicationId }, select: { emailThreadId: true, messageDraft: true } });
+  const draft = messageDraftSchema.safeParse(application?.messageDraft);
+  if (!application || !draft.success) throw new GoogleError("unavailable", "There's no message to send. Draft it again.");
+  if (!application.emailThreadId) throw new GoogleError("unavailable", "It went out without Gmail, so there's no thread to answer in. Copy it into your mail app instead.");
+  const body = draft.data.body.trim();
+  if (!body) throw new GoogleError("unavailable", "Write the message first.");
+  if (/\[…\]|\[\.\.\.\]/.test(body)) throw new GoogleError("unavailable", "Fill in the parts marked […] first.");
+
+  // Their latest mail, or else ours, in the thread.
+  const thread = await prisma.emailMessage.findMany({ where: { threadId: application.emailThreadId }, orderBy: { sentAt: "desc" } });
+  const latest = thread.find((email) => email.direction === EmailDirection.INCOMING) ?? thread[0];
+  if (!latest) throw new GoogleError("unavailable", "The thread isn't in Dossier yet. Check for mail in the inbox first.");
+  const to = latest.direction === EmailDirection.INCOMING ? (latest.fromName ? `${latest.fromName.replace(/[<>"]/g, "")} <${latest.fromAddress}>` : latest.fromAddress) : latest.toAddress;
+  const subject = replySubject(latest.subject);
+  const sent = await sendMail({ from: await sender(account.email), to, subject, body, inReplyTo: latest.messageId || undefined }, { threadId: application.emailThreadId });
+  await prisma.$transaction([
+    prisma.emailMessage.updateMany({ where: { threadId: application.emailThreadId, direction: EmailDirection.INCOMING, handledAt: null }, data: { handledAt: new Date() } }),
+    prisma.emailMessage.upsert({
+      where: { gmailId: sent.id },
+      create: {
+        gmailId: sent.id,
+        threadId: sent.threadId,
+        applicationId,
+        direction: EmailDirection.OUTGOING,
+        fromName: (await loadProfileName()).trim(),
+        fromAddress: account.email.toLowerCase(),
+        toAddress: to,
+        subject,
+        body,
+        sentAt: new Date(),
+        handledAt: new Date(),
+      },
+      update: {},
+    }),
+    prisma.application.update({ where: { id: applicationId }, data: { messageDraft: Prisma.DbNull } }),
+  ]);
 }

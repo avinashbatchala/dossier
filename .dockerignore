@@ -8,6 +8,7 @@ npm-debug.log*
 Dockerfile
 .dockerignore
 # Not part of the app: planning docs, the prototype, the website, test output and local data.
+desktop
 docs
 site
 _site

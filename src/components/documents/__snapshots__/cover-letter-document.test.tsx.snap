@@ -19,11 +19,18 @@ exports[`CoverLetterDocument > renders the prototype's letter 1`] = `
     <p
       class="_contactLine_fa1ef7"
     >
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="mailto:jane.doe@example.com"
+        rel="noreferrer"
+        target="_blank"
       >
-        jane.doe@example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          jane.doe@example.com
+        </bdi>
+      </a>
         ·  
       <bdi
         dir="ltr"
@@ -37,17 +44,31 @@ exports[`CoverLetterDocument > renders the prototype's letter 1`] = `
         Rotterdam, Netherlands
       </bdi>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://example.com/"
+        rel="noreferrer"
+        target="_blank"
       >
-        example.com
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          example.com
+        </bdi>
+      </a>
         ·  
-      <bdi
-        dir="ltr"
+      <a
+        class="_contactLink_fa1ef7"
+        href="https://linkedin.com/in/janedoe-example"
+        rel="noreferrer"
+        target="_blank"
       >
-        linkedin.com/in/janedoe-example
-      </bdi>
+        <bdi
+          dir="ltr"
+        >
+          linkedin.com/in/janedoe-example
+        </bdi>
+      </a>
     </p>
   </div>
   <div

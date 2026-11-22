@@ -1,0 +1,106 @@
+/* The app's own look, from src/app/globals.css, for the one screen it shows
+   before there's a server to show. */
+
+@font-face { font-family: "Geist"; src: url("fonts/Geist-Regular.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Geist"; src: url("fonts/Geist-Medium.woff2") format("woff2"); font-weight: 500; }
+@font-face { font-family: "Geist"; src: url("fonts/Geist-SemiBold.woff2") format("woff2"); font-weight: 600; }
+@font-face { font-family: "Newsreader"; src: url("fonts/Newsreader-Regular.woff2") format("woff2"); font-weight: 400; }
+
+:root {
+  color-scheme: light dark;
+  --paper: light-dark(#eeebe4, #1a1917);
+  --card: light-dark(#fbfaf7, #2a2825);
+  --input: light-dark(#ffffff, #1e1c1a);
+  --ink: light-dark(#1d1c1a, #f0ede7);
+  --muted: light-dark(#69655d, #aaa59c);
+  --line: light-dark(rgb(29 28 26 / 0.1), rgb(240 237 231 / 0.1));
+  --line-strong: light-dark(rgb(29 28 26 / 0.2), rgb(240 237 231 / 0.24));
+  --line-input: light-dark(rgb(29 28 26 / 0.5), rgb(240 237 231 / 0.42));
+  --primary: light-dark(#222222, #ebe7df);
+  --primary-hover: light-dark(#3a3936, #ffffff);
+  --on-primary: light-dark(#fbfaf7, #1d1c1a);
+  --error: light-dark(#9a3a2c, #f87171);
+  --warning: light-dark(#6b4f1a, #fbbf24);
+  --hover: light-dark(rgb(29 28 26 / 0.05), rgb(240 237 231 / 0.07));
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 15px/1.5 "Geist", Helvetica, Arial, sans-serif;
+}
+
+main { width: 100%; max-width: 560px; }
+.mark { display: block; margin-bottom: 24px; border-radius: 10px; }
+h1 { margin: 0; font: 400 36px/1.15 "Newsreader", Georgia, serif; letter-spacing: -0.015em; }
+.lead { margin: 10px 0 28px; color: var(--muted); }
+
+.options { display: grid; gap: 12px; }
+.option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.option:hover:not(:disabled) { border-color: var(--line-strong); background: var(--hover); }
+.option:disabled { cursor: not-allowed; opacity: 0.72; }
+.option-title { font-weight: 600; }
+.option-text { color: var(--muted); font-size: 14px; }
+.option-note { margin-top: 4px; font-size: 13px; font-weight: 500; }
+
+label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
+input {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-input);
+  border-radius: 8px;
+  background: var(--input);
+  color: inherit;
+  font: inherit;
+}
+input::placeholder { color: var(--muted); opacity: 1; }
+
+.message { min-height: 20px; margin: 8px 0 16px; font-size: 14px; color: var(--error); }
+.message.warning { color: var(--warning); }
+
+.actions { display: flex; align-items: center; gap: 16px; }
+button.primary {
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font: 600 14.5px/1.4 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+button.primary:hover { background: var(--primary-hover); }
+button.primary:disabled { opacity: 0.6; cursor: progress; }
+button.text { min-height: 24px; padding: 0; border: 0; background: none; color: var(--muted); font: 500 14px/1.4 inherit; font-family: inherit; cursor: pointer; }
+button.text:hover { color: var(--ink); }
+
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.log { margin: -16px 0 24px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+.version { margin: 28px 0 0; width: 100%; max-width: 560px; color: var(--muted); font-size: 12px; }

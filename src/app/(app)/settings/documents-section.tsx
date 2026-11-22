@@ -12,7 +12,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { DocumentKind, type DateFormat, type PaperSize, type Tone } from "@/generated/prisma/enums";
 import { DOCUMENT_LANGUAGES } from "@/lib/document-language";
 import { FILE_NAME_TOKENS, resolveFileName } from "@/lib/file-name";
-import { DATE_FORMATS, PAGE_LIMITS, type PageLimit } from "@/lib/settings";
+import { DATE_FORMATS, DOCUMENTS_TO_WRITE, DOCUMENTS_TO_WRITE_LABELS, type DocumentsToWrite } from "@/lib/settings";
 import { PAPER_SIZES } from "@/lib/themes";
 import { TONES } from "@/lib/tones";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -27,12 +27,11 @@ export type DocumentSettings = {
   defaultTone: Tone;
   docLanguage: string | null;
   /** The base resume's language; null is English. */
-  resumeLanguage: string | null;
   customLanguages: string[];
   fileNamePattern: string;
   includeRefs: boolean;
   signCoverLetters: boolean;
-  pageLimit: PageLimit;
+  documentsToWrite: DocumentsToWrite;
 };
 
 const POSTING_LANGUAGE = "__posting";
@@ -169,26 +168,14 @@ export function DocumentsSection({
           )}
         </div>
         <Select
-          label="Base resume language"
-          hint="For its headings and dates. Tailored documents use their application's language."
-          value={settings.resumeLanguage ?? "English"}
-          onChange={(event) => change({ resumeLanguage: event.target.value === "English" ? null : event.target.value })}
+          label="Documents to write"
+          hint="What New application writes, unless you choose there. A skipped one can be written later from the application."
+          value={settings.documentsToWrite}
+          onChange={(event) => change({ documentsToWrite: event.target.value as DocumentsToWrite })}
         >
-          {DOCUMENT_LANGUAGES.map(({ name }) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </Select>
-        <Select
-          label="Resume length"
-          hint="A tailored resume that runs longer is trimmed, oldest roles first, and I'll tell you what was cut."
-          value={settings.pageLimit}
-          onChange={(event) => change({ pageLimit: event.target.value as PageLimit })}
-        >
-          {PAGE_LIMITS.map((limit) => (
-            <option key={limit.value} value={limit.value}>
-              {limit.label}
+          {DOCUMENTS_TO_WRITE.map((value) => (
+            <option key={value} value={value}>
+              {DOCUMENTS_TO_WRITE_LABELS[value]}
             </option>
           ))}
         </Select>

@@ -12,8 +12,15 @@ export const AGENDA_DAYS = 7;
 
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Whether a string is a day, e.g. from the address bar. */
-export const isDay = (value: unknown): value is Day => typeof value === "string" && DAY.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+/**
+ * Whether a string is a day, e.g. from the address bar. It has to come back
+ * unchanged, as Date.parse rolls "2026-02-30" over into March.
+ */
+export const isDay = (value: unknown): value is Day => {
+  if (typeof value !== "string" || !DAY.test(value)) return false;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
+};
 
 const parts = (day: Day) => {
   const [, year, month, date] = DAY.exec(day)!;
@@ -36,9 +43,9 @@ export function addDays(day: Day, count: number): Day {
 }
 
 /** 1 = Monday … 7 = Sunday. */
-export const weekday = (day: Day) => ((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+const weekday = (day: Day) => ((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 
-export const startOfWeek = (day: Day) => addDays(day, 1 - weekday(day));
+const startOfWeek = (day: Day) => addDays(day, 1 - weekday(day));
 
 export const startOfMonth = (day: Day) => `${day.slice(0, 7)}-01`;
 
@@ -83,10 +90,10 @@ export type CalendarItem = {
 } & ({ allDay: false; start: Date; end: Date } | { allDay: true; startDay: Day; endDay: Day });
 
 export type TimedItem = Extract<CalendarItem, { allDay: false }>;
-export type AllDayItem = Extract<CalendarItem, { allDay: true }>;
+type AllDayItem = Extract<CalendarItem, { allDay: true }>;
 
 /** Whether an all-day item covers a day; its end day is the one after it. */
-export const coversDay = (item: AllDayItem, day: Day) => item.startDay <= day && day < item.endDay;
+const coversDay = (item: AllDayItem, day: Day) => item.startDay <= day && day < item.endDay;
 
 /** A day's items: all-day ones first, then by start. One over midnight is on both days. */
 export function itemsOnDay(items: readonly CalendarItem[], day: Day, timeZone: string): CalendarItem[] {

@@ -10,7 +10,8 @@ import { extractedOf, unitSchema, unitsSchema } from "@/lib/application-data";
 import { updateDocuments } from "@/lib/document-units";
 import { withoutPrivateParts } from "@/lib/letter-frame";
 import { prisma } from "@/lib/prisma";
-import { loadFactTexts, loadProfile } from "@/lib/profile-data";
+import { profileOfApplication } from "@/lib/frozen-copy";
+import { loadFactTexts } from "@/lib/profile-data";
 
 import { defineJob } from "./runner";
 
@@ -47,7 +48,7 @@ export const regenerateUnitJob = defineJob({
     const unit = units?.find((entry) => entry.id === unitId);
     if (!application || !units || !unit || unit.text !== from) return { outcome: "changed" as const };
 
-    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(), loadFactTexts(applicationId)]);
+    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), profileOfApplication(application.frozen, application.profileId), loadFactTexts(applicationId)]);
     const { data } = await regenerateUnit(
       provider,
       {

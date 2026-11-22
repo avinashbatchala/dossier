@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { demoLetterUnits, demoProfile } from "@/lib/demo-profile";
 import { documentLabels } from "@/lib/document-labels";
 
-import { defaultFrame, isFrameUnit, isParagraph, letterDate, newFrame, withFrame, withoutPrivateParts } from "./letter-frame";
+import { defaultFrame, isFrameUnit, isParagraph, letterDate, letterText, newFrame, withFrame, withoutPrivateParts } from "./letter-frame";
 
 const { basics } = demoProfile();
 const context = { basics, company: "Ledgerly", location: "Amsterdam", date: new Date(Date.UTC(2026, 9, 3)), dateFormat: "DAY_MONTH_YEAR" as const };
@@ -68,5 +68,35 @@ describe("the letter's frame (E8-11)", () => {
     expect(withoutPrivateParts(framed).map((unit) => unit.id)).not.toContain("sender");
     expect(withoutPrivateParts(framed).map((unit) => unit.id)).not.toContain("signature");
     expect(withoutPrivateParts(framed).map((unit) => unit.id)).toContain("greeting");
+  });
+});
+
+describe("the letter as text (public issue 101)", () => {
+  const parts = (units: { id: string; text: string }[]) => withFrame(units.map((unit) => ({ ...unit, label: "" })), defaultFrame(context));
+
+  it("runs from the greeting to the name under the sign-off, without the sender, date or recipient", () => {
+    const units = [
+      { id: "paragraph:1", text: "I'd like to join Ledgerly.\n" },
+      { id: "paragraph:2", text: " " },
+      { id: "paragraph:3", text: "I've run payments for six years." },
+      { id: "sign-off", text: "Kind regards," },
+    ];
+    expect(letterText(parts(units), "Best,")).toBe("Dear Ledgerly team,\n\nI'd like to join Ledgerly.\n\nI've run payments for six years.\n\nKind regards,\nJane Doe");
+  });
+
+  it("takes the tone's sign-off for a letter without its own, and the letter's own greeting and name when edited", () => {
+    const units = [
+      { id: "greeting", text: "Hello Mia," },
+      { id: "paragraph:1", text: "Short and sweet." },
+      { id: "signature", text: "Jane" },
+    ];
+    expect(letterText(parts(units), "Best,")).toBe("Hello Mia,\n\nShort and sweet.\n\nBest,\nJane");
+  });
+
+  it("copies the demo letter whole", () => {
+    const text = letterText(parts(demoLetterUnits()), "Best,");
+    expect(text.startsWith("Dear Ledgerly team,\n\n")).toBe(true);
+    expect(text.endsWith("\nJane Doe")).toBe(true);
+    expect(text).not.toContain("jane.doe@example.com");
   });
 });

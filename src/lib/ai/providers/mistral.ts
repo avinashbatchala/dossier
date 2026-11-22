@@ -3,15 +3,17 @@ import "server-only";
 import OpenAI from "openai";
 import type { ReasoningEffort } from "openai/resources/shared";
 
+import type { UsageSink } from "@/lib/usage";
+
 import { AiError } from "../errors";
 import type { ChatAnswer, ChatCall } from "../provider";
 import { OpenAICompatibleProvider } from "./openai-compatible";
 
 /** Offered before a key is saved. The free plan has these; Large needs a paid one. */
-export const MISTRAL_FALLBACK_MODELS = ["ministral-8b-latest", "mistral-medium-latest", "mistral-small-latest"];
+export const MISTRAL_FALLBACK_MODELS = ["ministral-8b-latest", "mistral-small-2603", "mistral-small-latest"];
 
 /** What Mistral's model list says about a model, besides OpenAI's fields. */
-export type MistralModel = Pick<OpenAI.Models.Model, "id"> & {
+type MistralModel = Pick<OpenAI.Models.Model, "id"> & {
   capabilities?: { completion_chat?: boolean };
   /** The model's other names; each is listed as a model of its own too. */
   aliases?: string[];
@@ -32,8 +34,9 @@ export class MistralProvider extends OpenAICompatibleProvider {
     private readonly apiKey: string | null,
     model: string | null,
     timeoutMs: number,
+    onUsage?: UsageSink,
   ) {
-    super("MISTRAL", baseURL, apiKey, model, timeoutMs);
+    super("MISTRAL", baseURL, apiKey, model, timeoutMs, onUsage);
   }
 
   protected override async chat(call: ChatCall): Promise<ChatAnswer> {
@@ -73,7 +76,7 @@ export class MistralProvider extends OpenAICompatibleProvider {
  * model goes by (Mistral Medium has ten); of those, the shortest `-latest`
  * one, or else the shortest. Embedding, OCR and retired models are left out.
  */
-export function mistralModelNames(cards: MistralModel[]): string[] {
+function mistralModelNames(cards: MistralModel[]): string[] {
   const named = new Set<string>();
   const chosen = new Set<string>();
   for (const card of cards) {

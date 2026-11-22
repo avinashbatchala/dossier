@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { json, stubFetch } from "@/lib/ai/test-http";
 import { freehireLastPage, freehirePage } from "@/test/job-search-fixtures";
 
-import { freehire } from "./freehire";
+import { builtInAdapter } from "@/lib/portals/adapters";
+
 import { EMPTY_QUERY } from "./search";
+
+const freehire = builtInAdapter("FREEHIRE");
 
 const fetchPosting = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/posting-fetch", () => ({ fetchPosting }));

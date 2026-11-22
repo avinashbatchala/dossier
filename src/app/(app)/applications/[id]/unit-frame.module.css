@@ -34,6 +34,46 @@
   outline: 2px solid var(--color-ink);
 }
 
+/* The lines that cover the requirement picked in the Fit column (E30-4). */
+.frame[data-highlight-all]::before,
+.frame [data-highlight] {
+  background: var(--color-flash);
+}
+
+.frame [data-highlight] {
+  border-radius: 3px;
+}
+
+/* Where a change landed (E30-12): light green with a line, fading out after
+   about 4 s; the changed lines alone when the diff picked them. */
+.landing::before,
+.frame [data-change] {
+  background: var(--color-change);
+  outline: 1px solid var(--color-change-line);
+}
+
+.frame [data-change] {
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing::before {
+    animation: landing 4s ease-in forwards;
+  }
+}
+
+@keyframes landing {
+  from,
+  80% {
+    background: var(--color-change);
+    outline-color: var(--color-change-line);
+  }
+  to {
+    background: transparent;
+    outline-color: transparent;
+  }
+}
+
 /* After a save or an AI change: a short yellow glow that fades out. */
 .flash::before {
   animation: flash 1.6s ease-out;

@@ -28,6 +28,12 @@ describe("the calendar's days (E15-6)", () => {
     expect(startOfDay("2026-10-26", zone).toISOString()).toBe("2026-10-25T23:00:00.000Z");
     expect([isDay("2026-10-19"), isDay("2026-13-40"), isDay("today"), isDay(undefined)]).toEqual([true, false, false, false]);
   });
+
+  it("accepts only real Gregorian days in the query format", () => {
+    expect(["2026-02-29", "2026-02-30", "2026-04-31"].map(isDay)).toEqual([false, false, false]);
+    expect(["2024-02-29", "2026-02-28", "2026-04-30", "0000-01-01", "0099-12-31"].map(isDay)).toEqual([true, true, true, true, true]);
+    expect([null, [], "", "2026-2-01", "2026-02-1", undefined].map(isDay)).toEqual([false, false, false, false, false, false]);
+  });
 });
 
 describe("the agenda", () => {

@@ -33,6 +33,16 @@ describe("searchPostings", () => {
     expect(requests).toHaveLength(3);
   });
 
+  it("leaves out postings clearly for another level, whatever the source could filter (public issue 59)", async () => {
+    stubFetch(() => json(jsearchV2Page));
+    // The fixture: a Senior Product Designer, and a UX Researcher whose posting doesn't say.
+    const junior = await searchPostings("JSEARCH", ninja, { ...query, experience: "junior" });
+    expect(junior.postings.map((posting) => posting.title)).toEqual(["UX Researcher"]);
+    const senior = await searchPostings("JSEARCH", ninja, { ...query, experience: "senior" });
+    expect(senior.postings.map((posting) => posting.title)).toEqual(["Senior Product Designer, Payments", "UX Researcher"]);
+    expect((await searchPostings("JSEARCH", ninja, query)).postings).toHaveLength(2);
+  });
+
   it("doesn't keep failures", async () => {
     let status = 503;
     const requests = stubFetch(() => json(jsearchV2LastPage, { status }));

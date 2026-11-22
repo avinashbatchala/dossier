@@ -1,13 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { calendarDay } from "@/lib/application-documents";
 import { demoLetterUnits, demoResumeUnits } from "@/lib/demo-profile";
 import { startJob } from "@/lib/jobs/runner";
-import { createTestClient, resetDatabase } from "@/test/db";
+import { createTestClient, resetDatabase, TEST_PROFILE_ID } from "@/test/db";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
 
-import { createApplication, startWritingDocuments } from "./actions";
+import { addGapSkill, addSentApplication, savePostingForLater, startReadingPosting, startWritingApplication } from "./actions";
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
@@ -21,12 +20,6 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/jobs/runner")>()),
   startJob: vi.fn(async () => "write-job"),
-}));
-// Trimming renders PDFs; here it says what it would cut.
-const trim = vi.hoisted(() => ({ result: { trimmed: [] as unknown[], fits: true } }));
-vi.mock("@/lib/page-limit", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/page-limit")>()),
-  fitResumeToPages: vi.fn(async () => trim.result),
 }));
 vi.mock("@/lib/profile-data", async () => {
   const { demoProfile } = await import("@/lib/demo-profile");
@@ -50,13 +43,13 @@ const extracted = {
 const match = { items: [{ requirement: "Experience with payments", result: "gap" as const, skill: null, experienceIds: [], note: "Nothing in your profile" }] };
 const details = { title: "Designer at Ledgerly", company: "Ledgerly B.V.", role: "Senior Product Designer", location: "Amsterdam", mode: "Hybrid", salary: "", deadline: "2026-10-20" };
 
-async function finishedJobs() {
+async function finishedJobs(profileId?: string) {
   await prisma().job.create({
     data: {
       id: "read-job",
       type: "read-posting",
       status: "DONE",
-      input: { posting: "Ledgerly is hiring a Senior Product Designer." },
+      input: { posting: "Ledgerly is hiring a Senior Product Designer.", ...(profileId ? { profileId } : {}) },
       result: { extracted, extractedWith: "extract-posting@1", match, matchedWith: "match-requirements@1" },
     },
   });
@@ -83,178 +76,191 @@ beforeEach(async () => {
 });
 afterAll(() => prisma().$disconnect());
 
-describe("startWritingDocuments", () => {
-  it("writes from the posting as read, with the details as edited (E7-6)", async () => {
-    await finishedJobs();
-    expect(await startWritingDocuments({ readJobId: "read-job", details, match, tone: "WARM", note: "Hi" })).toEqual({ ok: true, data: "write-job" });
-    expect(vi.mocked(startJob).mock.calls[0][1]).toMatchObject({
-      readJobId: "read-job",
-      posting: "Ledgerly is hiring a Senior Product Designer.",
-      extracted: { company: "Ledgerly B.V.", title: "Designer at Ledgerly", salary: null, deadline: "2026-10-20", requirements: extracted.requirements },
-      tone: "WARM",
-      note: "Hi",
-    });
-  });
+describe("startWritingApplication (E31-4)", () => {
+  const writing = { readJobId: "read-job", details, match, tone: "FORMAL" as const, note: "Relocating in January.", postingUrl: "jobs.ledgerly.example/42" };
 
-  it("needs a finished reading", async () => {
-    expect(await startWritingDocuments({ readJobId: "gone", details, match, tone: "WARM", note: "" })).toMatchObject({
-      ok: false,
-      error: "That reading of the posting is no longer available. Read the posting again.",
-    });
-  });
-});
-
-describe("createApplication", () => {
-  it("creates the draft, both documents in the base theme and the first message, in one go (E7-6)", async () => {
+  it("makes the Draft at once, from the reading and the details as edited, and writes its documents into it on the server", async () => {
     await finishedJobs();
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "jobs.ledgerly.example/42" });
-    expect(result.ok).toBe(true);
-    const id = result.ok ? result.data : "";
-    const application = await prisma().application.findUniqueOrThrow({ where: { id }, include: { documents: { orderBy: { kind: "asc" } }, messages: true } });
-    // Each document's history starts with the first draft (E8-10).
-    expect(await prisma().documentVersion.findMany({ where: { document: { applicationId: id } }, select: { cause: true } })).toEqual([{ cause: "WRITTEN" }, { cause: "WRITTEN" }]);
+    const result = await startWritingApplication({ ...writing, knownGaps: ["Experience with payments"] });
+    if (!result.ok) throw new Error(result.error);
+    const id = result.data;
+    const application = await prisma().application.findUniqueOrThrow({ where: { id }, include: { documents: true, messages: true, knownGaps: true, facts: true } });
     expect(application).toMatchObject({
       status: "DRAFT",
       title: "Designer at Ledgerly",
       company: "Ledgerly B.V.",
-      salary: "",
       postingUrl: "https://jobs.ledgerly.example/42",
       postingText: "Ledgerly is hiring a Senior Product Designer.",
       extracted: { company: "Ledgerly" },
       extractedWith: "extract-posting@1",
+      match,
       matchedWith: "match-requirements@1",
       tone: "FORMAL",
       language: "English",
+      profileId: TEST_PROFILE_ID,
     });
-    // "Anything I should know?" is the application's first fact (APP-15).
-    expect(await prisma().fact.findMany({ where: { applicationId: id }, select: { text: true } })).toEqual([{ text: "Relocating in January." }]);
     expect(application.deadline?.toISOString().slice(0, 10)).toBe("2026-10-20");
-    expect(application.documents.map((document) => [document.kind, document.themeId, document.writtenWith])).toEqual([
-      ["RESUME", "editorial", "tailor-resume@1"],
-      ["COVER_LETTER", "editorial", "write-cover-letter@1"],
-    ]);
-    expect(application.messages).toHaveLength(1);
-    expect(application.messages[0]).toMatchObject({ role: "AI", text: expect.stringMatching(/^Here's what I tailored for Ledgerly B\.V\.:\n\n- /) });
-    expect(application.messages[0].text).toMatch(/Nothing invented: every line comes from your profile\.$/);
-    expect(await prisma().job.count({ where: { key: `application:${id}`, applicationId: id } })).toBe(2);
+    // Nothing written yet: that's the job's.
+    expect(application.documents).toEqual([]);
+    expect(application.messages).toEqual([]);
+    // "Anything I should know?" is its first fact (APP-15); "I don't have this" is kept (E30-5).
+    expect(application.facts.map((fact) => fact.text)).toEqual(["Relocating in January."]);
+    expect(application.knownGaps.map((gap) => gap.requirement)).toEqual(["Experience with payments"]);
+    expect(vi.mocked(startJob)).toHaveBeenCalledWith(expect.objectContaining({ type: "write-application" }), { applicationId: id, write: "both" }, { key: `writing:${id}`, applicationId: id });
+    expect(await prisma().job.findUniqueOrThrow({ where: { id: "read-job" } })).toMatchObject({ key: `application:${id}`, applicationId: id });
   });
 
-  it("links the Find jobs posting it was started from (E14-8)", async () => {
+  it("returns the same application when asked twice, and writes once", async () => {
     await finishedJobs();
-    const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", title: "Senior Product Designer" } });
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "", postingId: posting.id });
-    expect(result.ok).toBe(true);
-    expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ applicationId: result.ok ? result.data : "" });
-  });
-
-  it("links the startup it was written to from Startups (#222)", async () => {
-    await finishedJobs();
-    const startup = await prisma().startup.create({ data: { source: "HN", externalId: "1", company: "Ledgerly", roles: [], emails: [], links: [], reasons: [] } });
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "", startupId: startup.id });
-    expect(result.ok).toBe(true);
-    expect(await prisma().startup.findUniqueOrThrow({ where: { id: startup.id } })).toMatchObject({ applicationId: result.ok ? result.data : "", status: "NEW" });
-  });
-
-  it("leaves a posting that already has an application, and one that's gone, alone", async () => {
-    await finishedJobs();
-    const earlier = await prisma().application.create({ data: { title: "Applied before" } });
-    const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", applicationId: earlier.id } });
-    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "", postingId: posting.id })).toMatchObject({ ok: true });
-    expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ applicationId: earlier.id });
-  });
-
-  it("creates the application when its posting was removed meanwhile", async () => {
-    await finishedJobs();
-    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "", postingId: "gone" })).toMatchObject({ ok: true });
-  });
-
-  it("stores every part of the letter: the sender and signature from the profile, the date written now, in its language (E8-11)", async () => {
-    await finishedJobs();
-    await prisma().setting.create({ data: { key: "docLanguage", value: "German" } });
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
-    const letter = await prisma().document.findUniqueOrThrow({ where: { applicationId_kind: { applicationId: result.ok ? result.data : "", kind: "COVER_LETTER" } } });
-    const units = letter.units as { id: string; text: string }[];
-    expect(units.map((unit) => unit.id)).toEqual(["sender", "date", "recipient", "greeting", "paragraph:1", "paragraph:2", "paragraph:3", "paragraph:4", "sign-off", "signature"]);
-    const text = (id: string) => units.find((unit) => unit.id === id)?.text;
-    expect(text("sender")).toMatch(/^Jane Doe\n.*jane\.doe@example\.com/);
-    expect(text("signature")).toBe("Jane Doe");
-    expect(text("date")).toBe(new Intl.DateTimeFormat("de", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(calendarDay()));
-    // This job's letter came without a recipient or greeting, so German ones stand in.
-    expect(text("recipient")).toMatch(/^Ledgerly B\.V\. · Personalabteilung/);
-    expect(text("greeting")).toBe("Sehr geehrte Damen und Herren,");
-    expect(await prisma().documentVersion.findFirstOrThrow({ where: { documentId: letter.id } })).toMatchObject({ units });
+    const [first, second] = await Promise.all([startWritingApplication(writing), startWritingApplication(writing)]);
+    const third = await startWritingApplication(writing);
+    const ids = [first, second, third].filter((result) => result.ok).map((result) => (result.ok ? result.data : ""));
+    expect(new Set(ids).size).toBe(1);
+    expect(await prisma().application.count()).toBe(1);
+    expect(vi.mocked(startJob)).toHaveBeenCalledTimes(1);
   });
 
   it("marks a new letter to be signed when Settings → Documents says so (E17)", async () => {
     await finishedJobs();
     await prisma().setting.create({ data: { key: "signCoverLetters", value: "true" } });
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
+    const result = await startWritingApplication(writing);
     expect(await prisma().application.findUniqueOrThrow({ where: { id: result.ok ? result.data : "" } })).toMatchObject({
       signatureOnLetter: true,
     });
   });
 
-  it("returns the same application when asked twice", async () => {
+  it("needs a finished reading, and a link that's a web address", async () => {
+    expect(await startWritingApplication({ ...writing, readJobId: "gone" })).toMatchObject({ ok: false, error: "That reading of the posting is no longer available. Read the posting again." });
     await finishedJobs();
-    const [first, second] = await Promise.all([
-      createApplication({ writeJobId: "write-job", details, postingUrl: "" }),
-      createApplication({ writeJobId: "write-job", details, postingUrl: "" }),
-    ]);
-    const third = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
-    const ids = [first, second, third].filter((result) => result.ok).map((result) => (result.ok ? result.data : ""));
-    expect(new Set(ids).size).toBe(1);
-    expect(await prisma().application.count()).toBe(1);
-  });
-
-  it("refuses a link that isn't a web address, and documents that aren't ready", async () => {
-    await finishedJobs();
-    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "javascript:alert(1)" })).toMatchObject({ ok: false });
-    await prisma().job.update({ where: { id: "write-job" }, data: { status: "RUNNING" } });
-    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "" })).toMatchObject({
-      ok: false,
-      error: "Those documents aren't ready. Try creating the application again.",
-    });
+    expect(await startWritingApplication({ ...writing, postingUrl: "javascript:alert(1)" })).toMatchObject({ ok: false });
     expect(await prisma().application.count()).toBe(0);
   });
 
-  it("trims the resume to its page limit and says what was cut (E10-10)", async () => {
-    const { fitResumeToPages } = await import("@/lib/page-limit");
-    await prisma().setting.create({ data: { key: "pageLimit", value: "1" } });
+  it("writes in the language chosen, else Settings', else the posting's (E31-3)", async () => {
     await finishedJobs();
-    trim.result = {
-      trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],
-      fits: true,
-    };
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
-    const id = result.ok ? result.data : "";
-    expect(fitResumeToPages).toHaveBeenCalledWith(id, expect.objectContaining({ experience: expect.any(Array) }), 1);
-    const [message] = await prisma().chatMessage.findMany({ where: { applicationId: id } });
-    expect(message.text).toMatch(/\n- Left out Studio Brik \(2015–2018\) to fit one page\n\nNothing invented/);
-    trim.result = { trimmed: [], fits: true };
+    const dutch = await startWritingApplication({ ...writing, language: "Dutch" });
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: dutch.ok ? dutch.data : "" } })).toMatchObject({ language: "Dutch" });
   });
 
-  it("trims to two pages unless another limit was chosen (SET-9)", async () => {
-    const { fitResumeToPages } = await import("@/lib/page-limit");
-    vi.mocked(fitResumeToPages).mockClear();
-    await finishedJobs();
-    trim.result = {
-      trimmed: [{ kind: "unit", unit: { id: "experience:e3", label: "Studio Brik role", text: "Built things" }, index: 3 }],
-      fits: true,
-    };
-    const result = await createApplication({ writeJobId: "write-job", details, postingUrl: "" });
-    const id = result.ok ? result.data : "";
-    expect(fitResumeToPages).toHaveBeenCalledWith(id, expect.anything(), 2);
-    const [message] = await prisma().chatMessage.findMany({ where: { applicationId: id } });
-    expect(message.text).toMatch(/- Left out Studio Brik \(2015–2018\) to fit two pages/);
-    trim.result = { trimmed: [], fits: true };
+  it("makes it from the profile the posting was read with (E24-6)", async () => {
+    const backend = await prisma().profile.create({ data: { name: "Backend", sort: 1 } });
+    expect(await startReadingPosting({ posting: "Acme is hiring.", profileId: backend.id })).toEqual({ ok: true, data: "write-job" });
+    expect(vi.mocked(startJob).mock.calls[0][1]).toEqual({ posting: "Acme is hiring.", profileId: backend.id });
+    await startReadingPosting({ posting: "Acme is hiring.", profileId: "deleted" });
+    expect(vi.mocked(startJob).mock.calls[1][1]).toEqual({ posting: "Acme is hiring.", profileId: TEST_PROFILE_ID });
+
+    await finishedJobs(backend.id);
+    const result = await startWritingApplication(writing);
+    expect(await prisma().application.findUniqueOrThrow({ where: { id: result.ok ? result.data : "" } })).toMatchObject({ profileId: backend.id });
   });
 
-  it("leaves the resume as written without a page limit (SET-9)", async () => {
-    const { fitResumeToPages } = await import("@/lib/page-limit");
-    vi.mocked(fitResumeToPages).mockClear();
-    await prisma().setting.create({ data: { key: "pageLimit", value: "none" } });
+  it("links the Find jobs posting and the startup it was started from, leaving one already applied for alone (E14-8, #222)", async () => {
     await finishedJobs();
-    expect(await createApplication({ writeJobId: "write-job", details, postingUrl: "" })).toMatchObject({ ok: true });
-    expect(fitResumeToPages).not.toHaveBeenCalled();
+    const earlier = await prisma().application.create({ data: { title: "Applied before" } });
+    const taken = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-0", applicationId: earlier.id } });
+    expect(await startWritingApplication({ ...writing, postingId: taken.id })).toMatchObject({ ok: true });
+    expect(await prisma().posting.findUniqueOrThrow({ where: { id: taken.id } })).toMatchObject({ applicationId: earlier.id });
+
+    await prisma().job.delete({ where: { id: "read-job" } });
+    await prisma().job.delete({ where: { id: "write-job" } });
+    await finishedJobs();
+    const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", title: "Senior Product Designer" } });
+    const startup = await prisma().startup.create({ data: { source: "HN", externalId: "1", company: "Ledgerly", roles: [], emails: [], links: [], reasons: [] } });
+    const result = await startWritingApplication({ ...writing, postingId: posting.id, startupId: startup.id });
+    const id = result.ok ? result.data : "";
+    expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ applicationId: id });
+    expect(await prisma().startup.findUniqueOrThrow({ where: { id: startup.id } })).toMatchObject({ applicationId: id });
+  });
+});
+
+describe("savePostingForLater (E31-3)", () => {
+  const later = { posting: "Ledgerly is hiring a Senior Product Designer.", postingUrl: "jobs.ledgerly.example/42", details: { title: "Designer at Ledgerly", company: "Ledgerly B.V.", role: "Senior Product Designer", location: "Amsterdam", mode: "Remote", salary: "€80k" } };
+
+  it("saves a pasted posting under Saved in Positions, as Pasted, with the reading's score; the same text twice is one", async () => {
+    await finishedJobs();
+    await prisma().job.update({
+      where: { id: "read-job" },
+      data: { result: { extracted, extractedWith: "extract-posting@1", match, matchedWith: "score-posting@3", fit: { score: 72, reasons: ["Payments"], redFlags: [] } } },
+    });
+    const result = await savePostingForLater({ ...later, readJobId: "read-job" });
+    if (!result.ok) throw new Error(result.error);
+    expect(await prisma().posting.findUniqueOrThrow({ where: { id: result.data } })).toMatchObject({
+      source: "PASTED",
+      title: "Senior Product Designer",
+      company: "Ledgerly B.V.",
+      place: "Amsterdam",
+      remote: true,
+      salary: "€80k",
+      url: "https://jobs.ledgerly.example/42",
+      description: "Ledgerly is hiring a Senior Product Designer.",
+      complete: true,
+      savedAt: expect.any(Date),
+      applicationId: null,
+    });
+    expect(await prisma().postingScore.findMany({ select: { source: true, score: true, profileId: true, scoredWith: true } })).toEqual([
+      { source: "PASTED", score: 72, profileId: TEST_PROFILE_ID, scoredWith: "score-posting@3" },
+    ]);
+    expect(await savePostingForLater(later)).toEqual({ ok: true, data: result.data });
+    expect(await prisma().posting.count()).toBe(1);
+  });
+
+  it("saves the Positions posting it was started from", async () => {
+    const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", dismissedAt: new Date() } });
+    expect(await savePostingForLater({ ...later, postingId: posting.id })).toEqual({ ok: true, data: posting.id });
+    expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ savedAt: expect.any(Date), dismissedAt: null });
+  });
+});
+
+describe("addGapSkill (E30-5 before writing)", () => {
+  it("adds the skill to the profile, linked to the role it was used in, with what was done there", async () => {
+    const role = await prisma().experience.create({ data: { profileId: TEST_PROFILE_ID, company: "Northwind", role: "Designer", bullets: "Ran research." } });
+    const result = await addGapSkill({ profileId: TEST_PROFILE_ID, name: "Payments", experienceId: role.id, did: "Designed the payouts flow." });
+    expect(result).toEqual({ ok: true, data: { name: "Payments", where: "Northwind", experienceId: role.id } });
+    expect(await prisma().experience.findUniqueOrThrow({ where: { id: role.id }, include: { skills: { include: { skill: true } } } })).toMatchObject({
+      bullets: "Ran research.\nDesigned the payouts flow.",
+      skills: [{ skill: { name: "Payments" } }],
+    });
+  });
+});
+
+describe("addSentApplication (public #129)", () => {
+  const sent = { posting: "Ledgerly is hiring a Senior Product Designer.", postingUrl: "jobs.example/ledgerly", company: "Ledgerly", role: "Senior Product Designer", sentOn: "2026-09-01", status: "SENT" as const };
+
+  it("adds an application sent on that day, without documents or the AI", async () => {
+    const result = await addSentApplication(sent);
+    if (!result.ok) throw new Error(result.error);
+    const application = await prisma().application.findUniqueOrThrow({ where: { id: result.data }, include: { documents: true, events: true, messages: true } });
+    expect(application).toMatchObject({
+      status: "SENT",
+      title: "Senior Product Designer · Ledgerly",
+      company: "Ledgerly",
+      postingText: "Ledgerly is hiring a Senior Product Designer.",
+      postingUrl: "https://jobs.example/ledgerly",
+      sentAt: new Date("2026-09-01T12:00:00Z"),
+      furthestStage: "SENT",
+      profileId: TEST_PROFILE_ID,
+    });
+    expect(application.documents).toEqual([]);
+    expect(application.messages).toEqual([]);
+    expect(application.events).toMatchObject([{ from: "DRAFT", to: "SENT", at: new Date("2026-09-01T12:00:00Z") }]);
+    expect(startJob).not.toHaveBeenCalled();
+  });
+
+  it("records where it stands now, after the day it was sent", async () => {
+    const result = await addSentApplication({ ...sent, status: "INTERVIEW" });
+    if (!result.ok) throw new Error(result.error);
+    const application = await prisma().application.findUniqueOrThrow({ where: { id: result.data }, include: { events: { orderBy: { at: "asc" } } } });
+    expect(application).toMatchObject({ status: "INTERVIEW", furthestStage: "INTERVIEW", sentAt: new Date("2026-09-01T12:00:00Z") });
+    expect(application.events.map((event) => event.to)).toEqual(["SENT", "INTERVIEW"]);
+  });
+
+  it("links the posting it was started from, and asks for a company or role and a day that has been", async () => {
+    const posting = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "job-1", title: "Senior Product Designer" } });
+    const result = await addSentApplication({ ...sent, postingId: posting.id });
+    expect(await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).toMatchObject({ applicationId: result.ok ? result.data : "" });
+
+    expect(await addSentApplication({ ...sent, company: " ", role: "" })).toMatchObject({ ok: false, error: "Give the company or the role." });
+    expect(await addSentApplication({ ...sent, sentOn: "2999-01-01" })).toMatchObject({ ok: false, error: "The day you sent it can't be in the future." });
+    expect(await addSentApplication({ ...sent, postingUrl: "not a link" })).toMatchObject({ ok: false });
   });
 });

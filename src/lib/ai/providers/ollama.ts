@@ -3,7 +3,10 @@ import "server-only";
 import { Ollama } from "ollama";
 import { z } from "zod";
 
+import type { UsageSink } from "@/lib/usage";
+
 import { BaseProvider, withJsonSchema, type ChatAnswer, type ChatCall } from "../provider";
+import { timedFetch } from "./timed-fetch";
 
 /**
  * Ollama wants the whole prompt to fit its context window and silently drops
@@ -20,15 +23,17 @@ export class OllamaProvider extends BaseProvider {
     private readonly host: string,
     model: string | null,
     timeoutMs: number,
+    onUsage?: UsageSink,
   ) {
-    super(model, timeoutMs);
+    super(model, timeoutMs, onUsage);
   }
 
   /** A client whose requests end when `signal` does. */
   private client(signal: AbortSignal): Ollama {
+    const timed = timedFetch(this.timeoutMs);
     return new Ollama({
       host: this.host,
-      fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal }),
+      fetch: (input, init) => timed(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal }),
     });
   }
 
@@ -45,6 +50,8 @@ export class OllamaProvider extends BaseProvider {
       format: call.json ? z.toJSONSchema(call.json.schema) : undefined,
       options: { temperature: call.temperature, num_predict: call.maxTokens, num_ctx: CONTEXT_TOKENS },
     });
+    // A prompt Ollama still has in its cache may come back without a count.
+    call.used({ input: response.prompt_eval_count ?? null, output: response.eval_count ?? null });
     return { text: response.message.content, cutOff: response.done_reason === "length" };
   }
 

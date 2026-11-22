@@ -7,23 +7,31 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusDot } from "@/components/ui/status-dot";
-import { ApplicationStatus } from "@/generated/prisma/enums";
+import { ApplicationStatus, SentVia } from "@/generated/prisma/enums";
 import { STATUSES, statusInfo } from "@/lib/status";
 
 import { InterviewDate } from "./interview-date";
 
+/** Mark as sent's choices (E29-7). Gmail sets its own when it sends. */
+const SENT_WAYS: { value?: SentVia; label: string }[] = [
+  { value: SentVia.EMAIL, label: "By email" },
+  { value: SentVia.PORTAL, label: "On their site or a job portal" },
+  { value: SentVia.OTHER, label: "Another way" },
+  { label: "Just mark it as sent" },
+];
+
 /**
- * The status pill and its menu (APP-2), plus "Mark as sent" while the
- * application is a draft, and the next interview's date while it's in
- * Interview (E9-9). The new status shows at once; the server's answer (and
- * its toast with Undo) follows. Moving to Interview asks for the date once
- * the menu has closed.
+ * The status pill and its menu (APP-2), and the next interview's date while
+ * it's in Interview (E9-9). The new status shows at once; the server's
+ * answer (and its toast with Undo) follows. Moving to Interview asks for the
+ * date once the menu has closed.
  */
 export function StatusControl({
   id,
@@ -42,12 +50,12 @@ export function StatusControl({
   const askForDate = useRef(false);
   const { label } = statusInfo(shown);
 
-  const move = (to: ApplicationStatus) => {
+  const move = (to: ApplicationStatus, sentVia?: SentVia) => {
     if (to === shown) return;
     askForDate.current = to === ApplicationStatus.INTERVIEW;
     startTransition(async () => {
       show(to);
-      await changeStatus(id, to);
+      await (sentVia ? changeStatus(id, to, sentVia) : changeStatus(id, to));
     });
   };
 
@@ -96,7 +104,37 @@ export function StatusControl({
           onOpenChange={(open) => setInterview(open ? "edit" : null)}
         />
       )}
-      {shown === ApplicationStatus.DRAFT && <Button onClick={() => move(ApplicationStatus.SENT)}>Mark as sent</Button>}
     </>
+  );
+}
+
+/**
+ * "Mark as sent" while the application is a draft (E29-7), asking how it
+ * went out, which is optional: the last item just marks it. With the email
+ * since E30-2, where sending finishes.
+ */
+export function MarkAsSent({ id, variant = "secondary" }: { id: string; variant?: "primary" | "secondary" }) {
+  const [, startTransition] = useTransition();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant={variant}>Mark as sent</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>How did you send it?</DropdownMenuLabel>
+        {SENT_WAYS.map(({ value, label }) => (
+          <DropdownMenuItem
+            key={label}
+            onSelect={() =>
+              startTransition(async () => {
+                await (value ? changeStatus(id, ApplicationStatus.SENT, value) : changeStatus(id, ApplicationStatus.SENT));
+              })
+            }
+          >
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
