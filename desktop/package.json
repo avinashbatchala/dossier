@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "prepare-server": "node scripts/prepare-server.mjs",
     "package:linux": "yarn build && electron-builder --linux --x64",
-    "package:windows": "yarn build && electron-builder --win --x64"
+    "package:windows": "yarn build && electron-builder --win --x64",
+    "package:mac": "yarn build && electron-builder --mac --arm64",
+    "package:mac:x64": "yarn build && electron-builder --mac --x64"
   },
   "devDependencies": {
     "@types/node": "^24",

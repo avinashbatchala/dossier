@@ -23,6 +23,13 @@ linux:
 win:
   icon: assets/icon.png
   target: [nsis]
+mac:
+  icon: assets/icon.png
+  category: public.app-category.productivity
+  # Unsigned: this fork has no Apple Developer certificate. A locally built app
+  # opens as it is; one downloaded from a release needs right-click → Open.
+  identity: null
+  target: [dmg, zip]
 nsis:
   # For this user, with no admin rights needed, and a new version installs over the old one.
   oneClick: true

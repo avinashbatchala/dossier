@@ -2,8 +2,8 @@ name: Release
 
 # A version tag (v1.0.0) releases the image that image.yml built for that commit: it's
 # tagged with the version and "latest" on GHCR, and a GitHub release is made
-# with the tag's message as its notes. The desktop app's downloads for Linux
-# and Windows are built from the same commit and attached to it (desktop.yml).
+# with the tag's message as its notes. The desktop app's downloads for Linux,
+# Windows and macOS are built from the same commit and attached to it (desktop.yml).
 # The release stays a draft until they are: the update notice reads the latest
 # release, which skips drafts, so it never points anyone at a release without
 # them.

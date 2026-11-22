@@ -98,22 +98,107 @@ jobs:
           docker run --rm --security-opt seccomp=unconfined -u "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo/desktop "$BUILDER" \
             sh -c 'mkdir -p /tmp/home && node node_modules/electron-builder/cli.js --win --x64 --publish never'
 
-      - name: Checksums
-        working-directory: desktop/release
-        run: |
-          ls -l Dossier-*
-          sha256sum Dossier-*.AppImage Dossier-*.deb Dossier-*.exe > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-
-      - name: Attach them, and publish the release
+      - name: Attach Linux and Windows
         working-directory: desktop/release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release upload "$TAG" Dossier-*.AppImage Dossier-*.deb Dossier-*.exe SHA256SUMS.txt --clobber
-          gh release edit "$TAG" --draft=false --latest
+          ls -l Dossier-*
+          gh release upload "$TAG" Dossier-*.AppImage Dossier-*.deb Dossier-*.exe --clobber
 
       - name: Say what's left when it fails
         if: failure()
         run: echo "::error::The desktop app's downloads failed, so the release $TAG is still a draft and the update notice doesn't offer it yet. The image is released. Fix the build and start this workflow again for $TAG (Actions → Desktop app → Run workflow), or publish the draft from the Releases page without downloads."
+
+  # macOS has to be built on macOS: a .app can't be packed or made into a DMG
+  # anywhere else. Apple Silicon only; Intel Macs build from source (see
+  # DEVELOPMENT.md → The desktop app). Unsigned: there's no Apple certificate,
+  # so a downloaded copy opens with right-click → Open.
+  mac:
+    name: Desktop app (macOS)
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag }}
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: corepack enable
+
+      - name: The app's version is the release's
+        run: |
+          version="${TAG#v}"
+          for file in package.json desktop/package.json; do
+            actual=$(node -p "require('./$file').version")
+            [ "$actual" = "$version" ] || { echo "::error file=$file::$file says $actual, not $version."; exit 1; }
+          done
+
+      # The same standalone server as the image, built here for the Mac.
+      - run: yarn install --immutable
+      - run: yarn generate
+      - run: yarn build
+      - name: The database setup, as one file
+        run: |
+          node_modules/.bin/esbuild prisma/seed.ts --bundle --platform=node --format=esm --target=node24 \
+            --external:pg-native --external:better-sqlite3 --outfile=.next/desktop-seed.mjs \
+            --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+      - name: Hand it to the desktop app
+        run: |
+          mkdir -p desktop/build-input
+          cp -R .next/standalone desktop/build-input/standalone
+          rm -f desktop/build-input/standalone/.env*
+          cp -R .next/static desktop/build-input/static
+          cp .next/desktop-seed.mjs desktop/build-input/desktop-seed.mjs
+
+      - run: yarn install --immutable
+        working-directory: desktop
+      - run: yarn build
+        working-directory: desktop
+
+      - name: Package the app
+        run: |
+          (cd desktop && yarn prepare-server --next build-input --seed build-input/desktop-seed.mjs --platform darwin --arch arm64)
+          (cd desktop && node node_modules/electron-builder/cli.js --mac --arm64 --publish never)
+
+      - name: Attach it
+        working-directory: desktop/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l Dossier-*
+          gh release upload "$TAG" Dossier-*.dmg Dossier-*.zip --clobber
+
+      - name: Say what's left when it fails
+        if: failure()
+        run: echo "::error::The Mac download wasn't built, so the release $TAG is still a draft. Fix the build and start this workflow again for $TAG (Actions → Desktop app → Run workflow)."
+
+  # The release is published only once every platform's download is attached:
+  # the update notice reads the latest release, which skips drafts.
+  publish:
+    name: Publish the release
+    needs: [desktop, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checksums, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p assets
+          gh release download "$TAG" --pattern 'Dossier-*' --dir assets
+          (cd assets && sha256sum Dossier-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          gh release upload "$TAG" assets/SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --latest

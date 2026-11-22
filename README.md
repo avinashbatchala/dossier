@@ -24,7 +24,7 @@ It's for one person on a small server: one password, your data in your own Postg
 
 **Get started:** [run it on your computer](#run-it-on-your-computer) in a few minutes, or [self-host it](#self-hosting) on a server. The [installation guide](https://github.com/AienTech/dossier/wiki) covers every way: Docker with or without Compose, Node.js, a plain Ubuntu server, CapRover, Coolify and Dokploy.
 
-**Or download the desktop app** for Windows or Linux from the [latest release](https://github.com/AienTech/dossier/releases/latest). It runs Dossier on your computer with nothing else to install, or opens a Dossier you host. See [Desktop app](https://github.com/AienTech/dossier/wiki/Desktop-app).
+**Or download the desktop app** for Windows, Linux or macOS from the [latest release](https://github.com/AienTech/dossier/releases/latest). The Mac build is for Apple Silicon and isn't notarized, so the first launch is right-click → **Open**. It runs Dossier on your computer with nothing else to install, or opens a Dossier you host. See [Desktop app](https://github.com/AienTech/dossier/wiki/Desktop-app).
 
 ## Demo
 

@@ -323,17 +323,41 @@ The backend is the project's own service and isn't published with the app. `src/
 A production server asks `https://api.dossier.aien.me/v1`. A development server only asks while `DOSSIER_API_URL` is set, and then on every page, so a change shows without the wait: the first reload asks, and the next one shows it. To try it against a local copy of the backend, set that variable, for example in an untracked `compose.override.yml`. The variable isn't in `.env.example` or `compose.production.yml`, because nobody running the image needs it. `e2e/announcements.spec.ts` points it at the fake job sources.
 ## The desktop app
 
-`desktop/` is the app for Linux and Windows, built with Electron. One download, two modes, chosen on first launch: **On my server** opens the user's own Dossier in a window, and **On this computer** runs Dossier itself. There's no auto-update: people download each new version from the release page.
+`desktop/` is the app for Linux, Windows and macOS, built with Electron. One download, two modes, chosen on first launch: **On my server** opens the user's own Dossier in a window, and **On this computer** runs Dossier itself. There's no auto-update: people download each new version from the release page.
 
 It has its own `package.json` and `yarn.lock`, so the image doesn't carry Electron.
 
 The window has no title bar or menu row of the system's. `desktop/bar/` is the app's own top bar, with the system's window buttons drawn over it, and the page is a view below it, so no server version has to know about the bar. The bar takes its colours from the page's `body` (`bar-colors.ts`), read again when the page loads and when the `dossier_theme` cookie changes.
 
-On this computer runs the same standalone server as the image, on a plain Node binary that ships inside the app, and on SQLite in the user's app folder. So nothing native is built for Electron, and an Electron update, which is how Chromium's security fixes arrive, can't be held back by it. `desktop/scripts/prepare-server.mjs` puts it together for one platform, checking every download against a pinned hash, and the app's own Chromium prints the PDFs (`print-service.ts`, `src/lib/pdf/desktop-print.ts`). The server listens on 127.0.0.1 only. The app makes a secret on first launch and a token at each launch, and signs itself in with the token (`src/lib/desktop.ts`): there's no password, but the sign-in page stays, so other programs reaching the port get nowhere.
+On this computer runs the same standalone server as the image, on a plain Node binary that ships inside the app, and on SQLite in the user's app folder. So nothing native is built for Electron, and an Electron update, which is how Chromium's security fixes arrive, can't be held back by it. `desktop/scripts/prepare-server.mjs` puts it together for one platform and architecture (`--platform darwin --arch arm64`, say), checking every download against a pinned hash, and the app's own Chromium prints the PDFs (`print-service.ts`, `src/lib/pdf/desktop-print.ts`). The server listens on 127.0.0.1 only. The app makes a secret on first launch and a token at each launch, and signs itself in with the token (`src/lib/desktop.ts`): there's no password, but the sign-in page stays, so other programs reaching the port get nowhere.
 
 Migrations run without Prisma's tools (`server-tools/migrate.mjs`) and **not in a transaction**, because SQLite ignores the files' `PRAGMA foreign_keys=OFF` inside one, and rebuilding a table would then delete the rows that point at it. It copies the database first, and refuses a database from a newer version.
 
 A view showing a server has no preload and is treated as any web page: other sites and mail go to the system browser (`window-rules.ts`), and the page may ask for nothing but writing to the clipboard, for the app's Copy buttons. Only the app's own start screen and bar get the small APIs in `preload.ts` and `bar-preload.ts`.
+
+### Building it
+
+CI builds Linux, Windows and macOS from each release tag (`.github/workflows/desktop.yml`). To build the Mac app locally, build the server in the container and pack it on the Mac, since electron-builder can only make a `.app` there:
+
+```bash
+docker/bin/yarn build
+docker compose exec -T app node_modules/.bin/esbuild prisma/seed.ts --bundle --platform=node --format=esm --target=node24 \
+  --external:pg-native --external:better-sqlite3 --outfile=.next/desktop-seed.mjs \
+  --banner:js='import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'
+mkdir -p /tmp/dossier-desktop
+docker compose cp app:/app/.next/standalone /tmp/dossier-desktop/standalone
+docker compose cp app:/app/.next/static /tmp/dossier-desktop/static
+docker compose cp app:/app/.next/desktop-seed.mjs /tmp/dossier-desktop/
+
+cd desktop
+corepack yarn install --immutable
+corepack yarn build
+node scripts/prepare-server.mjs --next /tmp/dossier-desktop --seed /tmp/dossier-desktop/desktop-seed.mjs --platform darwin --arch arm64
+CSC_IDENTITY_AUTO_DISCOVERY=false node node_modules/electron-builder/cli.js --mac --arm64 --publish never
+open release/mac-arm64/Dossier.app   # or install release/Dossier-1.15.1-mac-arm64.dmg
+```
+
+`--arch x64` builds it for an Intel Mac. The app is unsigned: a locally built copy opens as it is, and a downloaded one needs right-click → **Open** the first time. On first launch it offers **On my server** and **On this computer**; the latter keeps its SQLite database and secrets in `~/Library/Application Support/Dossier`.
 
 ## Tests and checks
 
